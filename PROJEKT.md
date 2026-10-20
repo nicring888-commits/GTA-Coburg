@@ -1,9 +1,9 @@
-# GTA Coburg (Coburg Open World) – Projektdokumentation
+# Grand Theft Coburg (Coburg Open World) – Projektdokumentation
 
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.0.0 „GTA Coburg“ · **Letzte Aktualisierung:** 20.10.2026
+**Version:** 1.0.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 20.10.2026
 
 ---
 
@@ -16,7 +16,7 @@ Luftbilder** der Bayerischen Vermessungsverwaltung auf dem Boden und auf allen D
 als **amtliche 3D-Gebäudemodelle (LoD2)** in der Stadt: mit echten Höhen und echten Dachformen, von der Altstadt über
 Schloss Ehrenburg bis zur Veste.
 
-**Seit v1.0.0 ist es „GTA Coburg“** – das Spielprinzip von Vice City io auf der Coburger Karte: **Autos** klauen
+**Seit v1.0.0 ist es „Grand Theft Coburg“** (bis v1.0.1 hieß es „GTA Coburg“): das Spielprinzip von Vice City io auf der Coburger Karte: **Autos** klauen
 und verkaufen, **Straßenrennen** gegen KI-Fahrer um Preisgeld und die **Polizei**, die mit Sternen fahndet, verfolgt,
 rammt, Straßensperren baut und festnimmt. Man startet am **Bahnhof** (Vorplatz an der Lossaustraße), ein Auto steht bereit.
 
@@ -192,6 +192,8 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
 
+- ✅ v1.0.1 (20.10.2026): Spielname „Grand Theft Coburg“ statt „GTA Coburg“ (Titel, Logo, Willkommensmeldung, README).
+  Repository-Name und Speicherschlüssel `gta-coburg-v1` bleiben, damit Links und Spielstände gültig bleiben.
 - ✅ v1.0.0 (20.10.2026): **GTA Coburg**.
   - Spawn am Bahnhof, Geld, Leben, Fahndungssterne, Speicherstand
   - Vier Fahrzeugtypen mit eigenen Fahrwerten und Modellen; Schaden, Rauch, Brand, Explosion, Wracks
@@ -230,8 +232,8 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - [ ] Touch-Steuerung für Smartphone und Tablet
 - [ ] Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)
 - [ ] Kartenausschnitt erweitern (z. B. Cortendorf, Ketschendorf) und Daten bei Bedarf kachelweise laden
-- [ ] GTA Coburg: Fußgänger (Passanten, die weglaufen; Anfahren gibt Sterne), Polizeihubschrauber ab 4 Sternen
-- [ ] GTA Coburg: Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge
-- [ ] GTA Coburg: Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
+- [ ] Fußgänger (Passanten, die weglaufen; Anfahren gibt Sterne), Polizeihubschrauber ab 4 Sternen
+- [ ] Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge
+- [ ] Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
 - [ ] Mehr Fahrzeugtypen (Bus, Lieferwagen, Motorrad)
 - [ ] Verkehr mit echter Fahrphysik, der auf Unfälle reagiert (heute fährt er auf Schienen)

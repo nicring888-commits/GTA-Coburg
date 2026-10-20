@@ -1,4 +1,4 @@
-// Hauptprogramm von GTA Coburg: Szene, Licht, Eingabe, Kamera, Spielzustand (Geld, Fahndung, Leben),
+// Hauptprogramm von Grand Theft Coburg: Szene, Licht, Eingabe, Kamera, Spielzustand (Geld, Fahndung, Leben),
 // Polizei, Rennen, Explosionen und die Hauptschleife.
 'use strict';
 
@@ -214,7 +214,7 @@
     started = true;
     audio.init();
     lockPointer();
-    ui.bigMessage('GTA COBURG', 2.5, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
+    ui.bigMessage('GRAND THEFT COBURG', 2.5, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
   };
   $('help-close').onclick = () => { $('help').classList.add('hidden'); };
 
