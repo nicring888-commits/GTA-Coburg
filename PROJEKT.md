@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.0.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 20.10.2026
+**Version:** 1.1.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 20.10.2026
 
 ---
 
@@ -59,6 +59,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Strecken | **Bahnhofs-Sprint** (2,1 km, Bahnhof → Theater → Ehrenburg → Rosengarten) · **Schnellweg-Rennen** (2,5 km, B 4 von Nord nach Süd) · **Veste-Bergrennen** (1,2 km bergauf zur Veste) · **Altstadt-Runde** (3,3 km Rundkurs) |
 | Lackiererei (grün) | Langsam hineinfahren: Reparatur € 100, mit Fahndung € 250 (neue Farbe, Sterne weg). Geht nicht, solange die Polizei dich sieht. Drei Stück: Nord, Süd, Ost |
 | Autohändler (orange) | `F`: Auto verkaufen; Preis je nach Typ und Zustand (Sportwagen bis € 1.400). Streifenwagen nimmt keiner |
+| Fußgänger (seit v1.1.0) | Bis zu 150 Passanten im Umkreis von 170 m, gut die Hälfte gezielt in der Fußgängerzone (Markt, Spitalgasse, Steinweg, Ketschengasse, Herrngasse …). Sie laufen über Fußwege, Plätze und Gehsteige (rechts der Laufrichtung), bleiben stehen, gehen zu zweit, darunter Kinder. Sie springen vor schnellen Autos zur Seite, fliehen bei Explosionen und vor der Hupe (`H`). Anfahren: Person fällt um, Zeugen rufen die Polizei (bei Polizei in Sichtweite sicher, sonst 40 %). Dazu ≈ 130 feste Figuren: Café-Gäste, Leute auf Bänken, Händler, Kunden am Bratwurststand |
+| Stadtdetails (seit v1.1.0) | ≈ 1.600 Straßenlaternen (bis 1,3 km um den Markt, nachts mit Lichtkegel am Boden), ≈ 120 Altstadtlaternen in der Fußgängerzone, gestreifte Markisen (≈ 280) und Ladenschilder (≈ 220, nachts leuchtend) an den Fassaden der Fußgängerzone, Café-Terrassen mit Sonnenschirmen vor echten Cafés und Restaurants aus OSM (≈ 90 Tische), Bänke, Mülleimer, Blumenkübel, abgestellte Fahrräder, 17 Brunnen mit Wasserstrahl (OSM `fountain`). Am Markt: Prinz-Albert-Denkmal, sechs Marktstände, Coburger-Bratwurststand mit Grillrauch und Kundschaft, 30 Tauben, die vor Spieler, Autos und Explosionen auffliegen. Stimmengewirr, je mehr Leute in der Nähe sind. Laternen, Bänke, Tische, Stände und Brunnen sind Hindernisse für Autos |
 | Speicherstand | Geld und Bestzeiten im Browser (`localStorage`, Schlüssel `gta-coburg-v1`) |
 
 ## 4. Inhalt der Welt
@@ -94,6 +96,8 @@ und müssen dort bleiben.
 | `js/driver.js` | `RoadNav`: Straßennetz als Graph (beide Richtungen, ohne Durchfahrten durch Gebäude), Dijkstra nach Fahrzeit, Wegsuche, Zufallspunkte. `AutoDriver`: KI-Fahrer mit echter Fahrphysik (Vorausschau-Lenkung, Kurvenbremsung, Ausweichen, Freifahren) |
 | `js/police.js` | Fahndung, Streifenwagen (Verfolgen, Rammen, Anhalten), Polizisten zu Fuß, Festnahme, Straßensperren, Entkommen |
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
+| `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes |
+| `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
 | `js/places.js` | Lackierereien und Autohändler (Lage, Säulen, Schilder) |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
@@ -192,6 +196,13 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
 
+- ✅ v1.1.0 (20.10.2026): lebendigere Stadt – Fußgänger (besonders in der Fußgängerzone) und viele Details in der
+  Innenstadt (siehe Tabelle in 3a). Getestet über `game.simulate`: Aufbau ohne Fehler, ≈ 150 Passanten, davon ≈ 45 im
+  Umkreis von 40 m am Markt; Anfahren mit Sturz und Fahndung; Nachtlicht der Laternen. Spiellogik ≈ 0,1 ms, Zeichnen
+  ≈ 2,6 ms pro Bild (im verdeckten Vorschaufenster gemessen).
+- ⚠️ Grenzen v1.1.0: Fußgänger gehen nicht über Ampeln und weichen einander nicht aus (laufen durcheinander durch);
+  der Verkehr auf Schienen hält nicht für sie an, sondern schiebt sie nur zur Seite. Markisen und Schilder sind ohne
+  echte Ladennamen. Lage der Marktstände und des Bratwurststands ist geschätzt, nicht vermessen.
 - ✅ v1.0.1 (20.10.2026): Spielname „Grand Theft Coburg“ statt „GTA Coburg“ (Titel, Logo, Willkommensmeldung, README).
   Repository-Name und Speicherschlüssel `gta-coburg-v1` bleiben, damit Links und Spielstände gültig bleiben.
 - ✅ v1.0.0 (20.10.2026): **GTA Coburg**.
@@ -232,7 +243,9 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - [ ] Touch-Steuerung für Smartphone und Tablet
 - [ ] Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)
 - [ ] Kartenausschnitt erweitern (z. B. Cortendorf, Ketschendorf) und Daten bei Bedarf kachelweise laden
-- [ ] Fußgänger (Passanten, die weglaufen; Anfahren gibt Sterne), Polizeihubschrauber ab 4 Sternen
+- [ ] Polizeihubschrauber ab 4 Sternen
+- [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
+- [ ] Echte Ladennamen an den Schildern (OSM `shop`/`amenity` mit Namen), Weihnachtsmarkt im Winter
 - [ ] Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge
 - [ ] Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
 - [ ] Mehr Fahrzeugtypen (Bus, Lieferwagen, Motorrad)

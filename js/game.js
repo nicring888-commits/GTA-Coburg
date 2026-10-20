@@ -71,7 +71,8 @@
 
   // ---------- Welt laden ----------
   const world = new World(window.COBURG, scene, renderer);
-  let ui, traffic, player, nav, fx, police, races, places, spawn;
+  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props;
+  let lastBoom = null;     // letzte Explosion (scheucht Tauben auf)
   const parked = [];       // Autos ohne KI (auch das eigene)
   const wrecks = [];       // ausgebrannte oder brennende Autos
   let car = null;          // Auto, in dem der Spieler sitzt
@@ -102,6 +103,10 @@
       adopt: c => { if (!wrecks.includes(c)) wrecks.push(c); },
     });
     places = new Places({ world, scene, ui });
+    progress('Fußgänger und Stadtleben …', 0.99);
+    peds = new Pedestrians(world, scene);
+    props = new CityProps(world, scene, peds, fx, ui);
+    props.build();
     spawn = bahnhofSpawn();
     respawn(true);
     progress('Fertig', 1);
@@ -245,6 +250,14 @@
         const sf = c.createBiquadFilter(); sf.type = 'lowpass'; sf.frequency.value = 1800;
         this.sirenOsc = c.createOscillator(); this.sirenOsc.type = 'sawtooth'; this.sirenOsc.frequency.value = 440;
         this.sirenOsc.connect(sf); sf.connect(this.sirenGain); this.sirenGain.connect(this.master); this.sirenOsc.start();
+        // Stimmengewirr in der Fußgängerzone: gefiltertes Rauschen in einer Schleife
+        const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+        let b = 0;
+        for (let i = 0; i < len; i++) { b = b * 0.97 + (Math.random() * 2 - 1) * 0.3; d[i] = b * (0.6 + 0.4 * Math.sin(i / c.sampleRate * 7.3) * Math.sin(i / c.sampleRate * 2.1)); }
+        const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
+        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.8;
+        this.crowdGain = c.createGain(); this.crowdGain.gain.value = 0;
+        src.connect(bp); bp.connect(this.crowdGain); this.crowdGain.connect(this.master); src.start();
       } catch (e) { this.ctx = null; }
     },
     engine(on, speed, throttle) {
@@ -288,6 +301,7 @@
       const notes = win ? [523, 659, 784, 1047] : [523, 494, 440];
       notes.forEach((f, i) => this.beep(f, i === notes.length - 1 ? 0.5 : 0.16, i * 0.15, 'square', 0.1));
     },
+    crowd(level) { if (this.ctx) this.crowdGain.gain.setTargetAtTime(level, this.ctx.currentTime, 0.5); },
     sting() { [392, 370, 349, 262].forEach((f, i) => this.beep(f, 0.4, i * 0.22, 'sawtooth', 0.09)); },
   };
 
@@ -431,6 +445,7 @@
     sun.intensity = s.sun; sun.color.set(s.sunColor);
     hemi.intensity = s.hemi; hemi.color.set(s.hemiSky); hemi.groundColor.set(s.hemiGround);
     world.setNight(night);
+    props.setNight(night);
     carMaterials().head.emissiveIntensity = night ? 2.5 : 0.2;
     carMaterials().tail.emissiveIntensity = night ? 1.6 : 0.25;
     ui.toast(night ? 'Nacht' : 'Tag', 1.2);
@@ -466,6 +481,8 @@
 
   function explode(c) {
     fx.explosion(c.x, c.y, c.z);
+    peds.panic(c.x, c.z, 45);
+    lastBoom = { x: c.x, z: c.z, t: 0.5 };
     const px = mode === 'drive' ? car.x : player.x, pz = mode === 'drive' ? car.z : player.z;
     audio.boom(Math.hypot(c.x - px, c.z - pz));
     c.wreck(); c.smokeT = 12;
@@ -678,6 +695,7 @@
       if (car.lastImpact > 3) audio.thump(car.lastImpact);
       audio.engine(true, car.speed, input.throttle);
       audio.horn(!!keys.KeyH);
+      if (pressed.KeyH) peds.panic(car.x + Math.sin(car.heading) * 7, car.z + Math.cos(car.heading) * 7, 8, 0.5); // Hupe: aus dem Weg!
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
       if (car.siren) car.flash(performance.now() / 1000);
     } else {
@@ -711,6 +729,23 @@
     if (over) return;
     races.update(dt, T, nonPlayerCars().concat(police.cars()));
     places.update(dt);
+
+    // Fußgänger: laufen, ausweichen, angefahren werden
+    const physCars = (mode === 'drive' ? [car] : []).concat(police.cars(), races.cars());
+    for (const h of peds.update(dt, px, pz, physCars, traffic.cars, mode === 'walk')) {
+      audio.thump(Math.min(14, h.speed));
+      peds.panic(h.ped.x, h.ped.z, 18);
+      if (h.car === car && mode === 'drive') {
+        if (police.witness(h.ped.x, h.ped.z, 100)) police.crime(0.5, 'Passant angefahren!', 1);
+        else if (Math.random() < 0.4) police.crime(0, 'Passant angefahren! Zeugen rufen die Polizei', 1);
+        else ui.toast('Passant angefahren!', 1.5);
+      }
+    }
+    // Tauben, Brunnen, Grillrauch
+    const threats = [{ x: px, z: pz, r: mode === 'drive' ? (Math.abs(car.speed) > 2 ? 14 : 4) : 3.5 }];
+    if (lastBoom && (lastBoom.t -= dt) > 0) threats.push({ x: lastBoom.x, z: lastBoom.z, r: 60 });
+    props.update(dt, px, pz, threats, performance.now() / 1000);
+    audio.crowd(Math.min(0.09, peds.countNear(px, pz, 25) * 0.005));
     vehicleLife(dt, px, pz);
     if (over) return;
     carHits(dt);
@@ -773,6 +808,7 @@
       headlight.position.set(car.x + fx * 2.2, car.y + 0.8, car.z + fz * 2.2);
       headlight.target.position.set(car.x + fx * 20, car.y - 1, car.z + fz * 20);
     } else headlight.intensity = 0;
+    peds.draw(camera.position.x, camera.position.z);
     ui.updateLabels(camera);
     renderer.render(scene, camera);
   }
@@ -785,7 +821,7 @@
 
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
-    get police() { return police; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
+    get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, travel, toggleNight, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
