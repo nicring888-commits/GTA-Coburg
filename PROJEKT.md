@@ -32,6 +32,10 @@ Nordwesten über die Altstadt und den Hofgarten bis zur Veste im Nordosten. Der 
 
 Für three.js (r160, über das CDN jsDelivr) wird eine Internetverbindung gebraucht.
 
+**Repository:** https://github.com/nicring888-commits/GTA-Coburg (Branch `main`, öffentlich). Die Rohdaten
+`data/raw/` (≈ 430 MB) sind per `.gitignore` ausgeschlossen. Das Spiel ist eine statische Seite und lässt sich ohne
+Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befehl; oder GitHub Pages: `main`, Ordner `/`).
+
 ## 3. Steuerung
 
 | | Zu Fuß | Im Auto |
