@@ -1,0 +1,793 @@
+// Hauptprogramm von GTA Coburg: Szene, Licht, Eingabe, Kamera, Spielzustand (Geld, Fahndung, Leben),
+// Polizei, Rennen, Explosionen und die Hauptschleife.
+'use strict';
+
+(function () {
+  const $ = id => document.getElementById(id);
+  if (!window.THREE) { $('load-text').textContent = 'three.js konnte nicht geladen werden. Bitte Internetverbindung prüfen.'; return; }
+  if (!window.COBURG) { $('load-text').textContent = 'Kartendaten fehlen (data/coburg.js). Bitte tools/convert.js ausführen.'; return; }
+
+  // ---------- Renderer und Szene ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  $('app').appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.3, 4000);
+
+  const SKY = {
+    day: { top: '#3f78c4', horizon: '#cfe0ef', fog: '#c6d6e3', sun: 2.6, sunColor: '#fff3df', hemi: 1.05, hemiSky: '#cfe3ff', hemiGround: '#6f6a55' },
+    night: { top: '#03060f', horizon: '#1a2238', fog: '#121a2c', sun: 0.18, sunColor: '#8fa6ff', hemi: 0.22, hemiSky: '#4a5a8a', hemiGround: '#151515' },
+  };
+  function skyTexture(s) {
+    const night = s === SKY.night;
+    const W = night ? 4096 : 4, H = night ? 1024 : 256;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d'), g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, s.top); g.addColorStop(0.5, s.horizon); g.addColorStop(1, s.horizon);
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    if (night) { // Sterne
+      const r = U.rng(5);
+      for (let i = 0; i < 1400; i++) {
+        c.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.65})`;
+        c.fillRect(Math.floor(r() * W), Math.floor(Math.pow(r(), 1.5) * H * 0.42), 1.5, 1.5);
+      }
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  const skyTex = { day: skyTexture(SKY.day), night: skyTexture(SKY.night) };
+  scene.fog = new THREE.Fog(SKY.day.fog, 260, 1500);
+
+  const hemi = new THREE.HemisphereLight(SKY.day.hemiSky, SKY.day.hemiGround, SKY.day.hemi);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(SKY.day.sunColor, SKY.day.sun);
+  // Sonne aus Südsüdost wie zur Aufnahmezeit der Luftbilder, damit 3D-Schatten und Fotoschatten zusammenpassen
+  const SUN_DIR = new THREE.Vector3(0.15, 1.3, 0.95).normalize();
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const SC = 110;
+  Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 1, far: 700 });
+  sun.shadow.bias = -0.0006;
+  sun.shadow.normalBias = 0.6;
+  scene.add(sun, sun.target);
+
+  // Scheinwerfer für das gefahrene Auto (nachts)
+  const headlight = new THREE.SpotLight('#fff1d0', 0, 70, 0.55, 0.5, 1.2);
+  headlight.castShadow = false;
+  scene.add(headlight, headlight.target);
+
+  // ---------- Spielstand (bleibt im Browser gespeichert) ----------
+  const SAVE_KEY = 'gta-coburg-v1';
+  let save = null;
+  try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = null; }
+  if (!save || typeof save.money !== 'number') save = { money: 500, best: {} };
+  save.best = save.best || {};
+  const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* ohne Speicher weiter */ } };
+
+  // ---------- Welt laden ----------
+  const world = new World(window.COBURG, scene, renderer);
+  let ui, traffic, player, nav, fx, police, races, places, spawn;
+  const parked = [];       // Autos ohne KI (auch das eigene)
+  const wrecks = [];       // ausgebrannte oder brennende Autos
+  let car = null;          // Auto, in dem der Spieler sitzt
+  let mode = 'walk';
+  let night = false;
+  let camMode = 0;         // 0 Verfolger, 1 Motorhaube
+  let over = null;         // Verhaftet/Erledigt-Sequenz
+
+  const progress = (text, f) => { $('load-text').textContent = text; $('load-bar').style.width = Math.round(f * 100) + '%'; };
+  world.build(progress).then(() => {
+    progress('Polizei und Rennstrecken …', 0.98);
+    $('attr-ortho').classList.toggle('hidden', !world.ortho);
+    $('attr-lod2').classList.toggle('hidden', !world.lod2);
+    ui = new UI(world);
+    ui.addLabels(scene);
+    traffic = new Traffic(world, scene);
+    player = new Player(scene);
+    nav = new RoadNav(world);
+    fx = new FX(scene);
+    police = new Police({ world, scene, nav, traffic, fx, ui,
+      others: () => nonPlayerCars().concat(races.cars()),
+      onBusted: busted,
+      onLost: c => { if (!wrecks.includes(c)) wrecks.push(c); },
+      onEscaped: (stars, reward) => { ui.bigMessage('ENTKOMMEN', 2.5, '#7ee36f', `Die Polizei hat dich verloren · € ${reward}`); addMoney(reward); },
+    });
+    races = new Races({ world, scene, nav, ui, audio, save, persist,
+      addMoney: (n, why) => addMoney(n),
+      adopt: c => { if (!wrecks.includes(c)) wrecks.push(c); },
+    });
+    places = new Places({ world, scene, ui });
+    spawn = bahnhofSpawn();
+    respawn(true);
+    progress('Fertig', 1);
+    $('loading').classList.add('hidden');
+    $('start').classList.remove('hidden');
+    renderer.compile(scene, camera);
+    requestAnimationFrame(loop);
+  }).catch(err => {
+    console.error(err);
+    progress('Fehler beim Aufbau: ' + err.message, 1);
+  });
+
+  const drivable = s => s.k === 'road' && !/motorway|trunk/.test(s.h || '');
+
+  // Auto am Straßenrand neben einem Punkt abstellen
+  function parkCarNear(x, z, color, kind) {
+    const r = world.nearestRoad(x, z, 250, s => drivable(s) && s.h !== 'service' && s.w >= 6)
+      || world.nearestRoad(x, z, 250, drivable);
+    if (!r) return null;
+    const s = r.seg;
+    let dx = s.bx - s.ax, dz = s.bz - s.az;
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    // am rechten Rand parken, aber nicht in einer Hauswand
+    let off = U.clamp(s.w / 2 - 1.2, 0, 2.5);
+    const free = o => [-1.6, 0, 1.6].every(t => !world.collideCircle(r.x - dz * o + dx * t, r.z + dx * o + dz * t, 1, {}).hit);
+    while (off > 0 && !free(off)) off -= 0.5;
+    off = Math.max(0, off);
+    const px = r.x - dz * off, pz = r.z + dx * off;
+    // in die Richtung mit mehr freier Strecke schauen
+    const room = sgn => { let d = 0; for (let t = 3; t <= 30; t += 3) { if (world.collideCircle(px + dx * t * sgn, pz + dz * t * sgn, 1, {}).hit) break; d = t; } return d; };
+    const flip = room(-1) > room(1);
+    const c = new Vehicle(scene, color, kind);
+    c.place(px, pz, Math.atan2(dx, dz) + (flip ? Math.PI : 0), world);
+    parked.push(c);
+    return c;
+  }
+
+  // Spawnpunkt: Vorplatz des Coburger Bahnhofs, Blick zur Straße
+  function bahnhofSpawn() {
+    const st = ui.landmarks.find(l => l.name === 'Bahnhof') || { x: 0, z: 0 };
+    const r = world.nearestRoad(st.x, st.z, 200, drivable) || { x: st.x, z: st.z };
+    let dx = st.x - r.x, dz = st.z - r.z;
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    let p = { x: r.x, z: r.z };
+    for (let t = 10; t >= 3; t -= 1) {
+      const x = r.x + dx * t, z = r.z + dz * t;
+      if (!world.insideBuilding(x, z, 0.8) && !world.collideCircle(x, z, 0.8, {}).hit) { p = { x, z }; break; }
+    }
+    return { x: p.x, z: p.z, heading: Math.atan2(-dx, -dz), roadX: r.x, roadZ: r.z };
+  }
+
+  // Neustart am Bahnhof (Spielbeginn, nach Festnahme oder Krankenhaus)
+  function respawn(first) {
+    if (races.active) races.stop();
+    police.reset();
+    if (car) { car.isPlayer = false; car = null; }
+    mode = 'walk';
+    player.health = 100;
+    player.visible = true;
+    player.place(spawn.x, spawn.z, world);
+    player.heading = spawn.heading;
+    cam.yaw = spawn.heading; cam.pitch = 0.3; cam.init = false;
+    // ein Auto steht bereit
+    if (!parked.some(c => !c.wrecked && Math.hypot(c.x - spawn.x, c.z - spawn.z) < 40)) parkCarNear(spawn.roadX, spawn.roadZ, '#c0392b');
+    over = null;
+    $('fade').classList.add('hidden');
+    if (!first) ui.toast('Zurück am Bahnhof', 2);
+  }
+
+  // ---------- Eingabe ----------
+  const keys = {};
+  const pressed = {};
+  let started = false;
+  addEventListener('keydown', e => {
+    if (e.code === 'F1') e.preventDefault();
+    if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+    if (!keys[e.code]) pressed[e.code] = true;
+    keys[e.code] = true;
+  });
+  addEventListener('keyup', e => { keys[e.code] = false; });
+  addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+  const cam = { yaw: 0, pitch: 0.28, dist: 6.5, lastMouse: -10, x: 0, y: 0, z: 0, init: false };
+  const canvas = renderer.domElement;
+  let dragging = false;
+  const lockPointer = () => {
+    try { const p = canvas.requestPointerLock?.(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ohne Mausfang weiter */ }
+  };
+  canvas.addEventListener('mousedown', () => {
+    if (!started) return;
+    if (document.pointerLockElement !== canvas) lockPointer();
+    dragging = true;
+  });
+  addEventListener('mouseup', () => { dragging = false; });
+  addEventListener('mousemove', e => {
+    if (!started || ui.mapOpen) return;
+    if (document.pointerLockElement === canvas || dragging) {
+      cam.yaw -= e.movementX * 0.0032;
+      cam.pitch = U.clamp(cam.pitch + e.movementY * 0.0025, -0.35, 1.25);
+      cam.lastMouse = performance.now() / 1000;
+    }
+  });
+  canvas.addEventListener('wheel', e => {
+    cam.dist = U.clamp(cam.dist * (e.deltaY > 0 ? 1.12 : 1 / 1.12), 2.2, 40);
+  }, { passive: true });
+
+  $('start-btn').onclick = () => {
+    $('start').classList.add('hidden');
+    $('hud').classList.remove('hidden');
+    started = true;
+    audio.init();
+    lockPointer();
+    ui.bigMessage('GTA COBURG', 2.5, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
+  };
+  $('help-close').onclick = () => { $('help').classList.add('hidden'); };
+
+  // ---------- Ton ----------
+  const audio = {
+    ctx: null,
+    init() {
+      if (this.ctx) return;
+      try {
+        const A = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new A();
+        const c = this.ctx;
+        this.master = c.createGain(); this.master.gain.value = 0.5; this.master.connect(c.destination);
+        // Motor: zwei Oszillatoren durch einen Tiefpass
+        this.engGain = c.createGain(); this.engGain.gain.value = 0;
+        this.filter = c.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.frequency.value = 600;
+        this.o1 = c.createOscillator(); this.o1.type = 'sawtooth';
+        this.o2 = c.createOscillator(); this.o2.type = 'square';
+        const g2 = c.createGain(); g2.gain.value = 0.35;
+        this.o1.connect(this.filter); this.o2.connect(g2); g2.connect(this.filter);
+        this.filter.connect(this.engGain); this.engGain.connect(this.master);
+        this.o1.start(); this.o2.start();
+        // Hupe
+        this.hornGain = c.createGain(); this.hornGain.gain.value = 0; this.hornGain.connect(this.master);
+        for (const f of [392, 494]) { const o = c.createOscillator(); o.type = 'square'; o.frequency.value = f; o.connect(this.hornGain); o.start(); }
+        // Martinshorn (Tatü-tata, Quarte a′–d″)
+        this.sirenGain = c.createGain(); this.sirenGain.gain.value = 0;
+        const sf = c.createBiquadFilter(); sf.type = 'lowpass'; sf.frequency.value = 1800;
+        this.sirenOsc = c.createOscillator(); this.sirenOsc.type = 'sawtooth'; this.sirenOsc.frequency.value = 440;
+        this.sirenOsc.connect(sf); sf.connect(this.sirenGain); this.sirenGain.connect(this.master); this.sirenOsc.start();
+      } catch (e) { this.ctx = null; }
+    },
+    engine(on, speed, throttle) {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const gear = Math.min(4, Math.floor(Math.abs(speed) / 11));
+      const rpm = 0.25 + (Math.abs(speed) - gear * 11) / 11 * 0.75;
+      const f = 38 + rpm * 70 + gear * 6;
+      this.o1.frequency.setTargetAtTime(f, t, 0.05);
+      this.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
+      this.filter.frequency.setTargetAtTime(350 + Math.abs(throttle) * 900 + rpm * 400, t, 0.08);
+      this.engGain.gain.setTargetAtTime(on ? 0.11 + Math.abs(throttle) * 0.12 : 0, t, 0.1);
+    },
+    horn(on) { if (this.ctx) this.hornGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, 0.02); },
+    siren(vol) {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      this.sirenOsc.frequency.setValueAtTime(Math.floor(t / 0.62) % 2 ? 587 : 440, t);
+      this.sirenGain.gain.setTargetAtTime(vol, t, 0.15);
+    },
+    noise(len, freq, gain) {
+      if (!this.ctx) return;
+      const c = this.ctx, buf = c.createBuffer(1, c.sampleRate * len, c.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+      const src = c.createBufferSource(); src.buffer = buf;
+      const g = c.createGain(); g.gain.value = gain;
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+      src.connect(f); f.connect(g); g.connect(this.master); src.start();
+    },
+    thump(strength) { if (strength >= 2) this.noise(0.25, 700, Math.min(1, strength / 15) * 0.8); },
+    boom(dist) { this.noise(1.6, 380, U.clamp(1.4 - dist / 200, 0.1, 1.4)); },
+    beep(freq, dur, when = 0, type = 'square', vol = 0.12) {
+      if (!this.ctx) return;
+      const c = this.ctx, t = c.currentTime + when, o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.05);
+    },
+    cash() { this.beep(1320, 0.12, 0, 'triangle', 0.2); this.beep(1760, 0.25, 0.09, 'triangle', 0.2); },
+    fanfare(win) {
+      const notes = win ? [523, 659, 784, 1047] : [523, 494, 440];
+      notes.forEach((f, i) => this.beep(f, i === notes.length - 1 ? 0.5 : 0.16, i * 0.15, 'square', 0.1));
+    },
+    sting() { [392, 370, 349, 262].forEach((f, i) => this.beep(f, 0.4, i * 0.22, 'sawtooth', 0.09)); },
+  };
+
+  // ---------- Geld ----------
+  function addMoney(n) {
+    save.money = Math.max(0, Math.round(save.money + n));
+    persist();
+    if (n > 0) audio.cash();
+  }
+
+  // ---------- Autos ----------
+  // alle Autos außer dem, in dem der Spieler gerade fährt (Polizei und Rennen kümmern sich um ihre eigenen)
+  function nonPlayerCars() {
+    const list = traffic.cars.concat(parked, wrecks);
+    return mode === 'drive' ? list.filter(c => c !== car) : list;
+  }
+  function allCars() { return traffic.cars.concat(parked, wrecks, police.cars(), races.cars()); }
+
+  // Autos, in die der Spieler einsteigen kann
+  function enterable() {
+    const list = traffic.cars.filter(c => !c.burning).concat(parked.filter(c => !c.wrecked && !c.burning));
+    for (const u of police.units) if ((u.officer || u.mode === 'block') && !u.car.burning) list.push(u.car);
+    return list;
+  }
+
+  function nearestCar(x, z, maxD) {
+    let best = null, bd = maxD;
+    for (const c of enterable()) {
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+
+  function enterCar(c) {
+    const unit = police.units.find(u => u.car === c);
+    if (unit) {
+      police.takeCar(c); parked.push(c);
+      police.crime(1, 'Streifenwagen geklaut!', 2);
+    } else if (c.ai) {
+      traffic.release(c); parked.push(c);
+      if (c.kind === 'police') police.crime(1, 'Streifenwagen geklaut!', 2);
+      else if (police.witness(c.x, c.z, 120) || Math.random() < 0.3) police.crime(0, 'Autodiebstahl! Jemand hat die Polizei gerufen', 1);
+      else ui.toast(`${c.spec.name} geklaut`, 1.8);
+    }
+    car = c; car.isPlayer = true; car.sleeping = false;
+    mode = 'drive';
+    player.visible = false;
+    cam.yaw = car.heading;
+  }
+
+  function exitCar() {
+    const lx = Math.cos(car.heading), lz = -Math.sin(car.heading);
+    let x = car.x + lx * 2.1, z = car.z + lz * 2.1;
+    if (world.insideBuilding(x, z, 0.4)) { x = car.x - lx * 2.1; z = car.z - lz * 2.1; }
+    player.place(x, z, world);
+    player.heading = car.heading;
+    player.visible = true;
+    car.vx *= 0.3; car.vz *= 0.3;
+    car.isPlayer = false;
+    car = null;
+    mode = 'walk';
+    audio.engine(false, 0, 0);
+    // nicht zu viele abgestellte Autos behalten
+    while (parked.length > 8) {
+      const far = parked.reduce((a, b) => Math.hypot(b.x - player.x, b.z - player.z) > Math.hypot(a.x - player.x, a.z - player.z) ? b : a);
+      parked.splice(parked.indexOf(far), 1); far.dispose(scene);
+    }
+  }
+
+  function resetCar() {
+    const r = world.nearestRoad(car.x, car.z, 300, s => s.k === 'road');
+    if (!r) return;
+    const s = r.seg;
+    let h = Math.atan2(s.bx - s.ax, s.bz - s.az);
+    if (Math.cos(U.wrapAngle(h - car.heading)) < 0) h += Math.PI;
+    car.place(r.x, r.z, h, world);
+    ui.toast('Auto zurückgesetzt', 1.5);
+  }
+
+  // Auto beim Händler verkaufen
+  function sellPrice(c) { return Math.round(c.spec.value * (0.25 + 0.75 * c.health / 100) / 10) * 10; }
+  function sellCar(pl) {
+    const c = car, price = sellPrice(c);
+    exitCar();
+    parked.splice(parked.indexOf(c), 1);
+    c.dispose(scene);
+    addMoney(price);
+    pl.cool = 3;
+    ui.bigMessage('VERKAUFT', 2, '#ff9a2e', `${c.spec.name} für € ${price}`);
+  }
+
+  // In die Lackiererei fahren
+  function sprayCar(pl) {
+    const stars = police.stars;
+    if (stars > 0 && police.seen) { ui.toast('Die Polizei sieht dich! Erst abhängen.', 1.5); pl.cool = 1.5; return; }
+    if (stars === 0 && car.health >= 99) { ui.toast('Dein Auto ist in Ordnung', 1.5); pl.cool = 4; return; }
+    const cost = stars > 0 ? SPRAY_COST.wanted : SPRAY_COST.repair;
+    if (save.money < cost) { ui.toast(`Zu wenig Geld (€ ${cost})`, 2); pl.cool = 3; return; }
+    addMoney(-cost);
+    let color = null;
+    if (car.kind !== 'police' && car.kind !== 'taxi') {
+      const pal = car.kind === 'sport' ? SPORT_COLORS : CAR_COLORS;
+      do color = pal[Math.floor(Math.random() * pal.length)]; while (pal.length > 1 && color === car.color);
+      car.color = color;
+    }
+    car.repair(color);
+    if (stars > 0) police.clear();
+    pl.cool = 8;
+    ui.bigMessage('FRISCH LACKIERT', 2.2, '#38d97a', (stars > 0 ? 'Fahndung aufgehoben · ' : 'Auto repariert · ') + `€ ${cost}`);
+    audio.noise(1.2, 3000, 0.25);
+  }
+
+  function travel(x, z, name) {
+    ui.closeMap();
+    if (mode === 'drive') {
+      const r = world.nearestRoad(x, z, 400, drivable);
+      if (r) {
+        const s = r.seg;
+        car.place(r.x, r.z, Math.atan2(s.bx - s.ax, s.bz - s.az), world);
+        cam.yaw = car.heading;
+      }
+    } else {
+      let p = { x, z };
+      if (world.insideBuilding(x, z, 0)) {
+        const r = world.nearestRoad(x, z, 300);
+        if (r) p = { x: r.x, z: r.z };
+      }
+      player.place(p.x, p.z, world);
+    }
+    cam.init = false;
+    ui.toast(name ? 'Willkommen: ' + name : 'Schnellreise', 2);
+  }
+
+  function toggleNight() {
+    night = !night;
+    const s = night ? SKY.night : SKY.day;
+    scene.background = night ? skyTex.night : skyTex.day;
+    scene.fog.color.set(s.fog);
+    scene.fog.near = night ? 120 : 260; scene.fog.far = night ? 900 : 1500;
+    sun.intensity = s.sun; sun.color.set(s.sunColor);
+    hemi.intensity = s.hemi; hemi.color.set(s.hemiSky); hemi.groundColor.set(s.hemiGround);
+    world.setNight(night);
+    carMaterials().head.emissiveIntensity = night ? 2.5 : 0.2;
+    carMaterials().tail.emissiveIntensity = night ? 1.6 : 0.25;
+    ui.toast(night ? 'Nacht' : 'Tag', 1.2);
+  }
+  scene.background = skyTex.day;
+
+  // ---------- Feuer, Explosionen, Verletzungen ----------
+  let puffT = 0;
+  function vehicleLife(dt, px, pz) {
+    puffT += dt;
+    const puff = puffT > 0.07;
+    if (puff) puffT = 0;
+    for (const c of allCars()) {
+      if (c.disposed) continue;
+      const near = Math.abs(c.x - px) < 180 && Math.abs(c.z - pz) < 180;
+      if (c.burning > 0) {
+        c.burning -= dt;
+        if (puff && near) { fx.fire(c.x, c.y + 1.1, c.z); fx.smoke(c.x, c.y + 1.8, c.z, 0.9); }
+        if (c.burning <= 0) explode(c);
+      } else if (c.wrecked) {
+        if (puff && near && c.smokeT > 0 && Math.random() < 0.4) fx.smoke(c.x, c.y + 1.4, c.z, 0.85);
+        c.smokeT -= dt;
+      } else if (c.health < 40 && puff && near && Math.random() < 0.25 + (40 - c.health) / 60) {
+        fx.smoke(c.x + Math.sin(c.heading) * 1.7, c.y + 1, c.z + Math.cos(c.heading) * 1.7, 0.2 + (40 - c.health) / 60);
+      }
+    }
+    // weit entfernte Wracks abräumen
+    for (let i = wrecks.length - 1; i >= 0; i--) {
+      const w = wrecks[i];
+      if (!w.burning && (wrecks.length > 12 || Math.hypot(w.x - px, w.z - pz) > 450)) { w.dispose(scene); wrecks.splice(i, 1); }
+    }
+  }
+
+  function explode(c) {
+    fx.explosion(c.x, c.y, c.z);
+    const px = mode === 'drive' ? car.x : player.x, pz = mode === 'drive' ? car.z : player.z;
+    audio.boom(Math.hypot(c.x - px, c.z - pz));
+    c.wreck(); c.smokeT = 12;
+    if (c.ai) traffic.release(c);
+    const pi = parked.indexOf(c);
+    if (pi >= 0 && c !== car) parked.splice(pi, 1);
+    if (!wrecks.includes(c) && c !== car) wrecks.push(c);
+    if (c.kind === 'police' && police.stars > 0) police.crime(0.5, 'Streifenwagen zerstört!', 2);
+    // Druckwelle
+    for (const o of allCars()) {
+      if (o === c || o.disposed) continue;
+      const d = Math.hypot(o.x - c.x, o.z - c.z);
+      if (d > 9) continue;
+      o.damage((9 - d) * 5);
+      if (!o.ai) { const k = (9 - d) * 1.5 / (d || 1); o.vx += (o.x - c.x) * k; o.vz += (o.z - c.z) * k; o.sleeping = false; }
+    }
+    if (car === c) {
+      parked.splice(parked.indexOf(c), 1); wrecks.push(c);
+      wasted('Im Auto verbrannt');
+    } else if (mode === 'walk') {
+      const d = Math.hypot(player.x - c.x, player.z - c.z);
+      if (d < 9) hurtPlayer((9 - d) * 14, c.x, c.z);
+    }
+  }
+
+  let hurtCool = 0, sinceHurt = 99;
+  function hurtPlayer(dmg, fromX, fromZ) {
+    player.health -= dmg;
+    sinceHurt = 0;
+    audio.thump(8);
+    const dx = player.x - fromX, dz = player.z - fromZ, d = Math.hypot(dx, dz) || 1;
+    const r = world.collideCircle(player.x + dx / d * 1.6, player.z + dz / d * 1.6, WALK.radius, {});
+    player.x = r.x; player.z = r.z; player.vy = 4.5; player.onGround = false;
+    if (player.health <= 0) wasted('Überfahren');
+  }
+
+  // Autos, die den Spieler zu Fuß erwischen
+  function carHits(dt) {
+    hurtCool -= dt;
+    if (mode !== 'walk' || hurtCool > 0) return;
+    for (const c of allCars()) {
+      const sp = c.ai ? c.ai.speed : Math.hypot(c.vx, c.vz);
+      if (sp < 5) continue;
+      const dx = player.x - c.x, dz = player.z - c.z;
+      if (dx * dx + dz * dz > 16) continue;
+      const fx_ = Math.sin(c.heading), fz_ = Math.cos(c.heading);
+      const lf = dx * fx_ + dz * fz_, ll = dx * fz_ - dz * fx_;
+      if (Math.abs(lf) < CAR.length / 2 + 0.6 && Math.abs(ll) < CAR.width / 2 + 0.6) {
+        hurtPlayer((sp - 4) * 5, c.x, c.z);
+        hurtCool = 0.8;
+        return;
+      }
+    }
+  }
+
+  // ---------- Verhaftet / Erledigt ----------
+  function busted() {
+    if (over) return;
+    const fine = Math.min(save.money, 100 + 100 * police.stars);
+    addMoney(-fine);
+    over = { t: 0 };
+    ui.bigMessage('VERHAFTET', 4, '#5fa0ff', fine ? `Strafe: € ${fine}` : 'Diesmal ohne Strafe');
+    audio.sting(); audio.engine(false, 0, 0); audio.siren(0);
+    $('fade').classList.remove('hidden');
+  }
+
+  function wasted(reason) {
+    if (over) return;
+    const fee = Math.min(save.money, 100);
+    addMoney(-fee);
+    if (car) { car.isPlayer = false; car = null; mode = 'walk'; player.visible = true; }
+    over = { t: 0 };
+    ui.bigMessage('ERLEDIGT', 4, '#e2463f', `${reason} · Krankenhaus: € ${fee}`);
+    audio.sting(); audio.engine(false, 0, 0); audio.siren(0);
+    $('fade').classList.remove('hidden');
+  }
+
+  // ---------- Kamera ----------
+  const tmpV = new THREE.Vector3();
+  function updateCamera(dt) {
+    if (window.game.debugCam) { // freie Kamera für Tests: game.debugCam = { pos: [x,y,z], look: [x,y,z] }
+      camera.position.fromArray(window.game.debugCam.pos); camera.lookAt(...window.game.debugCam.look); return;
+    }
+    let tx, ty, tz, follow = false, heading = 0;
+    if (mode === 'drive') {
+      tx = car.x; ty = car.y + 1.3; tz = car.z; follow = true; heading = car.heading;
+      // Blickrichtung folgt dem Auto, wenn die Maus ruht
+      const idle = performance.now() / 1000 - cam.lastMouse > 1.2;
+      if (idle) {
+        cam.yaw += U.wrapAngle(heading - cam.yaw) * (1 - Math.exp(-3.2 * dt));
+        cam.pitch = U.damp(cam.pitch, 0.22, 2, dt);
+      }
+    } else {
+      tx = player.x; ty = player.y + 1.6; tz = player.z;
+    }
+    if (mode === 'drive' && camMode === 1) {
+      // Motorhaubenkamera
+      const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+      camera.position.set(car.x + fx * 0.6, car.y + 1.55, car.z + fz * 0.6);
+      const lookYaw = car.heading + U.wrapAngle(cam.yaw - car.heading);
+      tmpV.set(camera.position.x + Math.sin(lookYaw) * 10, camera.position.y - Math.sin(cam.pitch - 0.22) * 10 - 0.3, camera.position.z + Math.cos(lookYaw) * 10);
+      camera.lookAt(tmpV);
+      cam.init = false;
+      return;
+    }
+    const dist = mode === 'drive' ? Math.max(cam.dist, 6.5) + Math.min(Math.abs(car.speed), 40) * 0.06 : cam.dist;
+    const cp = Math.cos(cam.pitch), spch = Math.sin(cam.pitch);
+    let wx = tx - Math.sin(cam.yaw) * dist * cp, wy = ty + dist * spch + 0.4, wz = tz - Math.cos(cam.yaw) * dist * cp;
+    // Kamera nicht in Gebäuden verschwinden lassen
+    const steps = Math.ceil(dist / 0.8);
+    for (let i = 1; i <= steps; i++) {
+      const f = i / steps;
+      const x = tx + (wx - tx) * f, y = ty + (wy - ty) * f, z = tz + (wz - tz) * f;
+      const b = world.insideBuilding(x, z, 0);
+      if (b && y < b.top + 1) {
+        const f2 = Math.max(0.05, (i - 1.5) / steps);
+        wx = tx + (wx - tx) * f2; wy = ty + (wy - ty) * f2; wz = tz + (wz - tz) * f2;
+        break;
+      }
+    }
+    wy = Math.max(wy, world.heightAt(wx, wz) + 0.6);
+    if (!cam.init) { cam.x = wx; cam.y = wy; cam.z = wz; cam.init = true; }
+    const lam = follow ? 12 : 30;
+    cam.x = U.damp(cam.x, wx, lam, dt); cam.y = U.damp(cam.y, wy, lam, dt); cam.z = U.damp(cam.z, wz, lam, dt);
+    camera.position.set(cam.x, cam.y, cam.z);
+    camera.lookAt(tx, ty, tz);
+  }
+
+  // ---------- Schleife ----------
+  let last = performance.now();
+  let hudTimer = 0;
+  let prevPX = 0, prevPZ = 0;
+  let burnWarned = null;
+  function loop(now) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (started && ui.mapOpen && (pressed.KeyM || pressed.Escape)) ui.closeMap();
+    else if (started && !ui.mapOpen) step(dt);
+    render(dt);
+    for (const k in pressed) delete pressed[k];
+  }
+
+  function mapExtra() {
+    const locked = police.stars > 0 ? 'Schnellreise gesperrt: Die Polizei sucht dich!' : races.active ? 'Schnellreise gesperrt: Rennen läuft' : null;
+    return { locked, raceStarts: races.list, places: places.list };
+  }
+
+  function step(dt) {
+    fx.update(dt);
+    ui.tick(dt);
+    if (over) {
+      over.t += dt;
+      ui.setBust(0); ui.setPrompt(null); ui.setSpeed(0, '', false);
+      if (over.t > 3.8) respawn(false);
+      return;
+    }
+    // Tasten mit einmaliger Wirkung
+    if (pressed.KeyM) { ui.openMap(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z, travel, mapExtra()); document.exitPointerLock?.(); return; }
+    if (pressed.F1) $('help').classList.toggle('hidden');
+    if (pressed.KeyN) toggleNight();
+    if (pressed.KeyC && mode === 'drive') camMode = 1 - camMode;
+    const freeze = !!(races.active && races.active.t < 0);
+    if (pressed.KeyE && !freeze) {
+      if (mode === 'drive') {
+        if (Math.abs(car.speed) < 6 || car.burning) { exitCar(); if (races.active) races.stop('Rennen abgebrochen'); }
+        else ui.toast('Erst langsamer fahren', 1.2);
+      } else { const c = nearestCar(player.x, player.z, 4.2); if (c) enterCar(c); }
+    }
+    if (pressed.KeyR && mode === 'drive' && !freeze) resetCar();
+
+    const pl = mode === 'drive' ? places.at(car.x, car.z) : null;
+    if (pressed.KeyF) {
+      if (races.active) races.stop('Rennen abgebrochen');
+      else if (pl && pl.type === 'dealer' && pl.cool <= 0 && Math.abs(car.speed) < 4) {
+        if (car.kind === 'police') ui.toast('Streifenwagen kauft hier keiner!', 1.8);
+        else sellCar(pl);
+      } else if (mode === 'drive') {
+        const r = races.near({ x: car.x, z: car.z, inCar: true });
+        if (r && police.stars > 0) ui.toast('Erst die Polizei abhängen!', 1.8);
+        else if (r) { car.vx = car.vz = 0; races.start(r, car); cam.yaw = car.heading; cam.init = false; }
+      }
+    }
+
+    // Spieler bewegen
+    if (mode === 'drive') {
+      const input = freeze ? { throttle: 0, steer: 0, handbrake: true } : {
+        throttle: (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0),
+        steer: (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0),
+        handbrake: !!keys.Space,
+      };
+      car.update(dt, input, world);
+      const now = performance.now() / 1000;
+      const pvx = car.vx, pvz = car.vz; // Geschwindigkeit vor dem Aufprall
+      for (const o of allCars()) {
+        if (o === car) continue;
+        const imp = collideCars(car, o);
+        if (imp < 3 || (o.hitT && now - o.hitT < 1)) continue;
+        o.hitT = now;
+        // nur zählen, wenn der Spieler auf das andere Auto zufährt (nicht, wenn die Polizei ihn rammt)
+        const dx = o.x - car.x, dz = o.z - car.z, dl = Math.hypot(dx, dz) || 1;
+        const mine = (pvx * dx + pvz * dz) / dl > 4;
+        if (!mine) continue;
+        if (o.kind === 'police' && !o.isPlayer && !o.wrecked) police.crime(0.4, 'Polizei gerammt!', 1);
+        else if (o.ai && imp > 7 && police.stars === 0 && police.witness(car.x, car.z, 80)) police.crime(0, 'Unfall vor den Augen der Polizei!', 1);
+      }
+      police.hitOfficers(car);
+      car.updateGround(world, dt, false);
+      car.sync();
+      if (car.lastImpact > 3) audio.thump(car.lastImpact);
+      audio.engine(true, car.speed, input.throttle);
+      audio.horn(!!keys.KeyH);
+      if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
+      if (car.siren) car.flash(performance.now() / 1000);
+    } else {
+      const fwd = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+      const side = (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0);
+      // Kamera-Vorwärts ist (sin yaw, cos yaw), links davon (cos yaw, -sin yaw)
+      const sx = Math.sin(cam.yaw), sz = Math.cos(cam.yaw);
+      let mx = sx * fwd + sz * side, mz = sz * fwd - sx * side;
+      const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+      player.update(dt, { x: mx, z: mz, run: keys.ShiftLeft || keys.ShiftRight, jump: !!pressed.Space }, world, allCars());
+      audio.horn(false);
+    }
+    // abgestellte Autos und Wracks rollen aus, wenn sie angestoßen wurden
+    for (const c of parked.concat(wrecks)) {
+      if (c === car || c.sleeping) continue;
+      c.update(dt, { throttle: 0, steer: 0, handbrake: true }, world);
+      c.updateGround(world, dt, false);
+      c.sync();
+    }
+    const px = mode === 'drive' ? car.x : player.x, pz = mode === 'drive' ? car.z : player.z;
+    const T = {
+      x: px, z: pz, inCar: mode === 'drive', car: mode === 'drive' ? car : null,
+      vx: mode === 'drive' ? car.vx : (px - prevPX) / dt, vz: mode === 'drive' ? car.vz : (pz - prevPZ) / dt,
+    };
+    T.speed = Math.hypot(T.vx, T.vz);
+    prevPX = px; prevPZ = pz;
+
+    const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars());
+    traffic.update(dt, px, pz, obstacles);
+    police.update(dt, T, cam.yaw);
+    if (over) return;
+    races.update(dt, T, nonPlayerCars().concat(police.cars()));
+    places.update(dt);
+    vehicleLife(dt, px, pz);
+    if (over) return;
+    carHits(dt);
+    if (over) return;
+    sinceHurt += dt;
+    if (sinceHurt > 8 && player.health < 100) player.health = Math.min(100, player.health + dt * 2);
+
+    // Lackiererei: einfach hineinfahren
+    if (pl && pl.type === 'spray' && pl.cool <= 0 && Math.abs(car.speed) < 6 && !car.burning) sprayCar(pl);
+
+    // Martinshorn
+    audio.siren(police.sirenDist < 260 ? 0.07 * (1 - police.sirenDist / 260) : 0);
+
+    // HUD
+    hudTimer -= dt;
+    if (hudTimer <= 0) {
+      hudTimer = 0.25;
+      const r = world.nearestRoad(px, pz, 35, s => !!s.n);
+      const b = world.insideBuilding(px, pz, 0);
+      ui.setLocation(r ? r.seg.n : (b && b.n) || 'Coburg', mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : 'zu Fuß');
+    }
+    ui.setMoney(save.money);
+    ui.setWanted(police.stars, police.stars > 0 && !police.seen);
+    ui.setBars(player.health, mode === 'drive' ? car.health : null);
+    ui.setBust(police.bust);
+    let prompt = null;
+    if (mode === 'drive') {
+      const sp = car.speed;
+      ui.setSpeed(Math.abs(sp) * 3.6, sp < -0.5 ? 'R' : Math.abs(sp) < 0.5 ? 'N' : 'D', true);
+      const r = races.near({ x: car.x, z: car.z, inCar: true });
+      if (pl && pl.type === 'dealer') prompt = car.kind === 'police' ? 'Streifenwagen kauft hier keiner' : `<kbd>F</kbd> ${car.spec.name} verkaufen: € ${sellPrice(car)}`;
+      else if (r) prompt = police.stars > 0 ? 'Rennen: erst die Polizei abhängen' : `<kbd>F</kbd> Rennen starten: ${r.name}`;
+      else if (Math.abs(sp) < 6 || car.burning) prompt = '<kbd>E</kbd> Aussteigen';
+    } else {
+      ui.setSpeed(0, '', false);
+      const c = nearestCar(player.x, player.z, 4.2);
+      if (c) prompt = c.kind === 'police' && (c.ai || police.units.some(u => u.car === c)) ? '<kbd>E</kbd> Streifenwagen klauen'
+        : c.ai ? `<kbd>E</kbd> ${c.spec.name} klauen` : '<kbd>E</kbd> Einsteigen';
+    }
+    ui.setPrompt(prompt);
+    const ri = races.mapInfo();
+    ui.drawMinimap(px, pz, mode === 'drive' ? car.heading : player.heading, cam.yaw, traffic.cars, mode === 'drive' ? car.speed : 0, {
+      police: police.cars(), officers: police.officers.filter(o => o.state === 'run').map(o => o.fig),
+      race: ri, places: places.list, raceStarts: races.list, wanted: police.stars > 0,
+    });
+  }
+
+  function render(dt) {
+    if (!player) return;
+    updateCamera(dt);
+    const t = mode === 'drive' ? car : player;
+    // Sonne folgt dem Spieler (auf Schattentexel gerastert, damit nichts flimmert)
+    const texel = (SC * 2) / sun.shadow.mapSize.x;
+    const sx = Math.round(t.x / texel) * texel, sz = Math.round(t.z / texel) * texel;
+    sun.target.position.set(sx, t.y, sz);
+    sun.position.set(sx + SUN_DIR.x * 300, t.y + SUN_DIR.y * 300, sz + SUN_DIR.z * 300);
+    if (mode === 'drive' && night) {
+      const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+      headlight.intensity = 60;
+      headlight.position.set(car.x + fx * 2.2, car.y + 0.8, car.z + fz * 2.2);
+      headlight.target.position.set(car.x + fx * 20, car.y - 1, car.z + fz * 20);
+    } else headlight.intensity = 0;
+    ui.updateLabels(camera);
+    renderer.render(scene, camera);
+  }
+
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  // für Tests in der Konsole
+  window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
+    get police() { return police; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
+    get mode() { return mode; }, get spawn() { return spawn; }, travel, toggleNight, enterCar, exitCar, explode, busted, wasted, addMoney,
+    keys, pressed,
+    // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
+    simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
+})();

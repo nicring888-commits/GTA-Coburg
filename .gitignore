@@ -1,0 +1,7 @@
+# Rohdaten (≈ 430 MB, lassen sich mit den Skripten in tools/ neu laden)
+data/raw/
+
+node_modules/
+.vercel/
+.DS_Store
+Thumbs.db
