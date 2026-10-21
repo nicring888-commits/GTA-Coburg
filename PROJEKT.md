@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.1.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 20.10.2026
+**Version:** 1.2.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 20.10.2026
 
 ---
 
@@ -42,7 +42,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 |---|---|---|
 | Bewegen | `W A S D` (relativ zur Kamera) | `W`/`S` Gas, Bremse, rückwärts · `A`/`D` lenken |
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
-| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Tag/Nacht · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
+| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Tag/Nacht · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
 
@@ -61,7 +61,12 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Autohändler (orange) | `F`: Auto verkaufen; Preis je nach Typ und Zustand (Sportwagen bis € 1.400). Streifenwagen nimmt keiner |
 | Fußgänger (seit v1.1.0) | Bis zu 150 Passanten im Umkreis von 170 m, gut die Hälfte gezielt in der Fußgängerzone (Markt, Spitalgasse, Steinweg, Ketschengasse, Herrngasse …). Sie laufen über Fußwege, Plätze und Gehsteige (rechts der Laufrichtung), bleiben stehen, gehen zu zweit, darunter Kinder. Sie springen vor schnellen Autos zur Seite, fliehen bei Explosionen und vor der Hupe (`H`). Anfahren: Person fällt um, Zeugen rufen die Polizei (bei Polizei in Sichtweite sicher, sonst 40 %). Dazu ≈ 130 feste Figuren: Café-Gäste, Leute auf Bänken, Händler, Kunden am Bratwurststand |
 | Stadtdetails (seit v1.1.0) | ≈ 1.600 Straßenlaternen (bis 1,3 km um den Markt, nachts mit Lichtkegel am Boden), ≈ 120 Altstadtlaternen in der Fußgängerzone, gestreifte Markisen (≈ 280) und Ladenschilder (≈ 220, nachts leuchtend) an den Fassaden der Fußgängerzone, Café-Terrassen mit Sonnenschirmen vor echten Cafés und Restaurants aus OSM (≈ 90 Tische), Bänke, Mülleimer, Blumenkübel, abgestellte Fahrräder, 17 Brunnen mit Wasserstrahl (OSM `fountain`). Am Markt: Prinz-Albert-Denkmal, sechs Marktstände, Coburger-Bratwurststand mit Grillrauch und Kundschaft, 30 Tauben, die vor Spieler, Autos und Explosionen auffliegen. Stimmengewirr, je mehr Leute in der Nähe sind. Laternen, Bänke, Tische, Stände und Brunnen sind Hindernisse für Autos |
-| Speicherstand | Geld und Bestzeiten im Browser (`localStorage`, Schlüssel `gta-coburg-v1`) |
+| Wohnungen (seit v1.2.0) | Sieben kaufbare Wohnungen mit eigener Haustür an echten Fassaden (violette Säule, Schild mit Typ, Größe, Preis): Apartment Lossaustraße € 2.500 und Altbauwohnung Judengasse € 4.500 (klein), Stadtwohnung Mohrenstraße € 9.500, Loft am Steinweg € 12.000, Wohnung Ketschengasse € 14.000 (modern), Penthouse am Glockenberg € 38.000, Villa Leopoldstraße € 55.000 (Luxus). `F` an der Tür öffnet das Menü mit Grundriss, Ausstattung und Preis: **Besichtigen** (kostenlos), **Kaufen** (nur mit genug Geld), **Betreten**, **Garage**. Gekaufte Wohnungen leuchten gold |
+| Innenräume | Drei Typen, beim Betreten Überblendung in einen eigenen Raum, beim Verlassen (`E` an der Wohnungstür) steht man wieder vor derselben Haustür. **Klein** (9 × 7 m, Altbau mit Dielen und Tapete: Bett, Kochnische, Tisch, Sofa, Fernseher, Bücherregal, Küchenradio). **Modern** (13 × 10 m, Fensterfront, Kücheninsel mit Hockern, Essplatz, Sofalandschaft, Großbild-TV, Hi-Fi, Schlafbereich hinter Glaswand). **Luxus** (19 × 14 m, Marmor, Panoramafenster, Whirlpool mit Wellen und Blasen, Bar mit beleuchtetem Flaschenregal, Flügel, Kamin mit Flammen, Kino-TV, Kronleuchter, Schlafpodest). Blick aus dem Fenster auf Altstadtdächer und Veste, nachts mit Lichtern |
+| Interaktionen drinnen | `E`: Schlafen (Leben voll, Tag/Nacht wechselt, Spiel gespeichert), Fernseher (Coburg TV mit Laufband, Fußball, Stadtansicht), Licht an/aus, Radio/Musik (kleine Akkordschleife), Snack/Espresso/Drink (+30 Leben), Whirlpool (Leben voll), Klavier spielen, Kamin. `F`: Kaufen bzw. Infos. Bei Besichtigung gehen Schlafen und Essen erst nach dem Kauf. Mit Fahndung kommt man nicht hinein |
+| Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Pkw € 1.800, Taxi € 2.400, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
+| Garage (`G`) | Eigene Autos (bis 8): Zustand, Farbe und Ort werden gespeichert. **Rausfahren/Herholen** stellt das Auto an den nächsten Straßenrand (immer nur eins draußen, das andere fährt zurück), **Einparken**, zerstörte Autos **reparieren** (20 % des Kaufpreises). Lackiererei ändert die gespeicherte Farbe, Verkauf beim Händler entfernt das Auto aus der Garage. Eigenes Auto: gelber Punkt auf Minikarte und Stadtplan, Einsteigen ohne Fahndung |
+| Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
 
 ## 4. Inhalt der Welt
 
@@ -99,6 +104,8 @@ und müssen dort bleiben.
 | `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes |
 | `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
 | `js/places.js` | Lackierereien und Autohändler (Lage, Säulen, Schilder) |
+| `js/property.js` | Besitz (seit v1.2.0): Wohnungsliste, Haustür an der nächsten Fassade (`placeHome`/`facade`), Autohäuser, Garage mit eigenen Autos (`deliver`/`stow`/`carSold`), gemeinsames Menü (`#menu`), Betreten/Verlassen, Interaktionen und Licht drinnen, Speicherstand |
+| `js/interiors.js` | Innenräume (`Room`): Raumhülle, Fenster mit Ausblick, Möbel aus Quadern mit gemalten Texturen, Kollision als Rechtecke (`collide`, `walker` ersetzt die Welt-Abfragen für die Spielfigur), Kamera innerhalb der Wände (`clampCam`), Stellen zum Benutzen; drei Grundrisse `buildSmallRoom`/`buildModernRoom`/`buildLuxuryRoom` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
@@ -149,6 +156,7 @@ sie nicht zum Gelände (`meta.base`), baut das Spiel alle Häuser wie bisher aus
 `game.debugCam = { pos: [x, y, z], look: [x, y, z] }` (freie Kamera, `null` schaltet sie wieder ab).
 Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races.list` / `game.races.start(r, game.car)`,
 `game.addMoney(1000)`, `game.explode(auto)`, `game.busted()`, `game.wasted('Grund')` und
+`game.property` (z. B. `game.property.enter(game.property.homes[0], true)`, `.exit()`, `.openGarage()`, `.openShop(game.property.shops[0])`) und
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
@@ -196,6 +204,26 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
 
+- ✅ v1.2.0 (20.10.2026): **Wohnungen und eigene Autos** (siehe Tabelle in 3a).
+  - Neue Module `js/property.js` und `js/interiors.js`; in `game.js` nur Einbindung: Zweig `indoorStep`/`indoorCamera`
+    für drinnen, `setIndoor` blendet die Stadt aus (nur Raum, Figur, Sonne und Himmelslicht bleiben, deshalb kostet ein
+    Innenraum ≈ 1 ms pro Bild), `applySky` statt Licht-Code in `toggleNight`, `walkInput` gemeinsam für draußen und
+    drinnen, Tasten `F` (Tür, Autohaus) und `G` (Garage). `ui.js`: Farbtabelle `PLACE_COLOR` für die neuen Orte.
+    Innenräume werden erst beim ersten Betreten gebaut, Licht drinnen nutzt die vorhandenen Lichtquellen (keine
+    zusätzlichen Lampen, also kein Neuübersetzen der Shader)
+  - Getestet im Browser (Skript und Screenshots): alle 7 Türen finden eine Fassade; Kaufen mit zu wenig Geld gesperrt,
+    mit genug Geld abgebucht; Besichtigen, Betreten, alle Interaktionen, Verlassen vor der richtigen Tür; Sperre bei
+    Fahndung; Autohaus mit Farbwahl, Auslieferung, Schaden wird gespeichert, Einparken/Herholen, Zerstörung und
+    Reparatur, Verkauf eigener Autos; Neuladen behält Geld, Wohnung und Garage; Rennen (auch im eigenen Auto) und
+    Polizei laufen weiter, keine Fehler in der Konsole
+  - Behoben beim Testen: Fensterbilder teilten sich die Bildquelle (Tag/Nacht hätte alle Fenster umgestellt), Flaschen
+    und Whirlpool-Wasser steckten in massiven Blöcken, Kamera klebte nach dem Betreten am Hinterkopf (jetzt steiler von
+    oben, wenn eine Wand im Weg ist), Banner überlappte die Ortsanzeige
+- ⚠️ Grenzen v1.2.0: Möbel sind achsparallel und aus einfachen Formen; Wohnungen lassen sich nicht wieder verkaufen;
+  Neustart nach Festnahme/Krankenhaus bleibt am Bahnhof (nicht zu Hause); in der Fußgängerzone wird ein bestelltes
+  Auto an der nächsten befahrbaren Straße abgestellt (Hinweis mit Entfernung und Straße); die Türen sitzen auf der
+  Grundrisskante aus LoD2/ALKIS und nicht immer an der echten Haustür.
+
 - ✅ v1.1.0 (20.10.2026): lebendigere Stadt – Fußgänger (besonders in der Fußgängerzone) und viele Details in der
   Innenstadt (siehe Tabelle in 3a). Getestet über `game.simulate`: Aufbau ohne Fehler, ≈ 150 Passanten, davon ≈ 45 im
   Umkreis von 40 m am Markt; Anfahren mit Sturz und Fahndung; Nachtlicht der Laternen. Spiellogik ≈ 0,1 ms, Zeichnen
@@ -229,6 +257,9 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   - Der Verkehr fährt weiter auf Schienen: er weicht nicht aus und bleibt bei Unfällen nur kurz stehen.
 
 ## 7. Nächste Schritte
+
+- [ ] Wohnungen: Neustart nach „ERLEDIGT“/„VERHAFTET“ im eigenen Zuhause, Kleiderschrank (andere Kleidung), Wohnung wieder verkaufen, Einnahmen (Miete)
+- [ ] Garagen-Stellplatz vor jeder eigenen Wohnung (Auto dort einparken statt per Menü)
 
 - [ ] **Echtes Geländemodell DGM1** der Bayerischen Vermessungsverwaltung (Open Data, 1-m-Raster) statt EU-DEM:
   Dann passen Straßen, Plätze und LoD2-Häuser ohne Einzelkorrektur zusammen (die LoD2-Bodenhöhen zeigen bis über

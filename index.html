@@ -28,6 +28,7 @@
       <div><b>🚗 Autos</b><span>Jedes Auto lässt sich klauen. Sportwagen sind schnell, Streifenwagen sind heiße Ware. Geklaute Autos bringen beim Autohändler Geld.</span></div>
       <div><b>🏁 Rennen</b><span>Fahr in eine blaue Säule und starte mit <kbd>F</kbd> ein Rennen gegen drei Gegner. Vier Strecken, Preisgeld und Bestzeiten.</span></div>
       <div><b>🚓 Polizei</b><span>Autodiebstahl, Rammen und Rasen bringen Sterne. Bleib außer Sicht, bis die Sterne verschwinden, oder fahr in eine grüne Lackiererei.</span></div>
+      <div><b>🏠 Besitz</b><span>Kauf dir Wohnungen (violette Türen) und Neuwagen im türkisen Autohaus. Deine Autos holst du mit <kbd>G</kbd> aus der Garage.</span></div>
     </div>
     <div class="controls">
       <div><h3>Zu Fuß</h3>
@@ -42,8 +43,8 @@
       </div>
       <div><h3>Allgemein</h3>
         <p><kbd>E</kbd> einsteigen, Auto klauen, aussteigen</p>
-        <p><kbd>F</kbd> Rennen starten · Auto verkaufen</p>
-        <p><kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht · <kbd>F1</kbd> Hilfe</p>
+        <p><kbd>F</kbd> Rennen · Wohnung · Autohaus · verkaufen</p>
+        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht · <kbd>F1</kbd> Hilfe</p>
       </div>
     </div>
     <button id="start-btn">Los geht's</button>
@@ -67,10 +68,15 @@
   <div id="bust" class="hidden"><div>Festnahme</div><div class="hbar"><div id="bust-bar"></div></div></div>
   <div id="prompt" class="hidden"></div>
   <div id="toast" class="hidden"></div>
+  <div id="indoor" class="hidden"></div>
   <div id="bigmsg" class="hidden"></div>
   <div id="attribution">Kartendaten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> · Höhen: EU-DEM<span id="attr-ortho"> · Luftbilder: <a href="https://geodaten.bayern.de/opengeodata/" target="_blank" rel="noopener">Bayerische Vermessungsverwaltung</a> (<a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>)</span><span id="attr-lod2"> · 3D-Gebäude LoD2: <a href="https://geodaten.bayern.de/opengeodata/OpenDataDetail.html?pn=lod2" target="_blank" rel="noopener">Bayerische Vermessungsverwaltung – www.geodaten.bayern.de</a> (<a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>)</span></div>
 </div>
 <div id="fade" class="hidden"></div>
+<div id="blackout" class="hidden"></div>
+
+<!-- Menü für Wohnungen, Autohaus und Garage -->
+<div id="menu" class="hidden"><div id="menu-panel" class="menu-panel"></div></div>
 
 <!-- Stadtplan -->
 <div id="map-overlay" class="hidden">
@@ -107,13 +113,19 @@
       <div><h3>Allgemein</h3>
         <p><kbd>E</kbd> ein-/aussteigen, Auto klauen</p>
         <p><kbd>F</kbd> Rennen starten/abbrechen, Auto verkaufen</p>
-        <p><kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht · <kbd>F1</kbd> Hilfe</p>
+        <p><kbd>F</kbd> an Haustür oder Autohaus: ansehen, kaufen</p>
+        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht</p>
+        <p>In der Wohnung: <kbd>E</kbd> benutzen · <kbd>F</kbd> kaufen/Infos</p>
       </div>
     </div>
     <div class="legend">
       <span><i style="background:#3aa0ff"></i>Rennstart</span>
       <span><i style="background:#38d97a"></i>Lackiererei: Reparatur, neue Farbe, Fahndung weg</span>
       <span><i style="background:#ff9a2e"></i>Autohändler: Auto verkaufen</span>
+      <span><i style="background:#2ed3c6"></i>Autohaus: Neuwagen kaufen</span>
+      <span><i style="background:#b57cff"></i>Wohnung zu kaufen</span>
+      <span><i style="background:#e9b949"></i>Dein Zuhause</span>
+      <span><i style="background:#ffe066"></i>Dein Auto</span>
       <span><i style="background:#ff3030"></i>Polizei</span>
     </div>
     <p class="sub small">Sterne gibt es für Autodiebstahl (wenn es jemand sieht), Rasen vor der Streife, Rammen von
@@ -140,6 +152,8 @@
 <script src="js/police.js"></script>
 <script src="js/race.js"></script>
 <script src="js/places.js"></script>
+<script src="js/interiors.js"></script>
+<script src="js/property.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

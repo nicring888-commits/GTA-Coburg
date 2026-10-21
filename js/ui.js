@@ -1,6 +1,9 @@
 // Oberfläche: Minikarte, Stadtplan mit Schnellreise, Anzeigen, Hinweise, Ortsschilder in der Welt.
 'use strict';
 
+// Farben der Orte auf Minikarte und Stadtplan
+const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066' };
+
 class UI {
   constructor(world) {
     this.world = world;
@@ -167,7 +170,7 @@ class UI {
       ctx.fill(); ctx.stroke();
     };
     for (const c of cars) if (c.kind === 'police') blip(c.x, c.z, '#2a5bd7', 3.5, false);
-    for (const p of extra.places || []) blip(p.x, p.z, p.type === 'spray' ? '#38d97a' : '#ff9a2e', 5, true, 'sq');
+    for (const p of extra.places || []) blip(p.x, p.z, PLACE_COLOR[p.type] || '#fff', p.type === 'flat' ? 3.5 : 5, p.type !== 'flat', p.type === 'mycar' ? 'dot' : 'sq');
     if (!race) for (const r of extra.raceStarts || []) blip(r.x, r.z, '#3aa0ff', 5, true, 'sq');
     if (race) {
       for (const c of race.rivals) blip(c.x, c.z, '#ffffff', 4, false);
@@ -328,7 +331,7 @@ class UI {
       ctx.fillStyle = '#222'; ctx.fillText(label, x + 10 * devicePixelRatio * px, z + 4 * devicePixelRatio * px);
     };
     for (const r of ex.raceStarts || []) icon(r.x, r.z, '#3aa0ff', 'Rennen: ' + r.name);
-    for (const p of ex.places || []) icon(p.x, p.z, p.type === 'spray' ? '#38d97a' : '#ff9a2e', p.name);
+    for (const p of ex.places || []) icon(p.x, p.z, PLACE_COLOR[p.type] || '#fff', p.name);
     ctx.fillStyle = '#e9b949'; ctx.strokeStyle = '#111'; ctx.lineWidth = 2 * devicePixelRatio * px;
     ctx.beginPath(); ctx.arc(this.player.x, this.player.z, 8 * devicePixelRatio * px, 0, 6.283); ctx.fill(); ctx.stroke();
   }

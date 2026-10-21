@@ -71,7 +71,7 @@
 
   // ---------- Welt laden ----------
   const world = new World(window.COBURG, scene, renderer);
-  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props;
+  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property;
   let lastBoom = null;     // letzte Explosion (scheucht Tauben auf)
   const parked = [];       // Autos ohne KI (auch das eigene)
   const wrecks = [];       // ausgebrannte oder brennende Autos
@@ -103,6 +103,10 @@
       adopt: c => { if (!wrecks.includes(c)) wrecks.push(c); },
     });
     places = new Places({ world, scene, ui });
+    property = new Property({ world, scene, ui, save, persist, audio, addMoney, parkCarNear, parked, hemi, sun, cam,
+      player: () => player, car: () => car, mode: () => mode, stars: () => police.stars, night: () => night,
+      setIndoor, sleep, lockPointer,
+    });
     progress('Fußgänger und Stadtleben …', 0.99);
     peds = new Pedestrians(world, scene);
     props = new CityProps(world, scene, peds, fx, ui);
@@ -202,7 +206,7 @@
   });
   addEventListener('mouseup', () => { dragging = false; });
   addEventListener('mousemove', e => {
-    if (!started || ui.mapOpen) return;
+    if (!started || ui.mapOpen || property.menuOpen) return;
     if (document.pointerLockElement === canvas || dragging) {
       cam.yaw -= e.movementX * 0.0032;
       cam.pitch = U.clamp(cam.pitch + e.movementY * 0.0025, -0.35, 1.25);
@@ -389,9 +393,10 @@
     exitCar();
     parked.splice(parked.indexOf(c), 1);
     c.dispose(scene);
+    const mine = property.carSold(c);
     addMoney(price);
     pl.cool = 3;
-    ui.bigMessage('VERKAUFT', 2, '#ff9a2e', `${c.spec.name} für € ${price}`);
+    ui.bigMessage('VERKAUFT', 2, '#ff9a2e', `${mine ? 'Dein ' : ''}${c.spec.name} für € ${price}`);
   }
 
   // In die Lackiererei fahren
@@ -438,6 +443,10 @@
 
   function toggleNight() {
     night = !night;
+    applySky();
+    ui.toast(night ? 'Nacht' : 'Tag', 1.2);
+  }
+  function applySky() {
     const s = night ? SKY.night : SKY.day;
     scene.background = night ? skyTex.night : skyTex.day;
     scene.fog.color.set(s.fog);
@@ -448,7 +457,33 @@
     props.setNight(night);
     carMaterials().head.emissiveIntensity = night ? 2.5 : 0.2;
     carMaterials().tail.emissiveIntensity = night ? 1.6 : 0.25;
-    ui.toast(night ? 'Nacht' : 'Tag', 1.2);
+    property.setNight(night);
+  }
+
+  // ---------- Wohnungen ----------
+  // drinnen: die Stadt ausblenden (nur Raum, Spielfigur und Licht bleiben), draußen alles wiederherstellen
+  let hiddenOutdoor = null;
+  function setIndoor(room) {
+    if (room) {
+      const keep = new Set([property.indoorRoot, player.group, sun, sun.target, hemi]);
+      hiddenOutdoor = scene.children.filter(o => o.visible && !keep.has(o));
+      for (const o of hiddenOutdoor) o.visible = false;
+      audio.engine(false, 0, 0); audio.siren(0); audio.crowd(0); audio.horn(false);
+    } else {
+      for (const o of hiddenOutdoor || []) o.visible = true;
+      hiddenOutdoor = null;
+      applySky();
+    }
+    $('minimap-wrap').classList.toggle('hidden', !!room);
+    $('location').classList.toggle('hidden', !!room);
+    cam.init = false;
+  }
+
+  // im eigenen Bett schlafen: Leben voll, Tag/Nacht wechseln, speichern
+  function sleep() {
+    toggleNight();
+    player.health = 100;
+    persist();
   }
   scene.background = skyTex.day;
 
@@ -560,12 +595,67 @@
     $('fade').classList.remove('hidden');
   }
 
+  // ---------- Drinnen ----------
+  // Laufrichtung aus WASD relativ zur Kamera
+  function walkInput() {
+    const fwd = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+    const side = (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0);
+    // Kamera-Vorwärts ist (sin yaw, cos yaw), links davon (cos yaw, -sin yaw)
+    const sx = Math.sin(cam.yaw), sz = Math.cos(cam.yaw);
+    let mx = sx * fwd + sz * side, mz = sz * fwd - sx * side;
+    const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+    return { x: mx, z: mz, run: keys.ShiftLeft || keys.ShiftRight, jump: !!pressed.Space };
+  }
+
+  // Spielschritt in einer Wohnung: die Stadt ruht, nur Figur, Raum und HUD laufen
+  function indoorStep(dt) {
+    if (pressed.F1) $('help').classList.toggle('hidden');
+    if (pressed.KeyN) toggleNight();
+    if (pressed.KeyM || pressed.KeyG) ui.toast('Erst die Wohnung verlassen', 1.5);
+    const io = property.inside, mv = walkInput();
+    mv.run = false; // drinnen wird nicht gerannt
+    player.update(dt, mv, io.room.walker, []);
+    sinceHurt += dt;
+    if (sinceHurt > 8 && player.health < 100) player.health = Math.min(100, player.health + dt * 2);
+    const prompt = property.indoorStep(dt, pressed);
+    ui.setMoney(save.money);
+    ui.setWanted(police.stars, false);
+    ui.setBars(player.health, null);
+    ui.setBust(0); ui.setSpeed(0, '', false);
+    ui.setPrompt(property.menuOpen ? null : prompt);
+    if (property.inside) ui.setLocation(io.home.name, io.viewing ? 'Besichtigung' : 'zu Hause');
+  }
+
+  // Kamera drinnen: näher dran und immer innerhalb der Wände
+  function indoorCamera(dt) {
+    const R = property.inside.room;
+    const tx = player.x, ty = player.y + 1.45, tz = player.z;
+    // vor einer Wand steiler von oben schauen, statt am Hinterkopf zu kleben
+    const dist = Math.min(cam.dist, 4.2);
+    let p = null;
+    for (const pitch of [cam.pitch, 0.75, 1.05, 1.3]) {
+      if (pitch < cam.pitch) continue;
+      const cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const q = R.clampCam(tx, ty, tz, tx - Math.sin(cam.yaw) * dist * cp, ty + dist * sp + 0.3, tz - Math.cos(cam.yaw) * dist * cp);
+      const d = Math.hypot(q[0] - tx, q[1] - ty, q[2] - tz);
+      if (!p || d > p.d + 0.3) p = { q, d };
+      if (d > Math.min(dist, 2.6) - 0.05) break;
+    }
+    p = p.q;
+    if (!cam.init) { cam.x = p[0]; cam.y = p[1]; cam.z = p[2]; cam.init = true; }
+    cam.x = U.damp(cam.x, p[0], 20, dt); cam.y = U.damp(cam.y, p[1], 20, dt); cam.z = U.damp(cam.z, p[2], 20, dt);
+    const q = R.clampCam(tx, ty, tz, cam.x, cam.y, cam.z);
+    camera.position.set(q[0], q[1], q[2]);
+    camera.lookAt(tx, ty, tz);
+  }
+
   // ---------- Kamera ----------
   const tmpV = new THREE.Vector3();
   function updateCamera(dt) {
     if (window.game.debugCam) { // freie Kamera für Tests: game.debugCam = { pos: [x,y,z], look: [x,y,z] }
       camera.position.fromArray(window.game.debugCam.pos); camera.lookAt(...window.game.debugCam.look); return;
     }
+    if (property.inside) { indoorCamera(dt); return; }
     let tx, ty, tz, follow = false, heading = 0;
     if (mode === 'drive') {
       tx = car.x; ty = car.y + 1.3; tz = car.z; follow = true; heading = car.heading;
@@ -621,6 +711,7 @@
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     if (started && ui.mapOpen && (pressed.KeyM || pressed.Escape)) ui.closeMap();
+    else if (started && property.menuOpen) { if (pressed.Escape || pressed.KeyF || pressed.KeyG) property.closeMenu(); }
     else if (started && !ui.mapOpen) step(dt);
     render(dt);
     for (const k in pressed) delete pressed[k];
@@ -628,7 +719,7 @@
 
   function mapExtra() {
     const locked = police.stars > 0 ? 'Schnellreise gesperrt: Die Polizei sucht dich!' : races.active ? 'Schnellreise gesperrt: Rennen läuft' : null;
-    return { locked, raceStarts: races.list, places: places.list };
+    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces()) };
   }
 
   function step(dt) {
@@ -640,6 +731,7 @@
       if (over.t > 3.8) respawn(false);
       return;
     }
+    if (property.inside) { indoorStep(dt); return; }
     // Tasten mit einmaliger Wirkung
     if (pressed.KeyM) { ui.openMap(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z, travel, mapExtra()); document.exitPointerLock?.(); return; }
     if (pressed.F1) $('help').classList.toggle('hidden');
@@ -653,10 +745,15 @@
       } else { const c = nearestCar(player.x, player.z, 4.2); if (c) enterCar(c); }
     }
     if (pressed.KeyR && mode === 'drive' && !freeze) resetCar();
+    if (pressed.KeyG && !freeze) { property.openGarage(); return; }
 
     const pl = mode === 'drive' ? places.at(car.x, car.z) : null;
+    const door = mode === 'walk' ? property.doorAt(player.x, player.z) : null;
+    const shop = property.shopAt(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z);
     if (pressed.KeyF) {
       if (races.active) races.stop('Rennen abgebrochen');
+      else if (door) { property.openHome(door); return; }
+      else if (shop && (mode === 'walk' || Math.abs(car.speed) < 4)) { property.openShop(shop); return; }
       else if (pl && pl.type === 'dealer' && pl.cool <= 0 && Math.abs(car.speed) < 4) {
         if (car.kind === 'police') ui.toast('Streifenwagen kauft hier keiner!', 1.8);
         else sellCar(pl);
@@ -699,13 +796,7 @@
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
       if (car.siren) car.flash(performance.now() / 1000);
     } else {
-      const fwd = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
-      const side = (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0);
-      // Kamera-Vorwärts ist (sin yaw, cos yaw), links davon (cos yaw, -sin yaw)
-      const sx = Math.sin(cam.yaw), sz = Math.cos(cam.yaw);
-      let mx = sx * fwd + sz * side, mz = sz * fwd - sx * side;
-      const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-      player.update(dt, { x: mx, z: mz, run: keys.ShiftLeft || keys.ShiftRight, jump: !!pressed.Space }, world, allCars());
+      player.update(dt, walkInput(), world, allCars());
       audio.horn(false);
     }
     // abgestellte Autos und Wracks rollen aus, wenn sie angestoßen wurden
@@ -729,6 +820,7 @@
     if (over) return;
     races.update(dt, T, nonPlayerCars().concat(police.cars()));
     places.update(dt);
+    property.update(dt);
 
     // Fußgänger: laufen, ausweichen, angefahren werden
     const physCars = (mode === 'drive' ? [car] : []).concat(police.cars(), races.cars());
@@ -776,20 +868,23 @@
       const sp = car.speed;
       ui.setSpeed(Math.abs(sp) * 3.6, sp < -0.5 ? 'R' : Math.abs(sp) < 0.5 ? 'N' : 'D', true);
       const r = races.near({ x: car.x, z: car.z, inCar: true });
-      if (pl && pl.type === 'dealer') prompt = car.kind === 'police' ? 'Streifenwagen kauft hier keiner' : `<kbd>F</kbd> ${car.spec.name} verkaufen: € ${sellPrice(car)}`;
+      if (pl && pl.type === 'dealer') prompt = car.kind === 'police' ? 'Streifenwagen kauft hier keiner' : `<kbd>F</kbd> ${car.ownedId ? 'Deinen ' : ''}${car.spec.name} verkaufen: € ${sellPrice(car)}`;
+      else if (shop && Math.abs(sp) < 6) prompt = property.prompt(car.x, car.z, false);
       else if (r) prompt = police.stars > 0 ? 'Rennen: erst die Polizei abhängen' : `<kbd>F</kbd> Rennen starten: ${r.name}`;
       else if (Math.abs(sp) < 6 || car.burning) prompt = '<kbd>E</kbd> Aussteigen';
     } else {
       ui.setSpeed(0, '', false);
       const c = nearestCar(player.x, player.z, 4.2);
       if (c) prompt = c.kind === 'police' && (c.ai || police.units.some(u => u.car === c)) ? '<kbd>E</kbd> Streifenwagen klauen'
-        : c.ai ? `<kbd>E</kbd> ${c.spec.name} klauen` : '<kbd>E</kbd> Einsteigen';
+        : c.ai ? `<kbd>E</kbd> ${c.spec.name} klauen` : c.ownedId ? `<kbd>E</kbd> Einsteigen: dein ${c.spec.name}` : '<kbd>E</kbd> Einsteigen';
+      const pp = property.prompt(player.x, player.z, true);
+      if (pp) prompt = prompt ? prompt + ' · ' + pp : pp;
     }
     ui.setPrompt(prompt);
     const ri = races.mapInfo();
     ui.drawMinimap(px, pz, mode === 'drive' ? car.heading : player.heading, cam.yaw, traffic.cars, mode === 'drive' ? car.speed : 0, {
       police: police.cars(), officers: police.officers.filter(o => o.state === 'run').map(o => o.fig),
-      race: ri, places: places.list, raceStarts: races.list, wanted: police.stars > 0,
+      race: ri, places: places.list.concat(property.mapPlaces()), raceStarts: races.list, wanted: police.stars > 0,
     });
   }
 
@@ -822,7 +917,7 @@
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, travel, toggleNight, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, travel, toggleNight, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
