@@ -291,6 +291,39 @@ class UI {
       if (!drag.moved && e.target === this.big && !this.mapExtra.locked) { const p = toWorld(e); this.onTravel(p.x, p.z, null); }
       drag = null;
     });
+    // Touch: ein Finger verschiebt/tippt = reisen, zwei Finger zoomen
+    const tp = new Map();
+    let pinch = 0, tdrag = null;
+    this.big.style.touchAction = 'none';
+    this.big.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;
+      tp.set(e.pointerId, e);
+      if (tp.size === 1) tdrag = { x: e.clientX, y: e.clientY, cx: this.view.cx, cz: this.view.cz, moved: false };
+      else { tdrag = null; const [a, b] = [...tp.values()]; pinch = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+    });
+    this.big.addEventListener('pointermove', e => {
+      if (!tp.has(e.pointerId)) return;
+      tp.set(e.pointerId, e);
+      if (tp.size >= 2) {
+        const [a, b] = [...tp.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        if (pinch) { this.view.scale = U.clamp(this.view.scale * d / pinch, this.view.min, 4); this.drawBigMap(); }
+        pinch = d;
+      } else if (tdrag) {
+        const dx = (e.clientX - tdrag.x) * devicePixelRatio, dy = (e.clientY - tdrag.y) * devicePixelRatio;
+        if (Math.abs(dx) + Math.abs(dy) > 10) tdrag.moved = true;
+        if (tdrag.moved) { this.view.cx = tdrag.cx - dx / this.view.scale; this.view.cz = tdrag.cz - dy / this.view.scale; this.drawBigMap(); }
+      }
+    });
+    const tend = e => {
+      if (!tp.has(e.pointerId)) return;
+      tp.delete(e.pointerId);
+      if (e.type === 'pointerup' && tdrag && !tdrag.moved && tp.size === 0 && !this.mapExtra.locked) {
+        const p = toWorld(e); this.onTravel(p.x, p.z, null);
+      }
+      if (tp.size === 0) tdrag = null;
+      pinch = 0;
+    };
+    this.big.addEventListener('pointerup', tend); this.big.addEventListener('pointercancel', tend);
     this.big.addEventListener('wheel', e => {
       e.preventDefault();
       const before = toWorld(e);

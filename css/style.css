@@ -150,3 +150,42 @@ button { font: inherit; cursor: pointer; }
   #speedo { width: 110px; height: 110px; }
   #speed-val { font-size: 32px; }
 }
+
+/* Touch-Steuerung (iPad) */
+body.touch { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+body.touch #app canvas { touch-action: none; }
+body.touch #help-hint, body.touch #attribution { display: none; }
+#touch { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+#touch.suspended { display: none; }
+#touch button { pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; color: #fff;
+  background: rgba(18,22,30,0.55); border: 2px solid rgba(255,255,255,0.45); border-radius: 50%;
+  width: 64px; height: 64px; font-size: 24px; font-weight: 800; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; line-height: 1; padding: 0; backdrop-filter: blur(4px); }
+#touch button small { font-size: 9.5px; font-weight: 600; margin-top: 2px; opacity: .85; }
+#touch button.on { background: rgba(233,185,73,0.8); color: #1c1606; transform: scale(0.94); }
+#touch button.big { width: 82px; height: 82px; font-size: 30px; border-color: var(--accent); }
+#t-stick { position: absolute; left: max(28px, env(safe-area-inset-left)); bottom: 52px; width: 160px; height: 160px;
+  border-radius: 50%; background: rgba(18,22,30,0.4); border: 2px solid rgba(255,255,255,0.4); pointer-events: auto; touch-action: none; }
+#t-knob { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%;
+  background: rgba(255,255,255,0.55); border: 2px solid rgba(255,255,255,0.8); }
+#t-btns { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: 36px; width: 290px; height: 250px; }
+#t-btns button { position: absolute; }
+#t-e { right: 0; bottom: 0; }
+#t-f { right: 96px; bottom: 6px; }
+#t-jump, #t-brake { right: 6px; bottom: 100px; }
+#t-run { right: 100px; bottom: 100px; }
+#t-horn { right: 194px; bottom: 6px; }
+#t-cam { right: 194px; bottom: 82px; }
+#t-flip { right: 100px; bottom: 176px; }
+#touch .drive { display: none; }
+#touch.driving .drive { display: flex; }
+#touch.driving .walk, #touch.driving #t-jump { display: none; }
+#t-top { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+#t-top button { width: 48px; height: 48px; font-size: 20px; }
+/* HUD rückt für den Joystick/Minimap nach oben bzw. klein */
+body.touch #minimap-wrap { width: 130px; height: 130px; left: auto; right: 16px; top: 150px; bottom: auto; }
+body.touch #compass { transform-origin: 10px 61px; }
+body.touch #speedo { right: auto; left: 210px; bottom: 36px; width: 100px; height: 100px; }
+body.touch #speed-val { font-size: 30px; }
+body.touch #prompt { bottom: 290px; }
+body.touch #bust { bottom: 290px; }
