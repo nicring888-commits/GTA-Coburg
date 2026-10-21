@@ -4,7 +4,7 @@
 'use strict';
 
 const LIFE = {
-  collectorSpeed: 2.6,   // m/s: schneller als Spaziergänger (1,1–1,6), langsamer als Rennende (5,2) und der Spieler (4,2)
+  collectorSpeed: 3.5,   // m/s: deutlich schneller als Spaziergänger (1,1–1,6), langsamer als der Spieler (4,2) und Rennende (5,2)
   kidRun: [2.4, 3.6],
   activeRange: 260,      // nur in der Nähe des Spielers bewegen
 };
@@ -16,6 +16,10 @@ const SCHOOLS = [
   { name: 'Heiligkreuz-Mittelschule', x: -205, z: -877 },
   { name: 'Berufsschule', x: -622, z: 129 },
   { name: 'Regiomontanus-Fachoberschule', x: -626, z: 14 },
+  // Lage der drei Gymnasien nach Google Maps (nicht namentlich in OSM)
+  { name: 'Gymnasium Casimirianum', x: 53, z: 147 },
+  { name: 'Gymnasium Ernestinum', x: 313, z: 260 },
+  { name: 'Gymnasium Alexandrinum', x: 418, z: 319 },
 ];
 
 class TownLife {
@@ -71,6 +75,21 @@ class TownLife {
       bt.position.set(-0.1 + i * 0.1, 0.02, 0); bag.add(bt);
     }
     this.bag = bag;
+    // Greifzange in der linken Hand: Alustange mit Griff oben und Zange unten, Drehpunkt an der Hand
+    const gr = new THREE.Group();
+    gr.rotation.order = 'YXZ';
+    const alu = new THREE.MeshLambertMaterial({ color: '#b8bcc2' }), dark = new THREE.MeshLambertMaterial({ color: '#222428' });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.95, 6), alu);
+    pole.position.y = -0.47; gr.add(pole);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.12), new THREE.MeshLambertMaterial({ color: '#e8b02a' }));
+    grip.position.set(0, 0.02, 0.03); gr.add(grip);
+    for (const sx of [-1, 1]) {
+      const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.1, 0.05), dark);
+      jaw.position.set(sx * 0.03, -0.98, 0); jaw.rotation.z = sx * 0.25; gr.add(jaw);
+    }
+    gr.traverse(o => { o.castShadow = true; });
+    this.grabber = gr;
+    this.scene.add(gr);
     this.scene.add(bag);
   }
 
@@ -105,6 +124,13 @@ class TownLife {
     const fwd = Math.sin(sw) * 0.25;
     this.bag.position.set(c.x + fx * hx + ax * fwd, c.y + 0.85, c.z + fz * hx + az * fwd);
     this.bag.rotation.y = c.heading;
+    // Greifzange: beim Laufen schräg nach vorn unten, am Eimer hochgehoben und stochernd
+    const g = this.grabber, poke = c.wait > 0;
+    const t = performance.now() / 1000;
+    const tilt = poke ? 1.15 + Math.sin(t * 7) * 0.25 : 0.45 - Math.sin(sw) * 0.3;
+    const lift = poke ? 0.55 + Math.sin(t * 7) * 0.08 : 0;
+    g.position.set(c.x - fx * hx - ax * fwd, c.y + 0.86 + lift, c.z - fz * hx - az * fwd);
+    g.rotation.set(-tilt, c.heading, 0);
   }
 
   // ---------- Schulhöfe ----------

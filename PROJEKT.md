@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.4.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 1.4.2 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -207,6 +207,12 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - ⚠️ Grenzen von LoD2: Fassaden, Fenster und Wandfarben sind weiter erfunden (LoD2 hat keine Fassadentexturen).
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
+
+- ✅ v1.4.2 (21.10.2026): Pfandsammler schneller (3,5 m/s, weiter langsamer als der Spieler) und mit Greifzange in der
+  linken Hand (Alustange, gelber Griff, Zange; beim Laufen schräg nach vorn, am Eimer hochgehoben und stochernd).
+  Drei weitere Schulhöfe: Gymnasium Casimirianum (Gymnasiumsgasse), Ernestinum (Untere Realschulstraße) und
+  Alexandrinum (Seidmannsdorfer Straße), Lage nach Google Maps. Getestet im Browser: Zange beim Laufen und im Eimer,
+  alle neun Höfe mit Kindern, Ball und Tischtennis; keine Fehler.
 
 - ✅ v1.4.1 (21.10.2026): **Mehr Leben** (`js/townlife.js`).
   - **Pfandsammler** auf dem Marktplatz: grauhaariger Mann in olivgrüner Jacke mit blauer Tasche voller Flaschen.
