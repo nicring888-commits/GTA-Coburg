@@ -10,6 +10,7 @@ Object.assign(INTERIOR_TYPES, {
   ratskeller: { label: 'Restaurant', title: 'Gewölbekeller', size: 190, W: 16, D: 12, H: 4.4, features: [] },
   gasthaus: { label: 'Gasthaus', title: 'Fränkisches Gasthaus', size: 130, W: 14, D: 9.5, H: 3.4, features: [] },
   cafe: { label: 'Café', title: 'Café und Bäckerei', size: 80, W: 10, D: 8, H: 3.3, features: [] },
+  tapas: { label: 'Tapas', title: 'Spanisches Restaurant', size: 170, W: 15, D: 11, H: 3.5, features: [] },
   fashion: { label: 'Mode', title: 'Modegeschäft', size: 210, W: 16, D: 13, H: 3.6, features: [] },
   drugstore: { label: 'Drogerie', title: 'Drogeriemarkt', size: 180, W: 15, D: 12, H: 3.3, features: [] },
   books: { label: 'Bücher', title: 'Buchhandlung', size: 170, W: 14, D: 12, H: 3.4, features: [] },
@@ -65,6 +66,22 @@ const VENUE_MENUS = {
     { n: 'Mineralwasser', d: '1,5 l', p: 0.89, hp: 5 },
     { n: 'Sonnencreme LSF 50', d: '200 ml', p: 6.95, hp: 0 },
   ],
+  // Barcelona Coburg: typische Gerichte laut Bildern und Bewertungen; Preise geschätzt (die Karte gibt es nur als PDF)
+  tapas: [
+    { n: 'Gambas al Ajillo', d: 'Garnelen in Knoblauchöl, im Tonschälchen', p: 9.9, hp: 35 },
+    { n: 'Champiñones al Ajillo', d: 'Champignons in Knoblauch und Petersilie', p: 6.9, hp: 25 },
+    { n: 'Dátiles con Bacon', d: 'Datteln im Speckmantel', p: 7.5, hp: 25 },
+    { n: 'Calamares Fritos', d: 'Frittierte Tintenfischringe mit Zitrone', p: 8.9, hp: 30 },
+    { n: 'Patatas Bravas', d: 'Kartoffeln mit scharfer Soße und Alioli', p: 5.9, hp: 25 },
+    { n: 'Bruschetta', d: 'Geröstetes Brot mit Tomaten', p: 6.5, hp: 20 },
+    { n: 'Pan con Alioli', d: 'Brot mit hausgemachter Knoblauchcreme', p: 4.5, hp: 15 },
+    { n: 'Tapas-Platte für zwei', d: 'Serrano, Käse, Gambas, Datteln, Oliven', p: 26.9, hp: 90 },
+    { n: 'Paella Valenciana', d: 'Mit Huhn, Meeresfrüchten und Safran', p: 19.9, hp: 80 },
+    { n: 'Solomillo', d: 'Rinderfilet vom Grill (Carne)', p: 29.9, hp: 85 },
+    { n: 'Crema Catalana', d: 'Karamellisierte Creme', p: 6.5, hp: 15 },
+    { n: 'Sangria 0,25 l', d: '', p: 5.5, hp: 5 },
+    { n: 'Rioja 0,2 l', d: 'Vino tinto', p: 6.9, hp: 5 },
+  ],
   books: [
     { n: 'Stadtführer Coburg', d: 'Veste, Ehrenburg, Altstadt', p: 14.95, hp: 0, read: 'Wusstest du? Prinz Albert, der Mann von Queen Victoria, stammte aus Coburg.' },
     { n: 'Franken-Krimi', d: 'Mord am Marktplatz', p: 12, hp: 0, read: 'Spannend! Der Täter war … nein, wird nicht verraten.' },
@@ -84,9 +101,10 @@ const VENUES = [
   { id: 'hm', name: 'H&M', street: 'Spitalgasse 16', type: 'fashion', x: 52, z: -106 },
   { id: 'mueller', name: 'Müller', street: 'Spitalgasse 3', type: 'drugstore', x: 5, z: -46 },
   { id: 'thalia', name: 'Thalia Coburg', street: 'Spitalgasse 21', type: 'books', x: 29, z: -111 },
+  { id: 'barcelona', name: 'BARCELONA', street: 'Ernstplatz 1', type: 'tapas', x: -151, z: 97, road: 'Ernstplatz', garden: true, host: 'Hugo' },
 ];
 const VENUE_COLOR = { food: '#ff8a3d', store: '#ff5fa2' };
-const VENUE_FOOD = new Set(['doener', 'ratskeller', 'gasthaus', 'cafe']);
+const VENUE_FOOD = new Set(['doener', 'ratskeller', 'gasthaus', 'cafe', 'tapas']);
 
 // ---------- gemalte Texturen ----------
 function tileTex(key, base, grout, n) {
@@ -482,15 +500,161 @@ function buildBooks(index) {
   return R;
 }
 
+// ---------- Barcelona (Tapas): Sandsteinwände mit Strahlern, Rundbogen, Holztische, Wandbank, Kaminzimmer, Bar ----------
+function sandstoneTex() { // Quadermauerwerk aus hellem Sandstein (wie im Gastraum des Barcelona)
+  return intCanvas('sandstone', 512, 512, (c, w, h) => {
+    const r = U.rng(21);
+    c.fillStyle = '#b89c70'; c.fillRect(0, 0, w, h);
+    let y = 0;
+    while (y < h) {
+      const bh = 40 + Math.floor(r() * 30);
+      let x = -r() * 80;
+      while (x < w) {
+        const bw = 70 + r() * 90, g = new THREE.Color('#d6bd8e').offsetHSL((r() - 0.5) * 0.02, (r() - 0.5) * 0.08, (r() - 0.5) * 0.09);
+        c.fillStyle = '#' + g.getHexString(); c.fillRect(x + 2, y + 2, bw - 4, bh - 4);
+        for (let k = 0; k < 14; k++) { c.fillStyle = `rgba(${r() < 0.5 ? '90,70,40' : '255,240,210'},0.12)`; c.fillRect(x + r() * bw, y + r() * bh, 3 + r() * 10, 2 + r() * 4); }
+        x += bw;
+      }
+      y += bh;
+    }
+  }, true);
+}
+function spainPosterTex() { // Plakat in Rot-Gelb mit Schriftzug
+  return intCanvas('spain-poster', 256, 360, (c, w, h) => {
+    c.fillStyle = '#f2c230'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#b3261e'; for (let i = 0; i < 4; i++) c.fillRect(0, 40 + i * 70, w, 32);
+    c.fillStyle = '#1d1d1d'; c.beginPath(); c.arc(w / 2, 150, 46, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#b3261e'; c.beginPath(); c.moveTo(w / 2 - 50, 190); c.quadraticCurveTo(w / 2, 330, w / 2 + 70, 210); c.fill();
+    c.fillStyle = '#ffffff'; c.font = 'bold 40px Georgia, serif'; c.textAlign = 'center'; c.fillText('BARCELONA', w / 2, 340);
+  });
+}
+// Tapas auf einem Tisch (nach den Essensfotos): Tonschälchen mit Gambas oder Champignons, weißer Teller mit
+// Garnelen und Paprika, Brot mit Alioli, zwei Gläser Rotwein. Mitte x, z, Tischhöhe y
+function tapasOnTable(R, g, x, z, y, seed) {
+  const r = U.rng(seed), clay = R.mat('#b5562a'), plate = R.mat('#f7f5f0');
+  const dish = (dx, dz, kind) => {
+    if (kind === 0) { // Gambas al Ajillo
+      R.cyl(0.11, 0.08, 0.05, clay, x + dx, y, z + dz, 14, g);
+      for (let i = 0; i < 5; i++) {
+        const s = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.012, 5, 8, 4.2), R.mat('#f08a5a'));
+        s.position.set(x + dx + Math.cos(i * 1.3) * 0.05, y + 0.055, z + dz + Math.sin(i * 1.3) * 0.05); s.rotation.x = -Math.PI / 2; g.add(s);
+      }
+    } else if (kind === 1) { // Champiñones al Ajillo
+      R.cyl(0.11, 0.08, 0.05, clay, x + dx, y, z + dz, 14, g);
+      for (let i = 0; i < 6; i++) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6, 0, 6.3, 0, 1.6), R.mat('#a8865a'));
+        m.position.set(x + dx + Math.cos(i) * 0.05, y + 0.05, z + dz + Math.sin(i) * 0.05); g.add(m);
+      }
+    } else if (kind === 2) { // Garnelen mit Paprika auf weißem Oval
+      const p = R.cyl(0.18, 0.16, 0.02, plate, x + dx, y, z + dz, 18, g); p.scale.z = 0.62;
+      for (let i = 0; i < 4; i++) R.pbox(g, 0.07, 0.025, 0.03, R.mat(['#f08a5a', '#e8c43a', '#4f9a3a', '#d8452b'][i]), x + dx - 0.09 + i * 0.06, y + 0.02, z + dz + (r() - 0.5) * 0.06, false);
+    } else { // Brot mit Alioli
+      R.cyl(0.14, 0.12, 0.02, plate, x + dx, y, z + dz, 16, g);
+      R.pbox(g, 0.16, 0.04, 0.07, R.mat('#d8a860'), x + dx - 0.03, y + 0.02, z + dz, false);
+      R.cyl(0.04, 0.035, 0.03, R.mat('#f4eedc'), x + dx + 0.07, y + 0.02, z + dz, 10, g);
+    }
+  };
+  [[-0.22, -0.12], [0.18, -0.1], [-0.05, 0.14], [0.26, 0.15]].forEach(([dx, dz], i) => { if (r() < 0.85) dish(dx, dz, (i + seed) % 4); });
+  for (const [dx, dz] of [[-0.35, 0.22], [0.38, -0.25]]) {
+    R.cyl(0.003, 0.03, 0.12, R.mat('#dde6ea', { transparent: true, opacity: 0.5 }), x + dx, y, z + dz, 8, g);
+    R.cyl(0.035, 0.03, 0.06, R.mat('#7a1424'), x + dx, y + 0.11, z + dz, 10, g);
+  }
+}
+
+function buildTapas(index) {
+  const R = new Room('tapas', index);
+  const stone = new THREE.MeshLambertMaterial({ map: sandstoneTex() });
+  R.shell(new THREE.MeshLambertMaterial({ map: planksTex('oak-dark2', '#5a3a22', 0.1, 7) }), stone, '#efe4cc', -4.5);
+  R.group.children[0].material.map.repeat.set(R.W / 3, R.D / 3);
+  R.wallMeshes.forEach(m => m.material.map.repeat.set(3, 1));
+  const { W, D, H } = R;
+  // Strahler an den Längswänden (warmes Licht auf den Stein)
+  for (let x = -W / 2 + 1; x < W / 2; x += 1.8) for (const z of [-D / 2 + 0.06, D / 2 - 0.06]) R.box(0.25, 0.06, 0.06, R.lampMat('#ffd9a0', 1.6), x, H - 0.3, z, { shadow: false });
+  // Zwischenwand aus Sandstein mit Rundbogen (wie die Durchgänge auf den Fotos); dahinter das Kaminzimmer
+  const wx = 2.2, arch = 2.4, aH = 2.6;
+  const sh = new THREE.Shape();
+  sh.moveTo(-D / 2, 0); sh.lineTo(D / 2, 0); sh.lineTo(D / 2, H); sh.lineTo(-D / 2, H); sh.lineTo(-D / 2, 0);
+  const hole = new THREE.Path();
+  hole.moveTo(-arch / 2, 0); hole.lineTo(-arch / 2, aH - arch / 2); hole.absarc(0, aH - arch / 2, arch / 2, Math.PI, 0, true); hole.lineTo(arch / 2, 0); hole.lineTo(-arch / 2, 0);
+  sh.holes.push(hole);
+  const wallG = new THREE.ExtrudeGeometry(sh, { depth: 0.5, bevelEnabled: false, curveSegments: 16 });
+  const uvA = wallG.attributes.uv; for (let i = 0; i < uvA.count; i++) uvA.setXY(i, uvA.getX(i) / 3, uvA.getY(i) / 3);
+  const wm = new THREE.Mesh(wallG, stone); wm.rotation.y = Math.PI / 2; wm.position.set(wx - 0.25, 0, 0);
+  wm.receiveShadow = true; R.group.add(wm);
+  R.solid(wx, -D / 4 - arch / 4, 0.5, D / 2 - arch / 2); R.solid(wx, D / 4 + arch / 4, 0.5, D / 2 - arch / 2);
+  // Vorderer Gastraum: helle Holztische, dunkle Stühle, Wandbank mit roten Polstern
+  const oak = '#c79a62', chairCol = '#2a1e16';
+  R.piece(-W / 2 + 0.35, -0.5, Math.PI / 2, 6.5, 0.6, g => {
+    R.pbox(g, 6.5, 0.45, 0.55, R.mat('#7a5232'), 0, 0, 0);
+    R.pbox(g, 6.5, 0.1, 0.5, R.mat('#7a1f22'), 0, 0.45, 0.02);
+    R.pbox(g, 6.5, 0.55, 0.1, R.mat('#7a5232'), 0, 0.5, -0.24);
+  });
+  for (const z of [-3.2, -0.5, 2.2]) {
+    R.table(-W / 2 + 1.25, z, 0.85, 1.3, 0.76, oak, '#3a2a1c');
+    R.chair(-W / 2 + 2.05, z - 0.3, -Math.PI / 2, chairCol); R.chair(-W / 2 + 2.05, z + 0.3, -Math.PI / 2, chairCol);
+  }
+  for (const [x, z] of [[-2.2, -2.6], [-2.2, 0.6], [0.2, -2.6], [0.2, 0.6]]) {
+    R.table(x, z, 1.2, 0.85, 0.76, oak, '#3a2a1c');
+    for (const s of [-1, 1]) { R.chair(x - 0.32, z + s * 0.65, s > 0 ? Math.PI : 0, chairCol); R.chair(x + 0.32, z + s * 0.65, s > 0 ? Math.PI : 0, chairCol); }
+  }
+  const food = new THREE.Group(); R.group.add(food);
+  [[-W / 2 + 1.25, -3.2], [-W / 2 + 1.25, 2.2], [-2.2, -2.6], [0.2, 0.6]].forEach(([x, z], i) => tapasOnTable(R, food, x, z, 0.76, 11 + i));
+  // Bar an der Südwand: Theke, Hocker, Weinregal, Zapfhähne, Serranoschinken auf dem Halter
+  R.counter(-1.2, D / 2 - 1.0, Math.PI, 3.4, '#5a3a22', '#2a1a10');
+  for (const x of [-2.4, -1.6, -0.8, 0]) R.stool(x, D / 2 - 1.75, '#2a1e16');
+  R.piece(-1.2, D / 2 - 0.2, Math.PI, 3.4, 0.3, g => {
+    R.pbox(g, 3.4, 1.8, 0.3, R.mat('#3a2414'), 0, 0.95, 0);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 12; j++) {
+      const b = R.cyl(0.035, 0.035, 0.25, R.mat(['#4a0f18', '#2e5d32', '#7a1424', '#d8c87a'][(i + j) % 4]), -1.5 + j * 0.27, 1.05 + i * 0.42, 0.06, 6, g);
+      b.rotation.x = Math.PI / 2;
+    }
+  }, false);
+  for (let i = 0; i < 3; i++) R.cyl(0.02, 0.02, 0.35, R.mat('#c9ccd0'), -2.2 + i * 0.15, 0.9, D / 2 - 1.15, 8);
+  R.piece(0.2, D / 2 - 1.0, 0, 0.3, 0.5, g => {
+    R.pbox(g, 0.18, 0.04, 0.45, R.mat('#3a2414'), 0, 0.9, 0);
+    const ham = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 0.5, 10), R.mat('#8a3a28'));
+    ham.rotation.x = Math.PI / 2 - 0.3; ham.position.set(0, 1.02, 0.02); g.add(ham);
+  }, false);
+  // Kaminzimmer hinter dem Bogen: weiße Tischdecken, Kerzen, Kamin mit flackerndem Feuer
+  for (const [x, z] of [[4.6, -2.6], [4.6, 1.2]]) {
+    R.piece(x, z, 0, 1.6, 1.0, g => { R.pbox(g, 1.6, 0.04, 1.0, R.mat('#f7f5f0'), 0, 0.74, 0); R.pbox(g, 1.64, 0.3, 1.04, R.mat('#f7f5f0'), 0, 0.44, 0); });
+    for (const s of [-1, 1]) { R.chair(x - 0.4, z + s * 0.75, s > 0 ? Math.PI : 0, chairCol); R.chair(x + 0.4, z + s * 0.75, s > 0 ? Math.PI : 0, chairCol); }
+    R.cyl(0.03, 0.04, 0.2, R.mat('#f2efe6'), x, 0.78, z, 8); R.cyl(0.012, 0.012, 0.03, R.lampMat('#ffcf70', 2), x, 0.98, z, 6);
+  }
+  tapasOnTable(R, food, 4.6, -2.6, 0.78, 21);
+  R.piece(W / 2 - 0.45, -0.8, -Math.PI / 2, 1.8, 0.7, g => {
+    R.pbox(g, 1.8, 1.2, 0.7, R.mat('#cdb48a'), 0, 0, 0);
+    R.pbox(g, 2.0, 0.12, 0.8, R.mat('#a8906a'), 0, 1.2, 0.02);
+    R.pbox(g, 1.0, 0.7, 0.1, R.mat('#1a1410'), 0, 0.15, 0.31, false);
+    const fire = R.pbox(g, 0.7, 0.35, 0.05, R.lampMat('#ff7a1a', 2.2), 0, 0.2, 0.34, false);
+    R.anims.push((dt, t) => { fire.scale.y = 0.85 + Math.sin(t * 9) * 0.12 + Math.sin(t * 23) * 0.05; });
+  });
+  // Plakat, Bilder, Pendelleuchten, Pflanzen
+  const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.12), new THREE.MeshLambertMaterial({ map: spainPosterTex() }));
+  poster.position.set(-1, 1.75, -D / 2 + 0.04); R.group.add(poster);
+  R.painting('n', -4.5, 1.8, 1.0, 0.75, 61); R.painting('n', 4.6, 1.8, 1.1, 0.8, 62);
+  for (const [x, z] of [[-2.2, -2.6], [-2.2, 0.6], [0.2, -2.6], [0.2, 0.6], [4.6, -2.6], [4.6, 1.2]]) R.ceilingLamp(x, z, '#ffcf8a', 0.18);
+  R.plant(W / 2 - 0.5, D / 2 - 0.5, 1.2); R.plant(-W / 2 + 0.5, -D / 2 + 0.5, 1.1);
+  venueFigure(R, -1.2, D / 2 - 0.55, Math.PI, { shirt: '#1d1d1d', pants: '#1d1d1d', hair: '#2a1a10' });  // hinter der Bar
+  venueFigure(R, 1.4, -1.0, -Math.PI / 2, { shirt: '#f4f4f2', pants: '#1d1d1d', hair: '#3a2a1a' });    // Kellner
+  venueFigure(R, -1.0, -3.6, 0.4, { shirt: '#c97a9a', pants: '#2c2f38', hair: '#d8b878' });
+  venueFigure(R, 3.8, 0.2, 2.6, { shirt: '#3a6ea8', pants: '#3a3a3a', hair: '#6b4a2a' });
+  R.spot(-1.2, D / 2 - 2.0, 1.4, () => 'Bestellen', 'order');
+  R.spot(1.4, -1.0, 1.2, () => 'Beim Kellner bestellen', 'order');
+  venueExit(R);
+  return R;
+}
+
 const VENUE_BUILDERS = { doener: buildDoener, ratskeller: buildRatskeller, gasthaus: buildGasthaus, cafe: buildCafe,
-  fashion: buildFashion, drugstore: buildDrugstore, books: buildBooks };
+  fashion: buildFashion, drugstore: buildDrugstore, books: buildBooks, tapas: buildTapas };
 
 // ---------- Erweiterung von Property: Türen, Betreten, Bestellen ----------
 Object.assign(Property.prototype, {
   // Tür an der Hauswand des Lokals, die zur nächsten Straße zeigt (wie die Ladenschilder in props.js)
   placeVenue(def) {
     const W = this.world;
-    const r = W.nearestRoad(def.x, def.z, 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
+    const r = (def.road && W.nearestRoad(def.x, def.z, 70, s => s.n === def.road)) ||
+      W.nearestRoad(def.x, def.z, 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
     if (!r) return;
     let dx = def.x - r.x, dz = def.z - r.z;
     const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
@@ -525,6 +689,9 @@ Object.assign(Property.prototype, {
     v.label.userData.range = 70;
     this.ui.addLabel(v.label, this.scene);
     this.venues.push(v);
+    if (def.road) this.venueSign(v);
+    if (def.garden) this.beerGarden(v);
+    if (def.host) this.placeHost(v, def.host);
   },
 
   venueRoom(v) {
@@ -577,3 +744,72 @@ Object.assign(Property.prototype, {
     });
   },
 });
+
+// ---------- Barcelona außen: Biergarten am Ernstplatz und Hugo, der vor dem Lokal winkt ----------
+Object.assign(Property.prototype, {
+  // eigenes Schild über der Tür (Lokale, deren Eingang an einer bestimmten Straße liegt; props.js lässt sie aus)
+  venueSign(v) {
+    const ex = -v.oz, ez = v.ox, w = 3.2;
+    const tex = intCanvas('sign-' + v.id, 512, 128, (c, cw, ch) => {
+      c.fillStyle = '#b3261e'; c.fillRect(0, 0, cw, ch);
+      c.strokeStyle = '#ffffff'; c.lineWidth = 5; c.strokeRect(10, 10, cw - 20, ch - 20);
+      c.fillStyle = '#ffffff'; c.font = 'bold 70px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(v.name, cw / 2, ch / 2 + 4);
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4), new THREE.MeshLambertMaterial({ map: tex, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.25 }));
+    m.position.set(v.x + v.ox * 0.12, this.world.heightAt(v.sx, v.sz) + 3.4, v.z + v.oz * 0.12);
+    m.rotation.y = Math.atan2(v.ox, v.oz);
+    this.scene.add(m);
+  },
+
+  // Holzgarnituren mit roten Kissen unter bordeauxroten Schirmen (nach den Fotos vom Ernstplatz)
+  beerGarden(v) {
+    const W = this.world, ex = -v.oz, ez = v.ox;
+    const wood = new THREE.MeshLambertMaterial({ color: '#b0703a' }), cushion = new THREE.MeshLambertMaterial({ color: '#a8252a' });
+    const cloth = new THREE.MeshLambertMaterial({ color: '#7a2230', side: THREE.DoubleSide }), pole = new THREE.MeshLambertMaterial({ color: '#d8d4cc' });
+    const box = (g, w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = true; b.receiveShadow = true; g.add(b); };
+    let n = 0;
+    for (const row of [5.6, 8.4]) for (const col of [-1.6, 1.6, -4.8, 4.8]) {
+      const x = v.x + v.ox * row + ex * col, z = v.z + v.oz * row + ez * col;
+      if (W.insideBuilding(x, z, 1.6) || W.nearestRoad(x, z, 2.6, s => s.k === 'road') || W.collideCircle(x, z, 1.2, {}).hit) continue;
+      const g = new THREE.Group();
+      g.position.set(x, W.heightAt(x, z), z); g.rotation.y = Math.atan2(ex, ez);
+      box(g, 0.7, 0.05, 1.9, wood, 0, 0.76, 0); box(g, 0.08, 0.74, 0.08, wood, 0, 0.37, -0.7); box(g, 0.08, 0.74, 0.08, wood, 0, 0.37, 0.7);
+      for (const s of [-1, 1]) { box(g, 0.3, 0.05, 1.9, wood, s * 0.6, 0.45, 0); box(g, 0.26, 0.05, 1.8, cushion, s * 0.6, 0.5, 0); box(g, 0.06, 0.45, 0.06, wood, s * 0.6, 0.22, -0.7); box(g, 0.06, 0.45, 0.06, wood, s * 0.6, 0.22, 0.7); }
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6), pole); p.position.y = 1.2; g.add(p);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(1.9, 0.5, 4, 1, true), cloth); roof.position.y = 2.45; roof.rotation.y = Math.PI / 4; roof.castShadow = true; g.add(roof);
+      this.scene.add(g);
+      W.trees.push(x, z, 1.0); W.treeGrid.insert(W.trees.length / 3 - 1, x - 1, z - 1, x + 1, z + 1);
+      n++;
+    }
+    v.gardenTables = n;
+  },
+
+  // Gastgeber vor der Tür: winkt allen zu, Name schwebt über dem Kopf
+  placeHost(v, name) {
+    const W = this.world, ex = -v.oz, ez = v.ox;
+    let x = v.x + v.ox * 2.0 + ex * 1.6, z = v.z + v.oz * 2.0 + ez * 1.6;
+    if (W.insideBuilding(x, z, 0.5)) { x = v.sx; z = v.sz; }
+    const p = new Player(this.scene, { shirt: '#b3261e', pants: '#2c2f38', hair: '#ecd27a', skin: '#f1c9a5' });
+    p.place(x, z, W);
+    p.heading = v.heading; p.sync();
+    const lab = makeLabel(name, '#ecd27a');
+    lab.position.set(x, p.y + 2.45, z);
+    lab.userData.range = 60; lab.userData.near = 0; lab.userData.minScale = 0.22; // auch direkt vor ihm lesbar
+    this.ui.addLabel(lab, this.scene);
+    this.hosts = this.hosts || [];
+    this.hosts.push({ p, t: 0 });
+    W.trees.push(x, z, 0.35); W.treeGrid.insert(W.trees.length / 3 - 1, x - 1, z - 1, x + 1, z + 1);
+  },
+});
+// Winken: linker Arm über dem Kopf, schwingt hin und her
+{
+  const baseUpdate = Property.prototype.update;
+  Property.prototype.update = function (dt) {
+    baseUpdate.call(this, dt);
+    for (const h of this.hosts || []) {
+      h.t += dt;
+      h.p.armL.rotation.set(0, 0, 2.7 + Math.sin(h.t * 7) * 0.35);
+      h.p.armR.rotation.set(0, 0, 0);
+    }
+  };
+}

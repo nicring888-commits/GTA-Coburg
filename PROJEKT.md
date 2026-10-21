@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.4.2 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 1.5.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -207,6 +207,15 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - ⚠️ Grenzen von LoD2: Fassaden, Fenster und Wandfarben sind weiter erfunden (LoD2 hat keine Fassadentexturen).
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
+
+- ✅ v1.5.0 (21.10.2026): **Restaurant BARCELONA** (Ernstplatz 1, Tapas) nach Fotos nachgebaut (`buildTapas`,
+  `recherche/referenz-coburg.md`): Sandsteinquader mit Strahlern, Rundbogen zum Kaminzimmer mit Feuer, Holztische,
+  Wandbank, Bar mit Weinregal und Serranoschinken, Tapas auf den Tischen (Gambas, Champiñones, Garnelenteller, Brot mit
+  Alioli, Rotwein). Speisekarte mit 13 spanischen Gerichten und Getränken (Preise geschätzt). Draußen Biergarten mit
+  acht Holzgarnituren, roten Kissen und bordeauxroten Schirmen, rotes Schild „BARCELONA“ über der Tür. Vor dem Eingang
+  steht **Hugo** (blond, rotes Hemd) und winkt; sein Name schwebt über dem Kopf (Schild auch aus der Nähe sichtbar:
+  neue Label-Optionen `near`, `minScale` in `ui.js`). Getestet im Browser: Biergarten, Hugo mit Namen, Innenraum,
+  Bestellung (Gambas: Leben +35, Geld −9,90 €); keine Fehler.
 
 - ✅ v1.4.2 (21.10.2026): Pfandsammler schneller (3,5 m/s, weiter langsamer als der Spieler) und mit Greifzange in der
   linken Hand (Alustange, gelber Griff, Zange; beim Laufen schräg nach vorn, am Eimer hochgehoben und stochernd).

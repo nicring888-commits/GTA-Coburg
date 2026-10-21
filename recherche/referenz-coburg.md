@@ -294,3 +294,18 @@ Grundlage für die betretbaren Läden und Lokale in `js/venues.js`. Die Fotos di
 | **H&M** (Spitalgasse 16) | helle Fliesen, Kleiderstangen aus Metall, Tische mit gefalteten Stapeln, Schaufensterpuppen, Wandregale, Kasse mit Logo | Kleiderstangen mit bunten Teilen, Stapeltische, Wandregal, zwei Puppen, drei Umkleidekabinen, Kasse mit rotem Logo |
 | **Müller** (Spitalgasse 3) | helle Gänge mit weißen Regalen voller bunter Packungen, orange Leitsystem-Schilder, Kosmetikwand | sechs doppelseitige Regale mit Packungstextur und orangen Kopfschildern, Kosmetikwand, orange Kasse |
 | **Thalia** (Spitalgasse 21) | schwarze Bücherregale, Holz-/Fischgrätboden, Tische mit Buchstapeln, Leseecke, Schild „Bestseller“ | schwarze Regale an zwei Wänden, vier Stapeltische, rote Sessel, Schild „BESTSELLER“, Kasse |
+
+### BARCELONA – Tapas. Carne. Vino (Ernstplatz 1)
+
+Google Maps: 50.2575711 N / 10.9624285 O (Spiel x −151, z 97), Tapas-Restaurant, 4,5 Sterne. Laut Google „helle Steinmauern und Separees“, laut Website (barcelona-coburg.de) ein Kaminzimmer, Öffnungszeiten Mo–Sa 17–24 Uhr, So 17–22:30 Uhr. Die Speisekarte gibt es nur als PDF-Download; die Gerichte im Spiel folgen den Essensfotos und Bewertungen (Tapas-Platte, Bruschetta, Alioli), die Preise sind geschätzt.
+
+| Was die Fotos zeigen | Umsetzung |
+|---|---|
+| Wände aus hellen Sandsteinquadern, warm angestrahlt | Quadermauerwerk-Textur, Strahlerleiste unter der Decke |
+| Rundbogen-Durchgänge zwischen den Räumen | Sandsteinwand mit Rundbogen vor dem Kaminzimmer |
+| helle Holztische, dunkle Stühle, Wandbänke | Eichentische, schwarzbraune Stühle, lange Wandbank mit roten Polstern |
+| Raum mit weißen Tischdecken | Kaminzimmer: weiß gedeckte Tische mit Kerzen, Kamin mit flackerndem Feuer |
+| Bar mit Weinregal und Hockern | Theke, Hocker, Weinregal, Zapfhähne, Serranoschinken auf dem Halter |
+| Tonschälchen mit Gambas al Ajillo und Champiñones, weiße Teller mit Garnelen und Paprika, Brot mit Alioli, Rotwein | auf mehreren Tischen nachgebaut |
+| Biergarten am Ernstplatz: Holzgarnituren, rote Kissen, bordeauxrote Schirme | acht Garnituren mit Schirmen vor dem Eingang |
+| rotes Schild „BARCELONA“ | rotes Schild mit weißer Schrift über der Tür |

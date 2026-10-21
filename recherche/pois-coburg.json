@@ -1714,16 +1714,17 @@
    "status": "osm_ungeprueft"
   },
   {
-   "name": "Bar Celona",
+   "name": "BARCELONA",
    "kind": "amenity=restaurant",
-   "cuisine": "spanish",
+   "cuisine": "spanish;tapas",
    "adresse": "Ernstplatz 1",
-   "lat": 50.257578,
-   "lon": 10.96239,
-   "x": -154,
-   "z": 96,
-   "quelle": "osm n602728501",
-   "status": "osm_ungeprueft"
+   "lat": 50.2575711,
+   "lon": 10.9624285,
+   "x": -151,
+   "z": 97,
+   "quelle": "osm n602728501 + google",
+   "status": "bestaetigt",
+   "google_name": "BARCELONA - Tapas. Carne. Vino"
   },
   {
    "name": "Echt bärig",

@@ -85,8 +85,9 @@ class UI {
     if (!this.labels) return;
     for (const sp of this.labels) {
       const d = cam.position.distanceTo(sp.position);
-      sp.visible = !sp.userData.hidden && d < (sp.userData.range || 900) && d > 12;
-      const f = U.clamp(d / 120, 0.6, 4);
+      // near: ab welcher Nähe das Schild verschwindet (Standard 12 m); minScale: kleinste Größe aus der Nähe
+      sp.visible = !sp.userData.hidden && d < (sp.userData.range || 900) && d > (sp.userData.near ?? 12);
+      const f = U.clamp(d / 120, sp.userData.minScale || 0.6, 4);
       sp.scale.copy(sp.userData.base).multiplyScalar(f);
     }
   }

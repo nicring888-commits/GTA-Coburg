@@ -40,7 +40,7 @@ const SIGN_BRANDS = [
   [/Commerzbank/, '#ffcc00', '#002e3c'], [/Deutsche Bank/, '#0018a8', '#ffffff'], [/VR-Bank|Raiffeisen/, '#0066b3', '#ffffff'],
   [/Riemann/, '#7a1e22', '#f3e7cf'], [/Apotheke/, '#ffffff', '#d4001a'], [/Rossmann/, '#e2001a', '#ffffff'],
   [/Ernsting/, '#ffffff', '#e2001a'], [/TK Maxx/, '#ffffff', '#c8102e'], [/Bijou Brigitte/, '#000000', '#d8b56d'],
-  [/Netto/, '#ffe500', '#d4001a'], [/NORMA/, '#e30613', '#ffffff'], [/TEDi/, '#e30613', '#ffffff'],
+  [/^BARCELONA$/, '#b3261e', '#ffffff'], [/Netto/, '#ffe500', '#d4001a'], [/NORMA/, '#e30613', '#ffffff'], [/TEDi/, '#e30613', '#ffffff'],
 ];
 const SIGN_KINDS = {
   'amenity=fast_food': ['#b8322a', '#ffd84a'], 'amenity=restaurant': ['#23402f', '#e8c766'],
@@ -307,6 +307,7 @@ class CityProps {
     let placed = 0;
     for (const [name, kind, px, pz] of S) {
       if (Math.hypot(px, pz) > 1600) continue;
+      if (typeof VENUES !== 'undefined' && VENUES.some(v => v.road && v.name === name)) continue; // eigenes Schild über der Tür (venues.js)
       const r = W.nearestRoad(px, pz, 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
       if (!r) continue;
       // Haus des Ladens: Punkt selbst oder auf der Linie Straße → Laden (bis 8 m dahinter)
