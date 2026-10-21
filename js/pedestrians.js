@@ -5,7 +5,7 @@
 
 const PEDS = {
   max: 150,          // laufende Fußgänger gleichzeitig
-  maxDrawn: 260,     // inkl. sitzender Café-Gäste
+  maxDrawn: 330,     // inkl. sitzender Café-Gäste, Schulkinder und Pfandsammler
   spawnMin: 35, spawnMax: 170, despawn: 210,
   walk: [1.1, 1.6], run: 5.2,
   // Wie gern auf welchem Weg gelaufen wird (Fußgängerzone am liebsten)

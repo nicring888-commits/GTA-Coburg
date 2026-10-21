@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.4.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 1.4.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -103,6 +103,7 @@ und müssen dort bleiben.
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
 | `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes |
 | `js/venues.js` | Läden und Lokale zum Hineingehen (seit v1.4.0): `VENUES` (Ort, Typ), `VENUE_MENUS` (Speisekarten, Sortimente), sieben Innenraum-Bauer auf Basis der Raum-Klasse aus `interiors.js`, erweitert `Property` um `placeVenue`, `venueRoom`, `openVenueMenu` |
+| `js/townlife.js` | Stadtleben (seit v1.4.1): Pfandsammler am Markt (`updateCollector`), Schulhöfe mit Kindern, Ball, Tischtennis und Aufsicht (`SCHOOLS`, `yardCells`, `updateYard`), nachts leer |
 | `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, echte Ladenschilder (`shopSigns`, Texturatlas), Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
 | `js/places.js` | Lackierereien und Autohändler (Lage, Säulen, Schilder) |
 | `js/property.js` | Besitz (seit v1.2.0): Wohnungsliste, Haustür an der nächsten Fassade (`placeHome`/`facade`), Autohäuser, Garage mit eigenen Autos (`deliver`/`stow`/`carSold`), gemeinsames Menü (`#menu`), Betreten/Verlassen, Interaktionen und Licht drinnen, Speicherstand |
@@ -206,6 +207,20 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - ⚠️ Grenzen von LoD2: Fassaden, Fenster und Wandfarben sind weiter erfunden (LoD2 hat keine Fassadentexturen).
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
+
+- ✅ v1.4.1 (21.10.2026): **Mehr Leben** (`js/townlife.js`).
+  - **Pfandsammler** auf dem Marktplatz: grauhaariger Mann in olivgrüner Jacke mit blauer Tasche voller Flaschen.
+    Er eilt mit 2,6 m/s (Spaziergänger 1,1–1,6, Spieler 4,2) von Mülleimer zu Mülleimer (14 Eimer rund um den Markt,
+    vier davon neu), kramt jeweils ein paar Sekunden und läuft zum nächsten.
+  - **Schulhöfe** an sechs Schulen (Gymnasium Albertinum, Rückert-, Heiligkreuz-Mittelschule, Lutherschule, Berufsschule,
+    Regiomontanus-FOS): Hof aus OSM oder die größte freie Fläche neben der Schule (höchstens 30 m entfernt). Dort
+    spielen Kinder Fußball (Ball rollt, wird geschossen, prallt am Rand ab), Fangen, stehen in Grüppchen, spielen
+    Tischtennis an einer Platte; eine Lehrkraft hat Aufsicht. Schild „Pause auf dem Schulhof“. Nachts sind die Höfe leer.
+  - Bewegt wird nur im Umkreis von 260 m um den Spieler; gezeichnet über die Fußgänger-Instanzen (`maxDrawn` 330).
+  Getestet im Browser: Pfandsammler läuft und hält an den Eimern, Kinder auf Rückert-Mittelschule und Lutherschule,
+  Ball bewegt sich, Tag/Nacht blendet die Kinder aus und ein; keine Fehler in der Konsole.
+- ⚠️ Grenzen v1.4.1: Kinder und Pfandsammler weichen Autos und anderen Fußgängern nicht aus und können nicht
+  angefahren werden; der Hof des Albertinum ist klein (OSM-Fläche fast ganz bebaut).
 
 - ✅ v1.4.0 (21.10.2026): **Läden und Lokale zum Hineingehen** (`js/venues.js`). Neun echte Orte haben eine Tür an
   der Fassade unter ihrem Ladenschild (orange bzw. pinke Markierung auf Minikarte und Stadtplan, Schild „F betreten“):

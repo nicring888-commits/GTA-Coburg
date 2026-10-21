@@ -71,7 +71,7 @@
 
   // ---------- Welt laden ----------
   const world = new World(window.COBURG, scene, renderer);
-  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property;
+  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property, life;
   let lastBoom = null;     // letzte Explosion (scheucht Tauben auf)
   const parked = [];       // Autos ohne KI (auch das eigene)
   const wrecks = [];       // ausgebrannte oder brennende Autos
@@ -112,6 +112,7 @@
     peds = new Pedestrians(world, scene);
     props = new CityProps(world, scene, peds, fx, ui);
     props.build();
+    life = new TownLife(world, scene, peds, props, ui);
     spawn = bahnhofSpawn();
     respawn(true);
     progress('Fertig', 1);
@@ -456,6 +457,7 @@
     hemi.intensity = s.hemi; hemi.color.set(s.hemiSky); hemi.groundColor.set(s.hemiGround);
     world.setNight(night);
     props.setNight(night);
+    life.setNight(night);
     carMaterials().head.emissiveIntensity = night ? 2.5 : 0.2;
     carMaterials().tail.emissiveIntensity = night ? 1.6 : 0.25;
     property.setNight(night);
@@ -838,6 +840,7 @@
     const threats = [{ x: px, z: pz, r: mode === 'drive' ? (Math.abs(car.speed) > 2 ? 14 : 4) : 3.5 }];
     if (lastBoom && (lastBoom.t -= dt) > 0) threats.push({ x: lastBoom.x, z: lastBoom.z, r: 60 });
     props.update(dt, px, pz, threats, performance.now() / 1000);
+    life.update(dt, px, pz);
     audio.crowd(Math.min(0.09, peds.countNear(px, pz, 25) * 0.005));
     vehicleLife(dt, px, pz);
     if (over) return;
@@ -917,7 +920,7 @@
 
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
-    get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
+    get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, travel, toggleNight, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
