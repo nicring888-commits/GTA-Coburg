@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.2.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 20.10.2026
+**Version:** 1.2.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -204,6 +204,21 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
 
+- ✅ v1.2.1 (21.10.2026): **Echtere Altstadt nach Straßenfotos** (Grundlage `recherche/referenz-coburg.md`).
+  - Fassadenfarben je Lage statt reinem Zufall (`World.facadePalette`): bunte Altstadt-Palette (Cremeweiß, Ocker,
+    Lachs, Altrosa, Ziegelrot, Mint) innerhalb der Altstadt samt Steinweg und Steintor; Gründerzeit-Palette
+    (Sandstein, heller Klinker, gedeckte Töne) an Mohrenstraße, Löwenstraße, Bahnhofsviertel usw. (Liste
+    `GRUENDERZEIT_STREETS`); sonst die bisherigen Farben. Feste Farben für Stadthaus, Rathaus, Landestheater und
+    Bahnhof (`LANDMARK_FACADES`)
+  - Granit-Kleinpflaster im Segmentbogen in der Fußgängerzone (Spitalgasse, Ketschengasse, Markt usw.): kachelbare
+    Canvas-Textur, die multiplikativ über das Luftbild gelegt wird (`makePaveTexture`, `paveArea`); ohne Luftbild
+    granitgrau statt beige
+  - Getestet im Browser: Aufbau ohne Fehler, Spitalgasse aus Augenhöhe (Pflaster sichtbar, Luftbild bleibt erhalten),
+    Markt (Stadthaus weiß), Mohrenstraße (Sandstein und Klinker)
+- ⚠️ Grenzen v1.2.1: Die Fassaden sind weiter einfarbig mit einer Fenstertextur (keine roten Fensterrahmen am
+  Stadthaus, keine blauen Wandfelder am Rathaus, keine Ladenschilder); die Pflasterstruktur liegt auch über
+  Marktständen und Schatten im Luftbild.
+
 - ✅ v1.2.0 (20.10.2026): **Wohnungen und eigene Autos** (siehe Tabelle in 3a).
   - Neue Module `js/property.js` und `js/interiors.js`; in `game.js` nur Einbindung: Zweig `indoorStep`/`indoorCamera`
     für drinnen, `setIndoor` blendet die Stadt aus (nur Raum, Figur, Sonne und Himmelslicht bleiben, deshalb kostet ein
@@ -265,7 +280,12 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   Dann passen Straßen, Plätze und LoD2-Häuser ohne Einzelkorrektur zusammen (die LoD2-Bodenhöhen zeigen bis über
   10 m Abweichung des EU-DEM)
 - [ ] Schärfere Luftbilder in der Nähe des Spielers (volle 40-cm-Auflösung kachelweise nachladen)
-- [ ] Echte Fassadenfarben, z. B. aus Straßenfotos (Mapillary, braucht einen kostenlosen Zugangsschlüssel)
+- [ ] Echte Fassadenfarben, Fenster, Gehwege und Wahrzeichen nach der **Referenzrecherche vom 21.10.2026**
+  (`recherche/referenz-coburg.md`: Street View, Bildersuche, Farbpalette, Straßen- und Platzbeschreibungen,
+  Umbauvorschläge; `recherche/pois-coburg.json`: 349 Läden/Lokale mit Spielkoordinaten, 27 per Google Maps geprüft;
+  `recherche/streetview-panos.json`: 802 Street-View-Aufnahmepunkte). Umgesetzt in v1.2.1: Fassadenfarben je Straße,
+  Pflaster der Fußgängerzone. Offen: Ladenschilder, Fensterläden/Sandstein-Gewände, Wahrzeichen-Details (Tortürme,
+  Stadthaus-Erker, Rathaus-Türmchen), Gehwegplatten mit Granitrinne, historische Laternen
 
 - [ ] Fußgänger als KI-Figuren auf Gehwegen und Plätzen
 - [ ] Brücken über die Itz mit eigener Höhe
@@ -276,7 +296,7 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - [ ] Kartenausschnitt erweitern (z. B. Cortendorf, Ketschendorf) und Daten bei Bedarf kachelweise laden
 - [ ] Polizeihubschrauber ab 4 Sternen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
-- [ ] Echte Ladennamen an den Schildern (OSM `shop`/`amenity` mit Namen), Weihnachtsmarkt im Winter
+- [ ] Echte Ladennamen an den Schildern (Daten liegen in `recherche/pois-coburg.json`), Weihnachtsmarkt im Winter
 - [ ] Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge
 - [ ] Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
 - [ ] Mehr Fahrzeugtypen (Bus, Lieferwagen, Motorrad)

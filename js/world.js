@@ -8,6 +8,7 @@ const GROUND_PX = 1;            // Bodentextur: Pixel pro Meter
 const ORTHO_TINT = '#c4c4c4';   // Farbabgleich der Luftbilder mit der Szenenbeleuchtung (Foto enthält schon Licht)
 // Mit Luftbild zeigt das Foto Gehwege, Pfade und Plätze schon echt, dann werden nur Fahrbahnen modelliert
 const PHOTO_HIDE = new Set(['foot', 'path', 'track', 'plaza', 'steps']);
+const PAVE_TILE = 2;   // Meter je Kachel der Pflastertextur (Steine etwa 10 cm)
 
 const AREA_STYLE = {
   // Reihenfolge = Zeichenreihenfolge (unten zuerst)
@@ -24,7 +25,7 @@ const MAP_STYLE = {
 };
 const ROAD_STYLE = {
   road: { color: '#3d4045', y: 0.10 },
-  plaza: { color: '#b6a68d', y: 0.07 },
+  plaza: { color: '#8e8d89', y: 0.07 },           // Granit-Kleinpflaster der Fußgängerzone
   foot: { color: '#a99d89', y: 0.06 },
   path: { color: '#9b8b69', y: 0.05 },
   track: { color: '#8c7c5b', y: 0.05 },
@@ -32,6 +33,27 @@ const ROAD_STYLE = {
 };
 const FACADES = ['#ece2c8', '#e3c88f', '#e6b39a', '#efe3ad', '#f1eee6', '#cdd6b4', '#d4cfc4', '#e8c3b8',
   '#c3ced4', '#e9d6a8', '#dfd2bd', '#f0dcc0'];
+// Fassadenfarben nach Straßenfotos (recherche/referenz-coburg.md); doppelte Einträge kommen öfter vor.
+// Altstadt und Vorstädte: bunter Putz von Cremeweiß über Ocker und Lachs bis Ziegelrot
+const FACADES_ALTSTADT = ['#f1ece0', '#f1ece0', '#ede4cf', '#e9d29a', '#e9d29a', '#e2b84c', '#e8a27c', '#e8a27c',
+  '#e3aaa0', '#e3aaa0', '#b8463a', '#cfd9c4', '#f0dc8a', '#c9d0d4', '#e0c99a'];
+// Gründerzeitstraßen: Sandstein, heller Klinker und gedeckte Putzfarben
+const FACADES_GRUENDERZEIT = ['#cbb99a', '#cbb99a', '#c8bfa8', '#b9705c', '#b9705c', '#e9e2cf', '#d9d6cf', '#ede7da',
+  '#c8cfa3', '#e8cf75'];
+const GRUENDERZEIT_STREETS = new Set(['Mohrenstraße', 'Löwenstraße', 'Viktoriastraße', 'Hindenburgstraße',
+  'Bahnhofstraße', 'Lossaustraße', 'Webergasse', 'Mühlgasse', 'Walkmühlgasse', 'Floßstegstraße', 'Callenberger Straße',
+  'Heiligkreuzstraße', 'Hintere Kreuzgasse', 'Kanalstraße', 'Lohgraben', 'Seifartshofstraße', 'Schenkgasse',
+  'Sally-Ehrlich-Straße', 'Goethestraße', 'Alexandrinenstraße', 'Marienstraße', 'Casimirstraße',
+  'Ketschendorfer Straße', 'Am Viktoriabrunnen', 'Allee', 'Rosenauer Straße', 'Kasernenstraße', 'Kreuzwehrstraße']);
+// Feste Farben für Wahrzeichen (Mitte des LoD2-Hauses, Spielkoordinaten)
+const LANDMARK_FACADES = [
+  { x: 28.2, z: -18.5, c: '#f3efe6' },    // Stadthaus (weiß, im Original mit roten Fensterrahmen)
+  { x: -5.3, z: 63.2, c: '#e4e2d6' },     // Rathaus (cremeweiß mit hellblauen Wandfeldern)
+  { x: 187.3, z: -147.1, c: '#e0d4b5' },  // Landestheater
+  { x: -413.3, z: -481.7, c: '#d6cdb8' }, // Bahnhof
+];
+// Altstadt mit Steinweg und Steintor (Spielkoordinaten, grob)
+const ALTSTADT_BOX = { minX: -175, maxX: 340, minZ: -470, maxZ: 360 };
 // Gebäudetypen, die ohne Angabe ein geneigtes (Walm-)Dach bekommen
 const HIP_TYPES = new Set(['house', 'detached', 'semidetached_house', 'terrace', 'yes', 'residential', 'apartments',
   'church', 'chapel', 'school', 'public', 'hotel', 'college', 'dormitory', 'castle', 'kindergarten', 'office', 'civic', 'townhall']);
@@ -446,6 +468,7 @@ class World {
   // ---------------- Straßen ----------------
   buildRoads() {
     const chunks = {}, marks = new Chunks();
+    this.pave = new Chunks();
     for (const k in ROAD_STYLE) chunks[k] = new Chunks();
     const rnd = U.rng(11);
     const white = new THREE.Color('#e9e6dc');
@@ -463,7 +486,8 @@ class World {
         this.roadGrid.insert({ ax, az, bx, bz, n: r.n, k: r.k, h: r.h, w: r.w },
           Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
       }
-      if (this.ortho && PHOTO_HIDE.has(r.k)) continue;
+      const hidden = this.ortho && PHOTO_HIDE.has(r.k);
+      if (hidden && r.k !== 'plaza') continue;
       const L = [], R = [];
       for (let i = 0; i < n; i++) {
         const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
@@ -482,22 +506,35 @@ class World {
         L.push([x + nx, this.heightAt(x + nx, z + nz) + style.y, z + nz]);
         R.push([x - nx, this.heightAt(x - nx, z - nz) + style.y, z - nz]);
       }
+      // Fußgängerzone: Pflasterstruktur in Weltkoordinaten (auch über dem Luftbild)
+      const pave = r.k === 'plaza' ? this.pave : null;
+      const puv = p => [p[0] / PAVE_TILE, p[2] / PAVE_TILE];
+      const quad = (b, a, c, d, e) => {
+        b.tri(a, c, d, col, null, null, null, 0, 1, 0);
+        b.tri(a, d, e, col, null, null, null, 0, 1, 0);
+      };
       for (let i = 0; i < n - 1; i++) {
-        const b = chunks[r.k].get(pts[i * 2], pts[i * 2 + 1]);
-        b.tri(L[i], R[i], R[i + 1], col, null, null, null, 0, 1, 0);
-        b.tri(L[i], R[i + 1], L[i + 1], col, null, null, null, 0, 1, 0);
+        if (!hidden) quad(chunks[r.k].get(pts[i * 2], pts[i * 2 + 1]), L[i], R[i], R[i + 1], L[i + 1]);
+        if (pave) {
+          const b = pave.get(pts[i * 2], pts[i * 2 + 1]);
+          b.tri(L[i], R[i], R[i + 1], white, puv(L[i]), puv(R[i]), puv(R[i + 1]), 0, 1, 0);
+          b.tri(L[i], R[i + 1], L[i + 1], white, puv(L[i]), puv(R[i + 1]), puv(L[i + 1]), 0, 1, 0);
+        }
       }
       // runde Enden schließen Lücken an Kreuzungen
       if (r.k === 'road' || r.k === 'plaza') {
         for (const e of [0, n - 1]) {
           const x = pts[e * 2], z = pts[e * 2 + 1];
-          const b = chunks[r.k].get(x, z);
+          const b = hidden ? null : chunks[r.k].get(x, z);
+          const pb = pave ? pave.get(x, z) : null;
           const c = [x, this.heightAt(x, z) + style.y, z];
           for (let s = 0; s < 10; s++) {
             const a1 = s / 10 * Math.PI * 2, a2 = (s + 1) / 10 * Math.PI * 2;
             const p1x = x + Math.cos(a1) * half, p1z = z + Math.sin(a1) * half;
             const p2x = x + Math.cos(a2) * half, p2z = z + Math.sin(a2) * half;
-            b.tri(c, [p1x, this.heightAt(p1x, p1z) + style.y, p1z], [p2x, this.heightAt(p2x, p2z) + style.y, p2z], col, null, null, null, 0, 1, 0);
+            const p1 = [p1x, this.heightAt(p1x, p1z) + style.y, p1z], p2 = [p2x, this.heightAt(p2x, p2z) + style.y, p2z];
+            if (b) b.tri(c, p1, p2, col, null, null, null, 0, 1, 0);
+            if (pb) pb.tri(c, p1, p2, white, puv(c), puv(p1), puv(p2), 0, 1, 0);
           }
         }
       }
@@ -512,6 +549,80 @@ class World {
     const order = { path: 0, track: 0, foot: 1, steps: 1, plaza: 2, road: 3 };
     for (const k in chunks) chunks[k].meshes(mat(order[k]), { receive: true }).forEach(m => this.group.add(m));
     marks.meshes(mat(5), { receive: true }).forEach(m => this.group.add(m));
+
+    // Pflaster: Plätze als Fläche, dann die Struktur multiplikativ über Luftbild bzw. Bodenfarbe legen
+    for (const r of this.data.roads) if (r.k === 'plazaArea') this.paveArea(r);
+    const paveMat = new THREE.MeshBasicMaterial({
+      map: this.makePaveTexture(), transparent: true, premultipliedAlpha: true, blending: THREE.MultiplyBlending,
+      depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8,
+    });
+    this.pave.meshes(paveMat, {}).forEach(m => this.group.add(m));
+    this.pave = null;
+  }
+
+  // Platzfläche (OSM highway=pedestrian, area=yes) in kleine Dreiecke zerlegen, die dem Gelände folgen
+  paveArea(r) {
+    const toV = p => { const a = []; for (let i = 0; i < p.length; i += 2) a.push(new THREE.Vector2(p[i], p[i + 1])); return a; };
+    const contour = toV(r.p), holes = (r.ho || []).map(toV);
+    let faces;
+    try { faces = THREE.ShapeUtils.triangulateShape(contour, holes); } catch (e) { return; }
+    const all = contour.concat(...holes);
+    const y = ROAD_STYLE.plaza.y;
+    const white = new THREE.Color('#ffffff');
+    const emit = (a, b, c, depth) => {
+      const ab = Math.hypot(a[0] - b[0], a[1] - b[1]), bc = Math.hypot(b[0] - c[0], b[1] - c[1]), ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      if (Math.max(ab, bc, ca) > 4 && depth < 10) {
+        // längste Kante halbieren
+        if (ab >= bc && ab >= ca) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; emit(a, m, c, depth + 1); emit(m, b, c, depth + 1); }
+        else if (bc >= ca) { const m = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2]; emit(a, b, m, depth + 1); emit(a, m, c, depth + 1); }
+        else { const m = [(c[0] + a[0]) / 2, (c[1] + a[1]) / 2]; emit(a, b, m, depth + 1); emit(m, b, c, depth + 1); }
+        return;
+      }
+      const P = q => [q[0], this.heightAt(q[0], q[1]) + y, q[1]];
+      const pa = P(a), pb = P(b), pc = P(c);
+      const uv = q => [q[0] / PAVE_TILE, q[1] / PAVE_TILE];
+      this.pave.get((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3).tri(pa, pb, pc, white, uv(a), uv(b), uv(c), 0, 1, 0);
+    };
+    for (const f of faces) emit([all[f[0]].x, all[f[0]].y], [all[f[1]].x, all[f[1]].y], [all[f[2]].x, all[f[2]].y], 0);
+  }
+
+  // Kachelbare Textur für Granit-Kleinpflaster im Segmentbogen (PAVE_TILE Meter je Kachel). Hell = Stein,
+  // dunkel = Fuge; sie wird multipliziert, damit Luftbild und Bodenfarbe erhalten bleiben.
+  makePaveTexture() {
+    const S = 512, rows = 20, rowH = S / rows, arcW = S / 2, arcH = rowH * 1.2;
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#9a9a9a'; c.fillRect(0, 0, S, S);
+    const rnd = U.rng(23);
+    const arc = x => arcH * (1 - Math.cos(x / arcW * Math.PI * 2)) / 2;
+    for (let j = 0; j < rows; j++) {
+      // Steinbreiten einer Reihe so strecken, dass die Reihe genau eine Kachel lang ist
+      const w = [];
+      let sum = 0;
+      while (sum < S) { const v = rowH * (0.8 + rnd() * 0.5); w.push(v); sum += v; }
+      const k = S / sum;
+      let x = rnd() * rowH;
+      for (const wi of w) {
+        const sw = wi * k, cx = x + sw / 2, cy = j * rowH + rowH / 2 + arc(cx);
+        const ang = Math.atan2(arc(cx + 1) - arc(cx - 1), 2);
+        const g = Math.floor(205 + rnd() * 50);
+        c.fillStyle = `rgb(${g},${g},${g})`;
+        for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {
+          c.save();
+          c.translate(cx + ox, cy + oy); c.rotate(ang);
+          c.beginPath();
+          c.roundRect(-sw / 2 + 1.5, -rowH / 2 + 1.5, sw - 3, rowH - 3, 4);
+          c.fill();
+          c.restore();
+        }
+        x += sw;
+      }
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    return t;
   }
 
   // Unterteilt eine Polylinie in Abschnitte von höchstens maxLen Metern
@@ -584,14 +695,26 @@ class World {
     return { color: make(false), lit: make(true) };
   }
 
-  // Fassadenfarbe nach OSM-Angaben und Gebäudetyp
-  wallColorHex(b, plainType, rnd) {
+  // Fassadenfarbe nach OSM-Angaben, Gebäudetyp und Lage (x, z: Mitte des Hauses)
+  wallColorHex(b, plainType, rnd, x, z) {
     if (b.c && (b.c[0] === '#' || THREE.Color.NAMES[b.c.toLowerCase()] !== undefined)) return b.c.toLowerCase();
     if (plainType) return '#a7a39a';
     if (/church|chapel|cathedral/.test(b.t)) return '#d3c7ad';
     if (b.t === 'castle') return '#d8ccae';
     if (/industrial|warehouse|retail|supermarket/.test(b.t)) return '#c5c1b7';
-    return FACADES[Math.floor(rnd() * FACADES.length)];
+    if (x !== undefined) for (const l of LANDMARK_FACADES) if (Math.hypot(l.x - x, l.z - z) < 3) return l.c;
+    const pal = this.facadePalette(x, z);
+    return pal[Math.floor(rnd() * pal.length)];
+  }
+
+  // Palette nach der nächsten benannten Straße: Gründerzeitstraßen, sonst Altstadt oder übrige Stadt
+  facadePalette(x, z) {
+    if (x === undefined) return FACADES;
+    const r = this.nearestRoad(x, z, 35, s => !!s.n && s.k !== 'path' && s.k !== 'track');
+    if (r && GRUENDERZEIT_STREETS.has(r.seg.n)) return FACADES_GRUENDERZEIT;
+    const A = ALTSTADT_BOX;
+    if (x > A.minX && x < A.maxX && z > A.minZ && z < A.maxZ) return FACADES_ALTSTADT;
+    return FACADES;
   }
 
   buildBuildings() {
@@ -637,7 +760,7 @@ class World {
       const bb = U.polyBBox(outer);
       const cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
       const plainType = PLAIN_TYPES.has(b.t);
-      const wallCol = U.color(this.wallColorHex(b, plainType, rnd), 0.1, rnd);
+      const wallCol = U.color(this.wallColorHex(b, plainType, rnd, cx, cz), 0.1, rnd);
       let roofHex = b.rc && (b.rc[0] === '#' || THREE.Color.NAMES[b.rc.toLowerCase()] !== undefined) ? b.rc.toLowerCase()
         : b.r ? TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)]
         : /church|castle|chapel/.test(b.t) ? '#6e5a50' : '#7c7973';
@@ -747,7 +870,7 @@ class World {
       for (let i = 0; i < nv; i++) { RY[i] = y0 + Y[i]; WY[i] = Y[i] <= 0.05 ? bottom : RY[i]; }
 
       const plainType = PLAIN_TYPES.has(b.t) || /^31001_246/.test(b.k || '') || (!b.t && area < 30 && maxY < 4.5);
-      const wallCol = U.color(this.wallColorHex(b, plainType, rnd), 0.1, rnd);
+      const wallCol = U.color(this.wallColorHex(b, plainType, rnd, ox, oz), 0.1, rnd);
       const roofCol = U.color(TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)], 0.12, rnd);
       const wb = plainType ? plain.get(ox, oz) : walls.get(ox, oz);
 
