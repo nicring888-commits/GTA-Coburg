@@ -209,6 +209,20 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- 🚧 v2.2.0 (21.10.2026, Zwischenstand): **Grafik realistischer.**
+  - Filmische Tonwertkurve (ACES), Schattenkarte 4096 px (wenn die Grafikkarte es kann), Sichtweite bis ≈ 2,9 km
+  - Neues Modul `js/atmosphere.js`: Himmelskuppel mit Sonne, Wolken, Sternen; fließender Tag-Nacht-Wechsel; Wetter
+    (klar, wolkig, bedeckt, Regen, Nebel) wechselt alle paar Minuten von selbst, Taste `K` schaltet von Hand; Regen,
+    nasse Straßen mit Pfützen; Umgebungsbild für Spiegelungen in Lack, Glas und Wasser
+  - Fassaden: Fenster mit Gewände, Sims, Sprossen, Laibungsschatten, spiegelndem Glas und Vorhängen; Sockel,
+    Geschossgesimse, Verwitterung, Kontaktschatten; Schaufenster im Erdgeschoss der Altstadt (`facadeShader`)
+  - Straßen: Asphaltstruktur, Bordsteine, Randlinien auf Hauptstraßen (`roadShader`, `curb`); Wasser spiegelt
+  - Autos: gerundete Karosserie mit Radkästen, Glaskabine mit Säulen, Felgen, Kennzeichen „CO“, Klarlack, Bodenschatten
+  - Bäume: unregelmäßige, weich schattierte Kronen mit Laubstruktur (drei Formen), Nadelbäume aus drei Kegeln
+  - Leichte Vignette, Sichtfeld wird bei hohem Tempo etwas weiter
+  - Getestet im Browser: Markt, Spitalgasse, Bahnhof, Luftbild Altstadt, Auto aus der Nähe; keine Fehler.
+    Noch offen: Regen, Nebel und Nacht im Bild prüfen, Bildrate messen, `K` in Hilfe und Startbildschirm eintragen
+
 - ✅ v2.1.0 (21.10.2026): **Wasser, Talbrücken, Leben in den Orten, schärfere Luftbilder.**
   - Echtes Wasser in Stadt und Landkreis: ausgehobenes Bett, Wasseroberfläche mit Wellen, Ufer als Hindernis
   - Hochbrücken (A 73 Itztal, B 4) mit gerader Fahrbahn, Brüstung und Pfeilern; befahrbar oben und unten

@@ -128,6 +128,75 @@ class Chunks {
   }
 }
 
+// ---------------- Bäume (Formen für Innenstadt und Umland) ----------------
+// Laubkronen: Ikosaeder mit Beulen, weichen Normalen (rund statt facettiert) und Eigenschatten in den
+// Eckenfarben (unten und innen dunkler); die Grundfarbe kommt je Baum aus der Instanzfarbe.
+function treeMergeGeos(list) {
+  const pos = [], nor = [], col = [];
+  for (const g of list) {
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); col.push(...g.attributes.color.array);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+function treeCrown(seed, detail, r, cx, cy, cz) {
+  const rnd = U.rng(seed), g = new THREE.IcosahedronGeometry(1, detail);
+  const bumps = [];
+  for (let i = 0; i < 8; i++) {
+    const a = rnd() * 6.283, y = rnd() * 1.6 - 0.5, s = Math.sqrt(1 - Math.min(1, y * y));
+    bumps.push([Math.cos(a) * s, y, Math.sin(a) * s, 0.12 + rnd() * 0.2]);
+  }
+  const p = g.attributes.position, n = p.count, nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+    let d = 0.88;
+    for (const b of bumps) d += b[3] * Math.pow(Math.max(0, x * b[0] + y * b[1] + z * b[2]), 3);
+    const fy = y < 0 ? 0.72 : 1; // Unterseite flacher
+    p.setXYZ(i, cx + x * r * d, cy + y * r * d * fy, cz + z * r * d);
+    const nl = Math.hypot(x, y + 0.35, z);
+    nor[i * 3] = x / nl; nor[i * 3 + 1] = (y + 0.35) / nl; nor[i * 3 + 2] = z / nl;
+    const ao = 0.5 + 0.55 * (y * 0.5 + 0.5) + (Math.sin(x * 13.1 + y * 7.7 + z * 9.3) * 0.5 + 0.5) * 0.08;
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao;
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
+function treePine(seed) {
+  const parts = [], rnd = U.rng(seed);
+  [[2.2, 3.4, 3.3], [1.7, 3.0, 5.0], [1.1, 2.6, 6.7]].forEach(([r, h, y], k) => {
+    const c = new THREE.ConeGeometry(r * (0.9 + rnd() * 0.2), h, 9, 1, true).toNonIndexed();
+    c.translate(0, y, 0);
+    const p = c.attributes.position, col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) { const v = 0.55 + 0.45 * U.clamp((p.getY(i) - y + h / 2) / h, 0, 1) + k * 0.05; col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = v; }
+    c.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    parts.push(c);
+  });
+  return treeMergeGeos(parts);
+}
+const _treeAssets = {};
+// detail 1 für die Innenstadt, 0 für das Umland (viele Bäume)
+function treeAssets(detail) {
+  if (_treeAssets[detail]) return _treeAssets[detail];
+  const crowns = [
+    treeMergeGeos([treeCrown(11, detail, 2.4, 0, 4.6, 0)]),
+    treeMergeGeos([treeCrown(23, detail, 2.1, 0.5, 4.4, 0.2), treeCrown(29, 0, 1.5, -1.0, 5.5, -0.5)]),
+    treeMergeGeos([treeCrown(37, detail, 2.0, 0, 5.1, 0), treeCrown(41, 0, 1.4, 0.4, 3.9, 1.0)]),
+  ];
+  const trunk = new THREE.CylinderGeometry(0.16, 0.3, 3.4, 7); trunk.translate(0, 1.7, 0);
+  _treeAssets[detail] = {
+    crowns, trunk, pine: treePine(5),
+    trunkMat: new THREE.MeshLambertMaterial({ color: '#4d4238' }),
+    leafMat: new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true }),
+  };
+  return _treeAssets[detail];
+}
+
 class World {
   constructor(data, scene, renderer) {
     this.data = data;
@@ -321,17 +390,85 @@ class World {
   addDetail(mat, detail) {
     mat.onBeforeCompile = sh => {
       sh.uniforms.detailMap = { value: detail };
+      sh.uniforms.uWet = ATMO.uniforms.uWet;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec2 vWorldXZ;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vWorldXZ;\nuniform sampler2D detailMap;')
+        .replace('#include <common>', '#include <common>\nvarying vec2 vWorldXZ;\nuniform sampler2D detailMap;\nuniform float uWet;')
         .replace('#include <map_fragment>', `#include <map_fragment>
           float dA = texture2D(detailMap, vWorldXZ / 9.0).r;
           float dB = texture2D(detailMap, vWorldXZ / 1.7).r;
-          diffuseColor.rgb *= mix(1.0, 0.72 + 0.56 * (dA * 0.5 + dB * 0.5), 0.55);`);
+          diffuseColor.rgb *= mix(1.0, 0.72 + 0.56 * (dA * 0.5 + dB * 0.5), 0.55);
+          diffuseColor.rgb *= 1.0 - 0.28 * uWet;`);
     };
     mat.customProgramCacheKey = () => 'ortho-detail';
+  }
+
+  // Shader-Ergänzung für Straßen, Wege und Markierungen: Asphaltkörnung und Flicken in Weltkoordinaten,
+  // bei Regen dunkler mit Pfützen, die den Himmel spiegeln
+  roadShader(mat) {
+    if (!this._roadDetail) this._roadDetail = this.makeDetailTexture();
+    const detail = this._roadDetail;
+    mat.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, ATMO.uniforms);
+      sh.uniforms.detailMap = { value: detail };
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vRPos;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvRPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+          varying vec3 vRPos;
+          uniform sampler2D detailMap;
+          uniform float uWet, uNight;
+          uniform vec3 uSkyTop, uSkyHorizon;
+          float rPuddle = 0.0;`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            vec2 wp = vRPos.xz;
+            float g1 = texture2D(detailMap, wp / 0.8).r, g2 = texture2D(detailMap, wp / 6.5).r, g3 = texture2D(detailMap, wp / 29.0).r;
+            diffuseColor.rgb *= (0.82 + 0.3 * g1) * (0.9 + 0.2 * g2) * (0.93 + 0.14 * smoothstep(0.42, 0.62, g3));
+            rPuddle = smoothstep(0.52, 0.66, g2 * 0.7 + g3 * 0.3) * uWet;
+            diffuseColor.rgb *= 1.0 - 0.38 * uWet - 0.2 * rPuddle;
+          }`)
+        .replace('#include <opaque_fragment>', `
+          {
+            vec3 V = normalize(vRPos - cameraPosition);
+            vec3 Rf = reflect(V, vec3(0.0, 1.0, 0.0));
+            float fres = 0.03 + 0.97 * pow(1.0 - max(-V.y, 0.0), 5.0);
+            vec3 sky = mix(uSkyHorizon, uSkyTop, pow(max(Rf.y, 0.0), 0.6));
+            outgoingLight = mix(outgoingLight, sky, uWet * (0.1 + 0.75 * fres) * (0.45 + 0.55 * rPuddle) * (1.0 - uNight * 0.6));
+          }
+          #include <opaque_fragment>`);
+    };
+    mat.customProgramCacheKey = () => 'road';
+    return mat;
+  }
+
+  // Laub: Blattbüschel mit dunklen Lücken (Rauschen in Kronenkoordinaten), etwas gedecktere Farben, nasses Laub dunkler
+  leafShader(mat) {
+    if (mat.userData.leaf) return;
+    mat.userData.leaf = true;
+    const detail = this._roadDetail || (this._roadDetail = this.makeDetailTexture());
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.detailMap = { value: detail };
+      sh.uniforms.uWet = ATMO.uniforms.uWet;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLeafP;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLeafP = position;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLeafP;\nuniform sampler2D detailMap;\nuniform float uWet;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            float a = texture2D(detailMap, vLeafP.xy * 0.55).r, b = texture2D(detailMap, vLeafP.zy * 0.55 + 0.37).r;
+            float c = texture2D(detailMap, (vLeafP.xz + vLeafP.y) * 1.7).r;
+            float n = (a + b) * 0.5 * 0.7 + c * 0.3;
+            diffuseColor.rgb *= 0.42 + 0.85 * smoothstep(0.3, 0.72, n);
+            float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+            diffuseColor.rgb = mix(vec3(l), diffuseColor.rgb, 0.82) * 0.9 * (1.0 - 0.2 * uWet);
+          }`);
+    };
+    mat.customProgramCacheKey = () => 'leaf';
   }
 
   // Kachel, in der ein Punkt liegt (oder die nächste am Rand)
@@ -558,20 +695,24 @@ class World {
     for (const k in ROAD_STYLE) chunks[k] = new Chunks();
     const rnd = U.rng(11);
     const white = new THREE.Color('#e9e6dc');
-    const up = [0, 1, 0];
+    this.curbs = new Chunks();
+    // erst alle Abschnitte ins Suchraster (Bordsteine brauchen die Kreuzungen), dann die Bänder bauen
+    const sampled = new Map();
+    for (const r of this.data.roads) {
+      if (r.k === 'plazaArea') continue;
+      const pts = this.resample(r.p, 4);
+      sampled.set(r, pts);
+      for (let i = 0; i < pts.length / 2 - 1; i++) {
+        const ax = pts[i * 2], az = pts[i * 2 + 1], bx = pts[i * 2 + 2], bz = pts[i * 2 + 3];
+        this.roadGrid.insert({ ax, az, bx, bz, n: r.n, k: r.k, h: r.h, w: r.w, src: r },
+          Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
+      }
+    }
     for (const r of this.data.roads) {
       if (r.k === 'plazaArea') continue;
       const style = ROAD_STYLE[r.k];
-      const pts = this.resample(r.p, 4);
-      const n = pts.length / 2;
-      const half = r.w / 2;
+      const pts = sampled.get(r);
       const col = U.color(style.color, 0.08, rnd);
-      // Suchraster
-      for (let i = 0; i < n - 1; i++) {
-        const ax = pts[i * 2], az = pts[i * 2 + 1], bx = pts[i * 2 + 2], bz = pts[i * 2 + 3];
-        this.roadGrid.insert({ ax, az, bx, bz, n: r.n, k: r.k, h: r.h, w: r.w },
-          Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
-      }
       const hidden = this.ortho && PHOTO_HIDE.has(r.k);
       if (hidden && r.k !== 'plaza') continue;
       // mit Umland nur die Stücke innerhalb des Innenstadt-Geländes (außen zeichnet js/region.js)
@@ -646,6 +787,17 @@ class World {
           }
         }
       }
+      // Bordsteine und Randlinien (nicht an Wohnwegen, Feldwegen, Autobahnen)
+      if (r.k === 'road' && r.w >= 5 && !/service|living_street|track|motorway/.test(r.h || '')) {
+        for (const E of [L, R]) this.curb(r, pts, E, half, style.y);
+        if (r.w >= 7.5 && /primary|secondary|trunk|tertiary/.test(r.h || '')) {
+          for (const E of [L, R]) {
+            const k = (half - 0.45) / half, side = [];
+            for (let i = 0; i < n; i++) side.push(pts[i * 2] + (E[i][0] - pts[i * 2]) * k, pts[i * 2 + 1] + (E[i][2] - pts[i * 2 + 1]) * k);
+            this.dashes(side, 1e9, 1, 0.065, style.y + 0.02, marks, white);
+          }
+        }
+      }
       // Mittellinie
       if (r.k === 'road' && r.w >= 6 && !r.o && r.h !== 'service' && r.h !== 'living_street') {
         this.dashes(pts, 3, 6, 0.07, style.y + 0.02, marks, white);
@@ -654,11 +806,43 @@ class World {
       if (r.k === 'steps') this.dashes(pts, 0.12, 0.3, half, style.y + 0.015, marks, new THREE.Color('#6f6a62'));
   }
 
+  // Bordstein (0,12 m hoch, 0,22 m breit) entlang einer Straßenkante E (Punkte [x, y, z]); an Kreuzungen und
+  // Einmündungen, wo eine andere Fahrbahn anschließt, bleibt er offen
+  curb(r, pts, E, half, y0) {
+    const n = pts.length / 2, H = 0.12, W = 0.22, col = this._curbCol || (this._curbCol = new THREE.Color('#a19f98'));
+    const ok = [];
+    for (let i = 0; i < n; i++) {
+      const cx = pts[i * 2], cz = pts[i * 2 + 1];
+      let ox = E[i][0] - cx, oz = E[i][2] - cz;
+      const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
+      const px = E[i][0] + ox * 0.6, pz = E[i][2] + oz * 0.6;
+      let free = true;
+      for (const s of this.roadGrid.query(px, pz, 12, this._tmp)) {
+        if (s.src === r || (s.k !== 'road' && s.k !== 'plaza')) continue;
+        const c = U.closestOnSeg(px, pz, s.ax, s.az, s.bx, s.bz);
+        if (Math.hypot(c[0] - px, c[1] - pz) < s.w / 2 + 1.2) { free = false; break; }
+      }
+      ok.push(free ? [ox, oz] : null);
+    }
+    for (let i = 0; i < n - 1; i++) {
+      if (!ok[i] || !ok[i + 1]) continue;
+      const b = this.curbs.get(pts[i * 2], pts[i * 2 + 1]);
+      const A = E[i], B = E[i + 1], [ax, az] = ok[i], [bx, bz] = ok[i + 1];
+      const At = [A[0], A[1] + H, A[2]], Bt = [B[0], B[1] + H, B[2]];
+      const Ao = [A[0] + ax * W, Math.max(this.heightAt(A[0] + ax * W, A[2] + az * W) + y0 + H, At[1]), A[2] + az * W];
+      const Bo = [B[0] + bx * W, Math.max(this.heightAt(B[0] + bx * W, B[2] + bz * W) + y0 + H, Bt[1]), B[2] + bz * W];
+      b.tri(At, Ao, Bo, col, null, null, null, 0, 1, 0); b.tri(At, Bo, Bt, col, null, null, null, 0, 1, 0);
+      b.tri(A, B, Bt, col, null, null, null, -ax, 0, -az); b.tri(A, Bt, At, col, null, null, null, -ax, 0, -az);
+    }
+  }
+
   finishRoads(chunks, marks) {
-    const mat = (o) => new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 });
+    const mat = (o) => this.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 }));
     const order = { path: 0, track: 0, foot: 1, steps: 1, plaza: 2, road: 3 };
     for (const k in chunks) chunks[k].meshes(mat(order[k]), { receive: true }).forEach(m => this.group.add(m));
     marks.meshes(mat(5), { receive: true }).forEach(m => this.group.add(m));
+    this.curbs.meshes(this.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true })), { receive: true }).forEach(m => this.group.add(m));
+    this.curbs = null;
 
     // Pflaster: Plätze als Fläche, dann die Struktur multiplikativ über Luftbild bzw. Bodenfarbe legen
     for (const r of this.data.roads) if (r.k === 'plazaArea') this.paveArea(r);
@@ -777,32 +961,160 @@ class World {
   }
 
   // ---------------- Gebäude ----------------
+  // Fassadentexturen: 4 × 4 Fensterachsen (je 3,2 m breit, 3,1 m hoch) auf 1024 px.
+  // color: Putz und Steinstruktur (wird mit der Wandfarbe multipliziert), lit: beleuchtete Fenster bei Nacht,
+  // mask: R = Glas, G = Gewände/Rahmen (eigene Farbe statt Wandfarbe), B = Relief (Schatten in Laibung und unter Simsen)
   makeWindowTextures() {
-    const S = 512, bay = S / 4;
-    const make = (lit) => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = S;
-      const c = cv.getContext('2d');
-      const rnd = U.rng(lit ? 99 : 5);
-      c.fillStyle = lit ? '#000' : '#fff'; c.fillRect(0, 0, S, S);
-      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
-        const x = i * bay, y = j * bay;
-        if (lit) {
-          if (rnd() < 0.42) { c.fillStyle = ['#ffd27a', '#ffe2a6', '#fff0c8', '#ffc56a'][Math.floor(rnd() * 4)]; c.fillRect(x + 34, y + 24, 60, 74); }
-        } else {
-          c.fillStyle = '#d8d3c8'; c.fillRect(x + 30, y + 20, 68, 82);        // Rahmen
-          c.fillStyle = '#4e5965'; c.fillRect(x + 34, y + 24, 60, 74);        // Glas
-          c.fillStyle = '#6d7985'; c.fillRect(x + 34, y + 24, 60, 22);        // Spiegelung
-          c.fillStyle = '#d8d3c8'; c.fillRect(x + 62, y + 24, 4, 74);         // Sprosse
-          c.fillStyle = '#bdb6a8'; c.fillRect(x + 26, y + 100, 76, 6);        // Fensterbank
-        }
+    if (this._facadeTex) return this._facadeTex;
+    const S = 1024, bay = S / 4, rnd = U.rng(5);
+    const canvas = fill => { const cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d'); c.fillStyle = fill; c.fillRect(0, 0, S, S); return [cv, c]; };
+    const [cvC, cc] = canvas('#fff'), [cvL, cl] = canvas('#000'), [cvM, cm] = canvas('rgb(0,0,255)');
+    // Putzkörnung
+    const img = cc.getImageData(0, 0, S, S);
+    for (let k = 0; k < img.data.length; k += 4) { const g = 246 + rnd() * 9; img.data[k] = img.data[k + 1] = img.data[k + 2] = g; }
+    cc.putImageData(img, 0, 0);
+    const mask = (r, g, b, x, y, w, h) => { cm.fillStyle = `rgb(${r},${g},${b})`; cm.fillRect(x, y, w, h); };
+    const shade = (x, y, w, h, from, to, vertical = true) => { // Relief als Verlauf im B-Kanal
+      const d = cm.getImageData(x, y, w, h);
+      for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
+        const t = vertical ? py / Math.max(1, h - 1) : px / Math.max(1, w - 1), k = (py * w + px) * 4 + 2;
+        d.data[k] = Math.round(d.data[k] * (1 - (from + (to - from) * t)));
       }
+      cm.putImageData(d, x, y);
+    };
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const x0 = i * bay, fb = (j + 1) * bay;                 // linker Rand der Achse, Unterkante des Geschosses
+      const wx = x0 + 80, ww = 96, wy = fb - 214, wh = 138;   // Fensteröffnung (1,2 × 1,7 m, Brüstung 0,9 m)
+      const g = 14, sill = 11;
+      // Gewände (Steinrahmen) mit Sturz und Fensterbank
+      mask(0, 255, 255, wx - g, wy - g - 6, ww + 2 * g, wh + g + 6);
+      mask(0, 255, 255, wx - g - 7, wy + wh, ww + 2 * g + 14, sill);
+      // Glas, Flügelrahmen, Mittelpfosten und Kämpfer
+      mask(255, 0, 255, wx, wy, ww, wh);
+      const fr = 6;
+      mask(0, 255, 255, wx, wy, ww, fr); mask(0, 255, 255, wx, wy + wh - fr, ww, fr);
+      mask(0, 255, 255, wx, wy, fr, wh); mask(0, 255, 255, wx + ww - fr, wy, fr, wh);
+      mask(0, 255, 255, wx + ww / 2 - 3, wy, 6, wh);
+      mask(0, 255, 255, wx, wy + Math.round(wh * 0.3), ww, 5);
+      // Tiefe: Schatten der Laibung oben und links, unter der Fensterbank, leicht unter dem Sturz
+      shade(wx, wy, ww, 22, 0.5, 0);
+      shade(wx, wy, 12, wh, 0.3, 0, false);
+      shade(wx - g - 7, wy + wh + sill, ww + 2 * g + 14, 16, 0.45, 0);
+      shade(wx - g, wy - g - 6 - 8, ww + 2 * g, 8, 0, 0.15);
+      // nachts beleuchtete Fenster
+      if (rnd() < 0.42) {
+        cl.fillStyle = ['#ffd27a', '#ffe2a6', '#fff0c8', '#ffc56a'][Math.floor(rnd() * 4)];
+        cl.fillRect(wx + fr, wy + fr, ww - 2 * fr, wh - 2 * fr);
+        cl.fillStyle = '#000'; cl.fillRect(wx + ww / 2 - 3, wy, 6, wh); cl.fillRect(wx, wy + Math.round(wh * 0.3), ww, 5);
+      }
+    }
+    const tex = (cv, srgb) => {
       const t = new THREE.CanvasTexture(cv);
-      t.colorSpace = THREE.SRGBColorSpace;
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = 4;
+      t.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
       return t;
     };
-    return { color: make(false), lit: make(true) };
+    this._facadeTex = { color: tex(cvC, true), lit: tex(cvL, true), mask: tex(cvM, false) };
+    return this._facadeTex;
+  }
+
+  // Shader-Ergänzung für Hauswände (Innenstadt und Umland): Gewände in eigener Farbe, Glas mit Spiegelung von Himmel
+  // und Gegenüber, Vorhänge, Sockel, Geschossgesimse, Verwitterung, Kontaktschatten am Boden und Schaufenster in der
+  // Altstadt. Die Wand-UV ist (Länge / 12,8 m, Höhe über Grund / 12,4 m), also 4 Achsen × 4 Geschosse je Kachel.
+  facadeShader(mat, tex) {
+    const A = ALTSTADT_BOX;
+    const detail = this.makeDetailTexture();
+    mat.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, ATMO.uniforms);
+      sh.uniforms.facadeMask = { value: tex.mask };
+      sh.uniforms.detailMap = { value: detail };
+      sh.uniforms.shopBox = { value: new THREE.Vector4(A.minX, A.minZ, A.maxX, A.maxZ) };
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNor;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNor = normalize(mat3(modelMatrix) * objectNormal);');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+          varying vec3 vWPos; varying vec3 vWNor;
+          uniform sampler2D facadeMask, detailMap;
+          uniform vec4 shopBox;
+          uniform float uNight, uWet;
+          uniform vec3 uSkyTop, uSkyHorizon, uSkyGround;
+          float fh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float fGlass = 0.0, fShop = 0.0, fCurtain = 0.0, fGlassVar = 0.0;`)
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            vec4 fm = texture2D(facadeMask, vMapUv);
+            vec3 qc = floor(vColor.rgb * 255.0 + 0.5);          // gerundet, sonst flackert der Wert je Pixel
+            float bh = fh(qc.rg + qc.b * 0.37);               // Zufall je Haus
+            float h = vMapUv.y * 12.4;                        // Höhe über Grund (m)
+            vec2 bay = vec2(vMapUv.x * 4.0, vMapUv.y * 4.0);  // Achse, Geschoss
+            vec2 cell = floor(bay);
+            vec2 loc = fract(bay) * vec2(3.2, 3.1);           // Lage in der Achse (m)
+            vec3 frameC = bh < 0.5 ? vec3(0.86, 0.84, 0.79) : bh < 0.78 ? vec3(0.56, 0.45, 0.33) : vec3(0.5, 0.5, 0.49);
+            float glass = fm.r, frame = fm.g, relief = fm.b;
+            // Schaufenster im Erdgeschoss der Altstadt
+            bool shop = vWPos.x > shopBox.x && vWPos.x < shopBox.z && vWPos.z > shopBox.y && vWPos.z < shopBox.w && bh < 0.82 && h > -0.3 && h < 3.1;
+            if (shop) {
+              float door = step(0.72, fh(cell + bh * 13.0));
+              float gx0 = door > 0.5 ? 1.05 : 0.25, gx1 = door > 0.5 ? 2.15 : 2.95, gy0 = door > 0.5 ? 0.02 : 0.5, gy1 = 2.55;
+              float inG = step(gx0, loc.x) * step(loc.x, gx1) * step(gy0, h) * step(h, gy1);
+              float inF = step(gx0 - 0.08, loc.x) * step(loc.x, gx1 + 0.08) * step(gy0 - 0.08, h) * step(h, gy1 + 0.08);
+              glass = inG; frame = inF - inG; relief = 1.0 - 0.35 * inG * smoothstep(gy1 - 0.3, gy1, h);
+              frameC = vec3(0.12, 0.12, 0.13);
+              // Ladenzone: Band über den Fenstern (Schildfläche) etwas dunkler
+              diffuseColor.rgb *= 1.0 - 0.18 * step(2.65, h);
+              fShop = inG;
+            } else if (h < 0.45 && h > -2.5) {
+              // Sockel aus Stein
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.39) * sampledDiffuseColor.rgb, 0.75);
+              glass = 0.0; frame = 0.0; relief = 1.0;
+            }
+            diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
+            // Geschossgesims (an etwa zwei Dritteln der Häuser)
+            float fl = fract(h / 3.1) * 3.1;
+            if (bh > 0.33 && h > 2.0 && !shop) {
+              float band = step(0.02, fl) * step(fl, 0.16);
+              diffuseColor.rgb = mix(diffuseColor.rgb, frameC * 1.05, band * 0.85);
+              relief *= 1.0 - 0.3 * step(0.16, fl) * (1.0 - smoothstep(0.16, 0.3, fl));
+            }
+            // Glas: dunkel, je Fenster etwas anders; manche mit hellem Vorhang
+            float wr = fh(cell + bh * 7.0);
+            vec3 glassC = mix(vec3(0.035, 0.045, 0.055), vec3(0.07, 0.075, 0.07), wr);
+            fCurtain = step(0.62, wr) * (1.0 - fShop);
+            glassC = mix(glassC, vec3(0.55, 0.5, 0.42), fCurtain * 0.55);
+            // Schaufenster: dunkler Laden, oben heller (Deckenlicht), je Laden etwas andere Tönung
+            if (shop) glassC = mix(vec3(0.03, 0.03, 0.035), mix(vec3(0.2, 0.17, 0.13), vec3(0.14, 0.15, 0.17), wr), smoothstep(0.6, 2.5, h) * 0.8);
+            diffuseColor.rgb = mix(diffuseColor.rgb, glassC, glass);
+            fGlass = glass; fGlassVar = fh(cell * 1.7 + bh * 3.0);
+            // Putz: großflächige Flecken und senkrechte Schmutzfahnen
+            vec2 wp = vec2(vWPos.x + vWPos.z, vWPos.y);
+            float big = texture2D(detailMap, wp * 0.045).r;
+            float streak = texture2D(detailMap, vec2(wp.x * 0.55, wp.y * 0.02)).r;
+            diffuseColor.rgb *= mix(1.0, (0.9 + 0.2 * big) * (1.0 - 0.12 * smoothstep(0.45, 0.8, streak)), 1.0 - glass);
+            // Kontaktschatten am Boden und Relief
+            diffuseColor.rgb *= relief * mix(0.62, 1.0, smoothstep(-0.3, 1.6, h));
+            // Regen dunkelt Putz und Stein
+            diffuseColor.rgb *= 1.0 - 0.22 * uWet * (1.0 - glass);
+          }`)
+        .replace('#include <opaque_fragment>', `
+          {
+            // Spiegelung im Glas: Himmel oben, Häuser und Straße unten (Fresnel, nachts schwach)
+            vec3 V = normalize(vWPos - cameraPosition);
+            vec3 N = normalize(vWNor);
+            vec3 R = reflect(V, N);
+            float fres = 0.08 + 0.92 * pow(1.0 - max(dot(-V, N), 0.0), 4.0);
+            vec3 sky = R.y > 0.0 ? mix(uSkyHorizon, uSkyTop, pow(R.y, 0.6)) : mix(uSkyHorizon * 0.45, uSkyGround * 0.35, clamp(-R.y * 3.0, 0.0, 1.0));
+            float k = fGlass * (0.12 + 0.55 * fres) * (1.0 - uNight * 0.85) * (1.0 - fCurtain * 0.5) * (1.0 - fShop * 0.45);
+            // manche Scheiben spiegeln eher die Häuser gegenüber als den Himmel
+            sky = mix(sky, uSkyGround * 0.6, fGlassVar * 0.6);
+            outgoingLight = mix(outgoingLight, sky, k);
+            // beleuchtete Schaufenster am Abend
+            outgoingLight += vec3(1.0, 0.78, 0.5) * 0.9 * uNight * fShop;
+          }
+          #include <opaque_fragment>`);
+    };
+    mat.customProgramCacheKey = () => 'facade';
   }
 
   // Fassadenfarbe nach OSM-Angaben, Gebäudetyp und Lage (x, z: Mitte des Hauses)
@@ -929,6 +1241,7 @@ class World {
     const wallMat = new THREE.MeshLambertMaterial({
       vertexColors: true, map: tex.color, emissive: new THREE.Color('#ffffff'), emissiveMap: tex.lit, emissiveIntensity: 0,
     });
+    this.facadeShader(wallMat, tex);
     const plainMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide });
     this.windowMaterials.push(wallMat);
     this._buildingMats = { wall: wallMat, plain: plainMat };
@@ -1267,11 +1580,9 @@ class World {
       if (budget <= 0) break;
     }
 
-    const trunkGeo = new THREE.CylinderGeometry(0.18, 0.28, 3, 6); trunkGeo.translate(0, 1.5, 0);
-    const leafGeo = new THREE.IcosahedronGeometry(2.4, 1); leafGeo.translate(0, 4.6, 0);
-    const pineGeo = new THREE.ConeGeometry(2.1, 7, 8); pineGeo.translate(0, 5.2, 0);
-    const trunkMat = new THREE.MeshLambertMaterial({ color: '#5b4632' });
-    const leafMat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true });
+    const TA = treeAssets(1);
+    this.leafShader(TA.leafMat);
+    const trunkGeo = TA.trunk, pineGeo = TA.pine, trunkMat = TA.trunkMat, leafMat = TA.leafMat;
     const byChunk = new Map();
     const rnd = U.rng(77);
     for (const t of pts) {
@@ -1280,13 +1591,16 @@ class World {
       byChunk.get(k).push(t);
     }
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
-    const greens = ['#5f8d3e', '#4f7d35', '#6a9a45', '#577f3a', '#7a9e4a', '#46703a'];
+    const greens = ['#5a8a3a', '#4b7a33', '#679845', '#557d38', '#77994a', '#43703a', '#6e8f3f'];
     for (const list of byChunk.values()) {
       const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, list.length);
-      const leaves = list.filter(t => !t[2]), pines = list.filter(t => t[2]);
-      const lm = leaves.length ? new THREE.InstancedMesh(leafGeo, leafMat, leaves.length) : null;
+      // drei Kronenformen, je Baum zufällig
+      const kind = list.map(t => t[2] ? -1 : Math.floor(rnd() * TA.crowns.length));
+      const lms = TA.crowns.map((geo, v) => { const c = kind.filter(k => k === v).length; return c ? new THREE.InstancedMesh(geo, leafMat, c) : null; });
+      const lcount = TA.crowns.map(() => 0);
+      const pines = list.filter(t => t[2]);
       const pm = pines.length ? new THREE.InstancedMesh(pineGeo, leafMat, pines.length) : null;
-      let li = 0, pi = 0;
+      let pi = 0;
       list.forEach((t, i) => {
         const s = 0.7 + rnd() * 0.65;
         const y = this.heightAt(t[0], t[1]) - 0.2;
@@ -1296,12 +1610,12 @@ class World {
         trunks.setMatrixAt(i, m4);
         const col = new THREE.Color(t[2] ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
         if (t[2]) { pm.setMatrixAt(pi, m4); pm.setColorAt(pi++, col); }
-        else { lm.setMatrixAt(li, m4); lm.setColorAt(li++, col); }
+        else { const lm = lms[kind[i]], li = lcount[kind[i]]++; lm.setMatrixAt(li, m4); lm.setColorAt(li, col); }
         this.trees.push(t[0], t[1], 0.35 * s);
         const ti = this.trees.length / 3 - 1;
         this.treeGrid.insert(ti, t[0] - 1, t[1] - 1, t[0] + 1, t[1] + 1);
       });
-      for (const m of [trunks, lm, pm]) {
+      for (const m of [trunks, pm, ...lms]) {
         if (!m) continue;
         m.castShadow = true; m.receiveShadow = true;
         m.computeBoundingSphere();

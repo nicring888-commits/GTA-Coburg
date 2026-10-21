@@ -1,4 +1,4 @@
-// Autos: Modelle aus einfachen Formen (Pkw, Sportwagen, Taxi, Polizei), Arcade-Fahrphysik mit Driften,
+// Autos: Modelle (Pkw, Sportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik mit Driften,
 // Schaden bis zum Ausbrennen.
 'use strict';
 
@@ -20,27 +20,139 @@ const VEHICLE_KINDS = {
   police: { name: 'Streifenwagen', maxSpeed: 53, accel: 11, grip: 11, armor: 1.5, value: 900 },
 };
 
+// ---------------- Modelle ----------------
+// Karosserie als Seitenprofil (Länge × Höhe) mit Radkästen, über die Breite extrudiert und an den Kanten gerundet.
+// Teile gleicher Farbe werden je Fahrzeugtyp zu einer Form zusammengefasst (wenige Zeichenaufrufe je Auto).
+const CAR_SHAPES = {
+  car: {
+    body: [[-2.13, 0.3], [2.1, 0.3], [2.17, 0.5], [2.15, 0.7], [2.02, 0.82], [1.05, 0.93], [0.82, 0.96], [-1.62, 0.98], [-2.02, 0.96], [-2.16, 0.78], [-2.16, 0.45]],
+    cabin: [[0.84, 0.92], [0.06, 1.4], [-0.98, 1.42], [-1.64, 0.97], [-1.6, 0.9]],
+    roof: [[0.11, 1.37], [0.05, 1.45], [-0.97, 1.47], [-1.06, 1.38]],
+    pillars: [[0.84, 0.94, 0.06, 1.41], [-0.98, 1.43, -1.64, 0.97]], bPillar: [-0.42, 0.95, 1.42],
+    head: [2.1, 0.74], tail: [-2.16, 0.84], cabinW: 1.5, mirror: [0.72, 1.0], roofY: 1.47,
+  },
+  sport: {
+    body: [[-2.13, 0.28], [2.12, 0.28], [2.2, 0.42], [2.18, 0.56], [1.95, 0.7], [0.9, 0.8], [0.62, 0.82], [-1.55, 0.86], [-2.05, 0.84], [-2.17, 0.66], [-2.16, 0.4]],
+    cabin: [[0.64, 0.78], [-0.25, 1.17], [-1.0, 1.18], [-1.75, 0.85], [-1.7, 0.78]],
+    roof: [[-0.2, 1.14], [-0.25, 1.21], [-1.0, 1.22], [-1.1, 1.13]],
+    pillars: [[0.64, 0.8, -0.25, 1.18], [-1.0, 1.19, -1.75, 0.85]], bPillar: null,
+    head: [2.12, 0.58], tail: [-2.17, 0.74], cabinW: 1.42, mirror: [0.5, 0.86], roofY: 1.22,
+  },
+};
+const WHEEL_X = 0.8, WHEEL_Z = 1.33;
+
+// Form aus Teilen zusammenfügen: [[geometry, matrix], …] → eine nicht indizierte Geometrie
+function carMerge(parts) {
+  const pos = [], nor = [], uv = [];
+  for (const [g0, m] of parts) {
+    const g = g0.index ? g0.toNonIndexed() : g0.clone();
+    if (m) g.applyMatrix4(m);
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array);
+    if (g.attributes.uv) uv.push(...g.attributes.uv.array); else for (let i = 0; i < g.attributes.position.count; i++) uv.push(0, 0);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeBoundingSphere();
+  return g;
+}
+// Weiche Normalen: Ecken an derselben Stelle mitteln, solange die Flächen weniger als `deg` Grad auseinander liegen
+// (gerundete Kanten wirken rund, harte Kanten bleiben hart)
+function carSmooth(g, deg = 50) {
+  const p = g.attributes.position, n = g.attributes.normal, cnt = p.count, lim = Math.cos(deg * Math.PI / 180);
+  const fn = new Float32Array(cnt * 3), map = new Map(), out = new Float32Array(cnt * 3);
+  for (let i = 0; i < cnt; i += 3) { // Flächennormalen
+    const ax = p.getX(i), ay = p.getY(i), az = p.getZ(i);
+    const ux = p.getX(i + 1) - ax, uy = p.getY(i + 1) - ay, uz = p.getZ(i + 1) - az;
+    const vx = p.getX(i + 2) - ax, vy = p.getY(i + 2) - ay, vz = p.getZ(i + 2) - az;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    for (let k = 0; k < 3; k++) fn.set([nx, ny, nz], (i + k) * 3);
+  }
+  const key = i => Math.round(p.getX(i) * 1000) + ',' + Math.round(p.getY(i) * 1000) + ',' + Math.round(p.getZ(i) * 1000);
+  for (let i = 0; i < cnt; i++) { const k = key(i); if (!map.has(k)) map.set(k, []); map.get(k).push(i); }
+  for (let i = 0; i < cnt; i++) {
+    let sx = 0, sy = 0, sz = 0;
+    for (const j of map.get(key(i))) {
+      if (fn[i * 3] * fn[j * 3] + fn[i * 3 + 1] * fn[j * 3 + 1] + fn[i * 3 + 2] * fn[j * 3 + 2] < lim) continue;
+      sx += fn[j * 3]; sy += fn[j * 3 + 1]; sz += fn[j * 3 + 2];
+    }
+    const l = Math.hypot(sx, sy, sz) || 1; out[i * 3] = sx / l; out[i * 3 + 1] = sy / l; out[i * 3 + 2] = sz / l;
+  }
+  n.array.set(out); n.needsUpdate = true;
+  return g;
+}
+// Seitenprofil [[länge, höhe], …] über die Breite w extrudieren (Rundung r an den Kanten), Mitte bei x = 0
+function carExtrude(profile, w, r, arches) {
+  const sh = new THREE.Shape();
+  sh.moveTo(profile[0][0], profile[0][1]);
+  if (arches) {
+    // Unterkante mit zwei Radkästen von hinten nach vorn
+    const y = profile[0][1];
+    for (const cz of [-WHEEL_Z, WHEEL_Z]) {
+      sh.lineTo(cz - 0.46, y);
+      sh.absarc(cz, CAR.wheelR, 0.44, Math.PI - Math.asin((y - CAR.wheelR) / 0.44), Math.asin((y - CAR.wheelR) / 0.44), true);
+    }
+  }
+  for (let i = 1; i < profile.length; i++) sh.lineTo(profile[i][0], profile[i][1]);
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: w - 2 * r, bevelEnabled: r > 0, bevelThickness: r, bevelSize: r * 0.75, bevelSegments: 3, curveSegments: 10 });
+  g.rotateY(-Math.PI / 2);        // Profil-x (Länge) → Welt-z, Extrusion → Welt-x
+  g.translate((w - 2 * r) / 2, 0, 0);
+  g.computeVertexNormals();
+  return carSmooth(g.index ? g.toNonIndexed() : g);
+}
 const _carGeo = {};
-function carGeometries() {
-  if (_carGeo.body) return _carGeo;
-  _carGeo.body = new THREE.BoxGeometry(1.8, 0.62, 4.3);
-  _carGeo.hood = new THREE.BoxGeometry(1.7, 0.1, 1.2);
-  _carGeo.cabin = new THREE.BoxGeometry(1.58, 0.55, 2.1);
-  _carGeo.roof = new THREE.BoxGeometry(1.5, 0.07, 1.85);
-  _carGeo.wheel = new THREE.CylinderGeometry(CAR.wheelR, CAR.wheelR, 0.26, 14);
-  _carGeo.wheel.rotateZ(Math.PI / 2);
-  _carGeo.hub = new THREE.CylinderGeometry(0.17, 0.17, 0.27, 8);
-  _carGeo.hub.rotateZ(Math.PI / 2);
-  _carGeo.light = new THREE.BoxGeometry(0.42, 0.14, 0.06);
-  _carGeo.bumper = new THREE.BoxGeometry(1.84, 0.2, 0.22);
-  _carGeo.plate = new THREE.BoxGeometry(0.52, 0.12, 0.03);
-  _carGeo.spoiler = new THREE.BoxGeometry(1.6, 0.06, 0.32);
-  _carGeo.strut = new THREE.BoxGeometry(0.08, 0.22, 0.12);
-  _carGeo.barBase = new THREE.BoxGeometry(1.1, 0.08, 0.32);
-  _carGeo.lamp = new THREE.BoxGeometry(0.42, 0.16, 0.26);
-  _carGeo.side = new THREE.PlaneGeometry(2.6, 0.36);
-  _carGeo.sign = new THREE.BoxGeometry(0.62, 0.2, 0.2);
-  return _carGeo;
+function carGeometries(kind = 'car') {
+  const key = kind === 'sport' ? 'sport' : 'car';
+  if (_carGeo[key]) return _carGeo[key];
+  const S = CAR_SHAPES[key], M4 = (x, y, z, rx = 0, ry = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, 0)), new THREE.Vector3(1, 1, 1));
+  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  // Säulen als schräge Leisten zwischen zwei Profilpunkten
+  const pillar = (s0, y0, s1, y1, x) => {
+    const L = Math.hypot(s1 - s0, y1 - y0);
+    return [box(0.07, 0.07, L), M4(x, (y0 + y1) / 2, (s0 + s1) / 2, Math.atan2(-(y1 - y0), s1 - s0))];
+  };
+  const cw = S.cabinW, px = cw / 2 + 0.005;
+  const paintParts = [[carExtrude(S.body, 1.8, 0.09, true)], [carExtrude(S.roof, cw + 0.03, 0.03)]];
+  for (const [s0, y0, s1, y1] of S.pillars) for (const x of [px, -px]) paintParts.push(pillar(s0, y0, s1, y1, x));
+  if (S.bPillar) paintParts.push([box(cw + 0.02, S.bPillar[2] - S.bPillar[1], 0.1), M4(0, (S.bPillar[1] + S.bPillar[2]) / 2, S.bPillar[0])]);
+  for (const x of [1, -1]) paintParts.push([box(0.16, 0.1, 0.2), M4(x * 0.98, S.mirror[1] + 0.05, S.mirror[0])]);
+  const [hz, hy] = S.head, [tz, ty] = S.tail;
+  const G = {
+    paint: carMerge(paintParts),
+    glass: carMerge([[carExtrude(S.cabin, cw, 0.05)]]),
+    trim: carMerge([
+      [box(1.86, 0.2, 0.2), M4(0, 0.4, hz + 0.08)], [box(1.86, 0.22, 0.2), M4(0, 0.42, tz - 0.06)],
+      [box(0.9, 0.15, 0.06), M4(0, hy - 0.12, hz + 0.11)],                       // Kühlergrill
+      [box(1.82, 0.06, 2.6), M4(0, 0.31, 0)],                                    // Schweller
+      [box(0.05, 0.1, 0.2), M4(0.93, S.mirror[1], S.mirror[0])], [box(0.05, 0.1, 0.2), M4(-0.93, S.mirror[1], S.mirror[0])],
+    ]),
+    head: carMerge([[box(0.44, 0.13, 0.14), M4(0.6, hy, hz + 0.05)], [box(0.44, 0.13, 0.14), M4(-0.6, hy, hz + 0.05)]]),
+    tail: carMerge([[box(0.5, 0.12, 0.12), M4(0.58, ty, tz - 0.02)], [box(0.5, 0.12, 0.12), M4(-0.58, ty, tz - 0.02)]]),
+    plate: carMerge([[box(0.52, 0.12, 0.02), M4(0, 0.47, hz + 0.19)], [box(0.52, 0.12, 0.02), M4(0, 0.6, tz - 0.1, 0, Math.PI)]]),
+    roofY: S.roofY,
+  };
+  // Räder: Reifen, Felge mit fünf Speichen auf beiden Seiten (drehen sich mit)
+  const tire = new THREE.CylinderGeometry(CAR.wheelR, CAR.wheelR, 0.24, 22); tire.rotateZ(Math.PI / 2);
+  G.tire = tire;
+  const rimParts = [[new THREE.CylinderGeometry(0.2, 0.2, 0.245, 16), M4(0, 0, 0, 0, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2))]];
+  for (const side of [1, -1]) for (let k = 0; k < 5; k++) {
+    const a = k / 5 * Math.PI * 2;
+    rimParts.push([box(0.02, 0.05, 0.19), new THREE.Matrix4().makeTranslation(side * 0.125, 0, 0).multiply(new THREE.Matrix4().makeRotationX(a)).multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.1))]);
+  }
+  G.rim = carMerge(rimParts);
+  G.spoiler = new THREE.BoxGeometry(1.6, 0.05, 0.32);
+  G.strut = new THREE.BoxGeometry(0.06, 0.2, 0.1);
+  G.barBase = new THREE.BoxGeometry(1.1, 0.07, 0.3);
+  G.lamp = new THREE.BoxGeometry(0.42, 0.14, 0.24);
+  G.side = new THREE.PlaneGeometry(2.4, 0.3);
+  G.sign = new THREE.BoxGeometry(0.62, 0.2, 0.2);
+  G.roofPlate = carExtrude(S.roof, cw + 0.05, 0.03);
+  G.blob = new THREE.PlaneGeometry(2.5, 5.0); G.blob.rotateX(-Math.PI / 2);
+  _carGeo[key] = G;
+  return G;
 }
 
 function textTexture(text, bg, fg, w = 256, h = 48) {
@@ -54,27 +166,50 @@ function textTexture(text, bg, fg, w = 256, h = 48) {
 }
 
 const _carMat = {};
+// Kennzeichen „CO“ (Coburg) mit Euro-Feld
+function plateTexture() {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 56;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#f4f4f0'; c.fillRect(0, 0, 256, 56);
+  c.fillStyle = '#1f43a6'; c.fillRect(0, 0, 30, 56);
+  c.fillStyle = '#ffd400'; c.beginPath(); c.arc(15, 18, 7, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#111'; c.lineWidth = 3; c.strokeRect(1.5, 1.5, 253, 53);
+  c.fillStyle = '#111'; c.font = '700 40px "DIN Alternate", "Arial Narrow", Arial, sans-serif'; c.textBaseline = 'middle';
+  c.fillText('CO GT 77', 40, 30);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+// Schatten-Fleck unter dem Auto (Bodenkontakt auch dort, wo die Sonnenschatten nicht mehr hinreichen)
+function blobTexture() {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(32, 64, 4, 32, 64, 62);
+  g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.55, 'rgba(0,0,0,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.save(); c.scale(1, 2); c.translate(0, -32); c.fillStyle = g; c.fillRect(0, 0, 64, 128); c.restore();
+  return new THREE.CanvasTexture(cv);
+}
 function carMaterials() {
   if (_carMat.glass) return _carMat;
-  _carMat.glass = new THREE.MeshLambertMaterial({ color: '#1e2730' });
-  _carMat.tire = new THREE.MeshLambertMaterial({ color: '#1a1a1a' });
-  _carMat.hub = new THREE.MeshLambertMaterial({ color: '#b8bcc0' });
-  _carMat.trim = new THREE.MeshLambertMaterial({ color: '#2a2a2a' });
-  _carMat.plate = new THREE.MeshLambertMaterial({ color: '#f4f4f4' });
-  _carMat.head = new THREE.MeshLambertMaterial({ color: '#fff6dd', emissive: '#fff1c4', emissiveIntensity: 0.2 });
-  _carMat.tail = new THREE.MeshLambertMaterial({ color: '#8a1010', emissive: '#ff2020', emissiveIntensity: 0.25 });
-  _carMat.policeBlue = new THREE.MeshLambertMaterial({ color: '#1f4fa3' });
-  _carMat.lampOff = new THREE.MeshLambertMaterial({ color: '#16306b', emissive: '#0a1840', emissiveIntensity: 0.4 });
-  _carMat.lampOn = new THREE.MeshBasicMaterial({ color: '#5fa0ff' });
-  _carMat.policeSide = new THREE.MeshLambertMaterial({ map: textTexture('POLIZEI', '#1f4fa3', '#ffffff', 512, 72) });
-  _carMat.taxiSign = new THREE.MeshLambertMaterial({ map: textTexture('TAXI', '#f6d23a', '#1a1a1a', 128, 40), emissive: '#ffd84a', emissiveIntensity: 0.25 });
-  _carMat.wreck = new THREE.MeshLambertMaterial({ color: '#1c1a19' });
+  const std = o => new THREE.MeshStandardMaterial(o);
+  _carMat.glass = std({ color: '#121a22', roughness: 0.05, metalness: 0.1, envMapIntensity: 1.8 });
+  _carMat.tire = std({ color: '#161616', roughness: 0.92 });
+  _carMat.hub = std({ color: '#c3c7cc', roughness: 0.28, metalness: 0.9, envMapIntensity: 1.2 });
+  _carMat.trim = std({ color: '#1c1d1f', roughness: 0.6 });
+  _carMat.plate = std({ map: plateTexture(), roughness: 0.5 });
+  _carMat.head = std({ color: '#fff6dd', emissive: '#fff1c4', emissiveIntensity: 0.2, roughness: 0.15, metalness: 0.3 });
+  _carMat.tail = std({ color: '#7a0c0c', emissive: '#ff2020', emissiveIntensity: 0.25, roughness: 0.25 });
+  _carMat.policeBlue = new THREE.MeshPhysicalMaterial({ color: '#1f4fa3', roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.08 });
+  _carMat.lampOff = std({ color: '#16306b', emissive: '#0a1840', emissiveIntensity: 0.4, roughness: 0.3 });
+  _carMat.lampOn = new THREE.MeshBasicMaterial({ color: '#7fb4ff' });
+  _carMat.policeSide = std({ map: textTexture('POLIZEI', '#1f4fa3', '#ffffff', 512, 72), roughness: 0.4 });
+  _carMat.taxiSign = std({ map: textTexture('TAXI', '#f6d23a', '#1a1a1a', 128, 40), emissive: '#ffd84a', emissiveIntensity: 0.25 });
+  _carMat.wreck = std({ color: '#1c1a19', roughness: 1 });
+  _carMat.blob = new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, color: '#000000', polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  _carMat.blob.alphaMap = _carMat.blob.map; _carMat.blob.map = null;
   return _carMat;
 }
-
 class Vehicle {
   constructor(scene, color, kind = 'car') {
-    const G = carGeometries(), M = carMaterials();
     this.kind = kind;
     this.spec = VEHICLE_KINDS[kind] || VEHICLE_KINDS.car;
     if (!color) {
@@ -84,49 +219,45 @@ class Vehicle {
       else color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
     }
     this.color = color;
-    const paint = new THREE.MeshLambertMaterial({ color: this.color });
+    // Lack mit Klarlack: spiegelt Himmel und Umgebung (scene.environment aus js/atmosphere.js)
+    const paint = new THREE.MeshPhysicalMaterial({ color: this.color, metalness: 0.35, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.06 });
     this.paint = paint;
     this.baseColor = new THREE.Color(this.color);
+    const G = carGeometries(kind), M = carMaterials();
     const g = new THREE.Group();
     const add = (geo, mat, x, y, z, shadow = true) => {
       const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = shadow; g.add(m); return m;
     };
-    const sport = kind === 'sport';
-    const body = add(G.body, paint, 0, 0.62, 0);
-    if (sport) { body.scale.y = 0.8; body.position.y = 0.56; }
-    add(G.hood, paint, 0, sport ? 0.86 : 0.96, 1.35);
-    this.glassMesh = add(G.cabin, M.glass, 0, sport ? 1.02 : 1.2, sport ? -0.35 : -0.25);
-    if (sport) this.glassMesh.scale.set(1, 0.72, 0.95);
-    add(G.roof, kind === 'police' ? M.policeBlue : paint, 0, sport ? 1.24 : 1.5, sport ? -0.4 : -0.3);
-    add(G.bumper, M.trim, 0, 0.42, 2.17, false);
-    add(G.bumper, M.trim, 0, 0.42, -2.17, false);
-    add(G.plate, M.plate, 0, 0.6, 2.29, false);
-    add(G.plate, M.plate, 0, 0.6, -2.29, false);
-    add(G.light, M.head, 0.62, 0.74, 2.16, false);
-    add(G.light, M.head, -0.62, 0.74, 2.16, false);
-    add(G.light, M.tail, 0.62, 0.76, -2.16, false);
-    add(G.light, M.tail, -0.62, 0.76, -2.16, false);
+    const sport = kind === 'sport', top = G.roofY;
+    add(G.paint, paint, 0, 0, 0);
+    this.glassMesh = add(G.glass, M.glass, 0, 0, 0);
+    add(G.trim, M.trim, 0, 0, 0, false);
+    add(G.head, M.head, 0, 0, 0, false);
+    add(G.tail, M.tail, 0, 0, 0, false);
+    add(G.plate, M.plate, 0, 0, 0, false);
+    const blob = add(G.blob, M.blob, 0, 0.05, 0, false);
+    blob.userData.keep = true; blob.renderOrder = 1;
     if (sport) {
-      add(G.spoiler, paint, 0, 1.12, -2.0);
-      add(G.strut, M.trim, 0.55, 0.98, -2.0, false); add(G.strut, M.trim, -0.55, 0.98, -2.0, false);
+      add(G.spoiler, paint, 0, 1.06, -1.98);
+      add(G.strut, M.trim, 0.55, 0.94, -1.98, false); add(G.strut, M.trim, -0.55, 0.94, -1.98, false);
     }
     this.lamps = null;
     if (kind === 'police') {
-      add(G.barBase, M.trim, 0, 1.57, -0.3, false);
-      this.lamps = [add(G.lamp, M.lampOff, 0.3, 1.66, -0.3, false), add(G.lamp, M.lampOff, -0.3, 1.66, -0.3, false)];
-      const sR = add(G.side, M.policeSide, 0.905, 0.66, 0, false); sR.rotation.y = Math.PI / 2;
-      const sL = add(G.side, M.policeSide, -0.905, 0.66, 0, false); sL.rotation.y = -Math.PI / 2;
-      add(G.hood, M.policeBlue, 0, 0.965, 1.35, false).scale.set(0.35, 1.2, 1.01);
+      add(G.roofPlate, M.policeBlue, 0, 0.004, 0, false);
+      add(G.barBase, M.trim, 0, top + 0.04, -0.4, false);
+      this.lamps = [add(G.lamp, M.lampOff, 0.3, top + 0.13, -0.4, false), add(G.lamp, M.lampOff, -0.3, top + 0.13, -0.4, false)];
+      const sR = add(G.side, M.policeSide, 0.912, 0.62, -0.1, false); sR.rotation.y = Math.PI / 2;
+      const sL = add(G.side, M.policeSide, -0.912, 0.62, -0.1, false); sL.rotation.y = -Math.PI / 2;
     }
-    if (kind === 'taxi') add(G.sign, M.taxiSign, 0, 1.63, -0.3, false);
+    if (kind === 'taxi') add(G.sign, M.taxiSign, 0, top + 0.1, -0.45, false);
     this.wheels = [];
     this.frontPivots = [];
-    for (const [x, z] of [[0.84, 1.33], [-0.84, 1.33], [0.84, -1.33], [-0.84, -1.33]]) {
+    for (const [x, z] of [[WHEEL_X, WHEEL_Z], [-WHEEL_X, WHEEL_Z], [WHEEL_X, -WHEEL_Z], [-WHEEL_X, -WHEEL_Z]]) {
       const pivot = new THREE.Group(); pivot.position.set(x, CAR.wheelR, z);
       const w = new THREE.Group();
-      const tire = new THREE.Mesh(G.wheel, M.tire); tire.castShadow = true;
-      const hub = new THREE.Mesh(G.hub, M.hub);
-      w.add(tire, hub);
+      const tire = new THREE.Mesh(G.tire, M.tire); tire.castShadow = true;
+      const rim = new THREE.Mesh(G.rim, M.hub);
+      w.add(tire, rim);
       pivot.add(w); g.add(pivot);
       this.wheels.push(w);
       if (z > 0) this.frontPivots.push(pivot);
@@ -259,7 +390,7 @@ class Vehicle {
   wreck() {
     this.wrecked = true; this.burning = 0; this.health = 0; this.siren = false;
     const M = carMaterials();
-    this.group.traverse(o => { if (o.isMesh && o.material !== M.tire) o.material = M.wreck; });
+    this.group.traverse(o => { if (o.isMesh && o.material !== M.tire && !o.userData.keep) o.material = M.wreck; });
   }
 
   setSiren(on) {

@@ -31,9 +31,10 @@ function waterMaterial() {
   c.putImageData(img, 0, 0);
   const nt = new THREE.CanvasTexture(cv);
   nt.wrapS = nt.wrapT = THREE.RepeatWrapping;
-  _waterMat = new THREE.MeshPhongMaterial({
-    color: '#3b6577', specular: '#5d7480', shininess: 35, normalMap: nt, normalScale: new THREE.Vector2(0.22, 0.22),
-    transparent: true, opacity: 0.88, depthWrite: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+  // physikalisches Material: spiegelt Himmel und Wolken aus dem Umgebungsbild (flacher Blick = mehr Spiegelung)
+  _waterMat = new THREE.MeshStandardMaterial({
+    color: '#34524f', roughness: 0.06, metalness: 0, envMapIntensity: 1.5, normalMap: nt, normalScale: new THREE.Vector2(0.3, 0.3),
+    transparent: true, opacity: 0.93, depthWrite: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
   });
   _waterMat.userData.tex = nt;
   return _waterMat;

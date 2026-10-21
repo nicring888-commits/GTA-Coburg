@@ -13,48 +13,32 @@
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Filmische Tonwertkurve: helle Flächen laufen weich aus statt hart abzuschneiden, Farben bleiben natürlich
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
   $('app').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.3, 4000);
+  const BASE_FOV = 65;
+  const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.3, 4000);
+  scene.fog = new THREE.Fog('#c8dbec', 300, 2800);
 
-  const SKY = {
-    day: { top: '#3f78c4', horizon: '#cfe0ef', fog: '#c6d6e3', sun: 2.6, sunColor: '#fff3df', hemi: 1.05, hemiSky: '#cfe3ff', hemiGround: '#6f6a55' },
-    night: { top: '#03060f', horizon: '#1a2238', fog: '#121a2c', sun: 0.18, sunColor: '#8fa6ff', hemi: 0.22, hemiSky: '#4a5a8a', hemiGround: '#151515' },
-  };
-  function skyTexture(s) {
-    const night = s === SKY.night;
-    const W = night ? 4096 : 4, H = night ? 1024 : 256;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const c = cv.getContext('2d'), g = c.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, s.top); g.addColorStop(0.5, s.horizon); g.addColorStop(1, s.horizon);
-    c.fillStyle = g; c.fillRect(0, 0, W, H);
-    if (night) { // Sterne
-      const r = U.rng(5);
-      for (let i = 0; i < 1400; i++) {
-        c.fillStyle = `rgba(255,255,255,${0.35 + r() * 0.65})`;
-        c.fillRect(Math.floor(r() * W), Math.floor(Math.pow(r(), 1.5) * H * 0.42), 1.5, 1.5);
-      }
-    }
-    const t = new THREE.CanvasTexture(cv);
-    t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }
-  const skyTex = { day: skyTexture(SKY.day), night: skyTexture(SKY.night) };
-  scene.fog = new THREE.Fog(SKY.day.fog, 260, 1500);
-
-  const hemi = new THREE.HemisphereLight(SKY.day.hemiSky, SKY.day.hemiGround, SKY.day.hemi);
+  const hemi = new THREE.HemisphereLight('#cfe2ff', '#6f6a55', 1.1);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(SKY.day.sunColor, SKY.day.sun);
+  const sun = new THREE.DirectionalLight('#fff1dc', 3);
   // Sonne aus Südsüdost wie zur Aufnahmezeit der Luftbilder, damit 3D-Schatten und Fotoschatten zusammenpassen
   const SUN_DIR = new THREE.Vector3(0.15, 1.3, 0.95).normalize();
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  const SC = 110;
+  // große Schattenkarte, wenn die Grafikkarte sie kann (schärfere Schatten bei gleicher Reichweite)
+  const SHADOW_PX = renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048;
+  sun.shadow.mapSize.set(SHADOW_PX, SHADOW_PX);
+  const SC = SHADOW_PX > 2048 ? 135 : 110;
   Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 1, far: 700 });
-  sun.shadow.bias = -0.0006;
-  sun.shadow.normalBias = 0.6;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = SHADOW_PX > 2048 ? 0.4 : 0.6;
   scene.add(sun, sun.target);
+  // Himmel, Wolken, Wetter und Spiegelungen (js/atmosphere.js) steuern ab jetzt Sonne, Himmelslicht und Nebel
+  const atmo = new Atmosphere({ scene, renderer, sun, hemi, sunDir: SUN_DIR });
 
   // Scheinwerfer für das gefahrene Auto (nachts)
   const headlight = new THREE.SpotLight('#fff1d0', 0, 70, 0.55, 0.5, 1.2);
@@ -459,13 +443,14 @@
     applySky();
     ui.toast(night ? 'Nacht' : 'Tag', 1.2);
   }
-  function applySky() {
-    const s = night ? SKY.night : SKY.day;
-    scene.background = night ? skyTex.night : skyTex.day;
-    scene.fog.color.set(s.fog);
-    scene.fog.near = night ? 120 : 260; scene.fog.far = night ? 900 : 1500;
-    sun.intensity = s.sun; sun.color.set(s.sunColor);
-    hemi.intensity = s.hemi; hemi.color.set(s.hemiSky); hemi.groundColor.set(s.hemiGround);
+  function cycleWeather() {
+    atmo.auto = false; // von Hand gewählt: bleibt, bis man wieder wechselt
+    ui.toast('Wetter: ' + atmo.cycleWeather(), 1.6);
+  }
+  // instant: ohne Überblendung (z. B. nach dem Verlassen einer Wohnung)
+  function applySky(instant) {
+    atmo.setNight(night, instant);
+    if (instant) atmo.update(0, camera, true);
     world.setNight(night);
     if (world.region) world.region.setNight(night);
     props.setNight(night);
@@ -487,7 +472,7 @@
     } else {
       for (const o of hiddenOutdoor || []) o.visible = true;
       hiddenOutdoor = null;
-      applySky();
+      applySky(true);
     }
     $('minimap-wrap').classList.toggle('hidden', !!room);
     $('location').classList.toggle('hidden', !!room);
@@ -500,7 +485,6 @@
     player.health = 100;
     persist();
   }
-  scene.background = skyTex.day;
 
   // ---------- Feuer, Explosionen, Verletzungen ----------
   let puffT = 0;
@@ -626,6 +610,7 @@
   function indoorStep(dt) {
     if (pressed.F1) $('help').classList.toggle('hidden');
     if (pressed.KeyN) toggleNight();
+    if (pressed.KeyK) cycleWeather();
     if (pressed.KeyM || pressed.KeyG) ui.toast(property.inside.home.venue ? 'Erst nach draußen gehen' : 'Erst die Wohnung verlassen', 1.5);
     const io = property.inside, mv = walkInput();
     mv.run = false; // drinnen wird nicht gerannt
@@ -712,6 +697,9 @@
     if (!cam.init) { cam.x = wx; cam.y = wy; cam.z = wz; cam.init = true; }
     const lam = follow ? 12 : 30;
     cam.x = U.damp(cam.x, wx, lam, dt); cam.y = U.damp(cam.y, wy, lam, dt); cam.z = U.damp(cam.z, wz, lam, dt);
+    // bei hohem Tempo etwas weiteres Sichtfeld (Geschwindigkeitsgefühl, ohne Verzerrung)
+    const fov = BASE_FOV + (mode === 'drive' ? Math.min(Math.abs(car.speed), 45) * 0.16 : 0);
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = U.damp(camera.fov, fov, 3, dt); camera.updateProjectionMatrix(); }
     camera.position.set(cam.x, cam.y, cam.z);
     camera.lookAt(tx, ty, tz);
   }
@@ -752,6 +740,7 @@
     if (pressed.KeyM) { ui.openMap(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z, travel, mapExtra()); document.exitPointerLock?.(); return; }
     if (pressed.F1) $('help').classList.toggle('hidden');
     if (pressed.KeyN) toggleNight();
+    if (pressed.KeyK) cycleWeather();
     if (pressed.KeyC && mode === 'drive') camMode = 1 - camMode;
     const freeze = !!(races.active && races.active.t < 0);
     if (pressed.KeyE && !freeze) {
@@ -930,6 +919,7 @@
       headlight.position.set(car.x + fx * 2.2, car.y + 0.8, car.z + fz * 2.2);
       headlight.target.position.set(car.x + fx * 20, car.y - 1, car.z + fz * 20);
     } else headlight.intensity = 0;
+    if (!property.inside) atmo.update(dt, camera);
     peds.draw(camera.position.x, camera.position.z);
     waterTick(dt);
     ui.updateLabels(camera);
@@ -945,7 +935,7 @@
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, travel, toggleNight, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };

@@ -106,8 +106,9 @@ function beaconTexture(checker) {
 function makeBeacon(color, radius, height, checker = false) {
   const geo = new THREE.CylinderGeometry(radius, radius, height, 40, 1, true);
   geo.translate(0, height / 2, 0);
-  const mat = new THREE.MeshBasicMaterial({ color, map: beaconTexture(checker), transparent: true, depthWrite: false,
-    side: THREE.DoubleSide, blending: checker ? THREE.NormalBlending : THREE.AdditiveBlending, fog: false });
+  // ohne Tonwertkurve, sonst überstrahlen die Säulen (gleiche Helligkeit wie vorher)
+  const mat = new THREE.MeshBasicMaterial({ color, map: beaconTexture(checker), transparent: true, depthWrite: false, toneMapped: false,
+    opacity: 0.8, side: THREE.DoubleSide, blending: checker ? THREE.NormalBlending : THREE.AdditiveBlending, fog: false });
   const m = new THREE.Mesh(geo, mat);
   m.renderOrder = 2;
   return m;

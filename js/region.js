@@ -526,7 +526,7 @@ class Region {
   // ---------------- Straßen ----------------
   roadMaterials() {
     if (!this._roadMat) {
-      const mat = o => new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 });
+      const mat = o => this.world.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 }));
       this._roadMat = mat(3); this._markMat = mat(5);
     }
     return [this._roadMat, this._markMat];
@@ -825,11 +825,10 @@ class Region {
   // ---------------- Bäume ----------------
   treeAssets() {
     if (!this._trees) {
-      const trunk = new THREE.CylinderGeometry(0.18, 0.28, 3, 5); trunk.translate(0, 1.5, 0);
-      const leaf = new THREE.IcosahedronGeometry(2.5, 0); leaf.translate(0, 4.6, 0);
-      const pine = new THREE.ConeGeometry(2.1, 7.5, 6); pine.translate(0, 5.3, 0);
-      this._trees = { trunk, leaf, pine, trunkMat: new THREE.MeshLambertMaterial({ color: '#5b4632' }),
-        leafMat: new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true }) };
+      // gleiche Formen wie in der Innenstadt (js/world.js), aber gröber, weil hier viel mehr Bäume stehen
+      const A = treeAssets(0);
+      this.world.leafShader(A.leafMat);
+      this._trees = { trunk: A.trunk, leaf: A.crowns[1], pine: A.pine, trunkMat: A.trunkMat, leafMat: A.leafMat };
     }
     return this._trees;
   }
