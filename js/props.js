@@ -92,6 +92,7 @@ class CityProps {
     this.awnings();
     this.fountainsBuild();
     this.makeMeshes();
+    this.landmarks();
     this.pigeonsBuild();
   }
 
@@ -143,6 +144,122 @@ class CityProps {
         for (let k = 0; k < n; k++) this.add('bike', { x: x + dx * (k - n / 2) * 0.7, y, z: z + dz * (k - n / 2) * 0.7, ry: facing, c: new THREE.Color(PED_SHIRTS[Math.floor(R() * PED_SHIRTS.length)]) });
       }
     }
+  }
+
+  // ---------- Wahrzeichen-Details ----------
+  // Die Formen kommen aus LoD2 (World.landmarkLod2). Hier kommen dazu: dunkle Torbögen und Uhren an den drei
+  // Tortürmen (zur Straße hin) und die beiden rot-weißen Eckerker am Stadthaus.
+  landmarks() {
+    const W = this.world, list = W.landmarkLod2 || [];
+    const lam = (o) => new THREE.MeshLambertMaterial(o);
+    const archMat = lam({ color: '#1f1c19' }), clockMat = lam({ map: this.clockTexture() });
+    const add = (geo, mat, x, y, z, ry) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z); m.rotation.y = ry || 0;
+      m.castShadow = true; m.receiveShadow = true;
+      this.scene.add(m);
+      return m;
+    };
+    // Torbogen-Fläche: Rechteck mit Halbkreis oben, Unterkante bei y = 0
+    const archGeo = (w, h) => {
+      const s = new THREE.Shape(), r = w / 2;
+      s.moveTo(-r, 0); s.lineTo(r, 0); s.lineTo(r, h - r);
+      s.absarc(0, h - r, r, 0, Math.PI, false);
+      s.lineTo(-r, 0);
+      return new THREE.ShapeGeometry(s, 12);
+    };
+    const GATES = { Spitaltor: { clock: 20.5, w: 3.4, h: 4.8 }, Judentor: { clock: 18.5, w: 3.0, h: 4.2 }, Ketschentor: { clock: 19.5, w: 3.6, h: 5.0 } };
+    for (const L of list) {
+      const g = GATES[L.name];
+      if (!g) continue;
+      const { X, Z, RY, y0 } = L;
+      let cx = 0, cz = 0;
+      for (let i = 0; i < X.length; i++) { cx += X[i]; cz += Z[i]; }
+      cx /= X.length; cz /= Z.length;
+      const r = W.nearestRoad(cx, cz, 30, s => s.k !== 'path' && s.k !== 'track');
+      if (!r) continue;
+      let dx = r.seg.bx - r.seg.ax, dz = r.seg.bz - r.seg.az;
+      const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+      // halbe Tiefe des Turms in Straßenrichtung in einem Höhenband (über Grund)
+      const depth = (lo, hi) => {
+        let m = 0;
+        for (let i = 0; i < X.length; i++) {
+          const y = RY[i] - y0;
+          if (y >= lo && y <= hi) m = Math.max(m, Math.abs((X[i] - cx) * dx + (Z[i] - cz) * dz));
+        }
+        return m;
+      };
+      const dLow = depth(-1, 6), dHigh = depth(g.clock - 4, g.clock + 1) || dLow;
+      for (const sd of [1, -1]) {
+        const fx = cx + dx * sd * (dLow + 0.06), fz = cz + dz * sd * (dLow + 0.06);
+        const ry = Math.atan2(dx * sd, dz * sd);
+        add(archGeo(g.w, g.h), archMat, fx, W.heightAt(fx, fz) - 0.05, fz, ry);
+        const kx = cx + dx * sd * (dHigh + 0.08), kz = cz + dz * sd * (dHigh + 0.08);
+        add(new THREE.CircleGeometry(1.05, 24), clockMat, kx, y0 + g.clock, kz, ry);
+      }
+    }
+    // Stadthaus: zweigeschossige Eckerker an beiden Ecken zum Markt (Süden = +z)
+    const sh = list.filter(L => L.name === 'Stadthaus').sort((a, b) => b.X.length - a.X.length)[0];
+    if (sh) {
+      const { X, Z, RY, y0 } = sh;
+      let cx = 0, cz = 0, n = 0;
+      for (let i = 0; i < X.length; i++) if (RY[i] - y0 < 1) { cx += X[i]; cz += Z[i]; n++; }
+      cx /= n; cz /= n;
+      const bodyMat = lam({ map: this.orielTexture() }), helmMat = lam({ color: '#4b5262' }), baseMat = lam({ color: '#a83a2e' });
+      for (const sx of [-1, 1]) {
+        let bi = -1, bv = -Infinity;
+        for (let i = 0; i < X.length; i++) if (RY[i] - y0 < 1 && Z[i] + X[i] * sx > bv) { bv = Z[i] + X[i] * sx; bi = i; }
+        if (bi < 0) continue;
+        let ox = X[bi] - cx, oz = Z[bi] - cz;
+        const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
+        const x = X[bi] + ox * 0.55, z = Z[bi] + oz * 0.55;
+        const ry = Math.atan2(ox, oz) + Math.PI / 8;
+        const R = 1.55;
+        add(new THREE.CylinderGeometry(R, 0.25, 1.6, 8), baseMat, x, y0 + 3.6, z, ry);              // Konsole
+        add(new THREE.CylinderGeometry(R, R, 8, 8), bodyMat, x, y0 + 8.4, z, ry);                    // Erkerkörper
+        add(new THREE.CylinderGeometry(R + 0.12, R + 0.12, 0.25, 8), baseMat, x, y0 + 12.5, z, ry);   // Gesims
+        add(new THREE.ConeGeometry(R + 0.1, 3.4, 8), helmMat, x, y0 + 14.3, z, ry);                  // Schieferhelm
+        add(new THREE.CylinderGeometry(0.03, 0.05, 1.4, 4), lam({ color: '#c9a646' }), x, y0 + 16.6, z); // Spitze
+      }
+    }
+  }
+
+  // Zifferblatt: weiß mit schwarzem Ring, Strichen und Zeigern (zehn nach zehn)
+  clockTexture() {
+    const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d'), m = S / 2;
+    c.fillStyle = '#1d1d1d'; c.fillRect(0, 0, S, S);
+    c.fillStyle = '#f2efe6'; c.beginPath(); c.arc(m, m, m - 14, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#1d1d1d'; c.lineCap = 'round';
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2;
+      c.lineWidth = i % 3 ? 5 : 10;
+      c.beginPath(); c.moveTo(m + Math.sin(a) * (m - 24), m - Math.cos(a) * (m - 24)); c.lineTo(m + Math.sin(a) * (m - 44), m - Math.cos(a) * (m - 44)); c.stroke();
+    }
+    c.strokeStyle = '#a8862a';
+    const hand = (a, l, w) => { c.lineWidth = w; c.beginPath(); c.moveTo(m, m); c.lineTo(m + Math.sin(a) * l, m - Math.cos(a) * l); c.stroke(); };
+    hand(-Math.PI / 3, m * 0.45, 11); hand(Math.PI / 3, m * 0.68, 7);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  // Stadthaus-Erker: ochsenblutrot mit weißen Bändern, je Seite ein Fenster pro Geschoss
+  orielTexture() {
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#a83a2e'; c.fillRect(0, 0, 512, 256);
+    c.fillStyle = '#efe9dc';
+    for (const y of [0, 124, 244]) c.fillRect(0, y, 512, 12);
+    for (let i = 0; i < 8; i++) {
+      c.fillRect(i * 64, 0, 4, 256);                     // weiße Kanten
+      for (const y of [22, 146]) {
+        c.fillStyle = '#efe9dc'; c.fillRect(i * 64 + 14, y, 36, 86);
+        c.fillStyle = '#3b4652'; c.fillRect(i * 64 + 19, y + 5, 26, 76);
+        c.fillStyle = '#efe9dc'; c.fillRect(i * 64 + 30, y + 5, 4, 76); c.fillRect(i * 64 + 19, y + 34, 26, 4);
+      }
+    }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
   }
 
   // ---------- Echte Ladenschilder (data/shops.js) ----------

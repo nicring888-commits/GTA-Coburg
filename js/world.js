@@ -52,6 +52,15 @@ const LANDMARK_FACADES = [
   { x: 187.3, z: -147.1, c: '#e0d4b5' },  // Landestheater
   { x: -413.3, z: -481.7, c: '#d6cdb8' }, // Bahnhof
 ];
+// Wahrzeichen in den LoD2-Daten (nach Namen): Wandfarbe ohne Fensterraster, Wandfarbe oberhalb einer Höhe über dem
+// Boden, Dachfarbe statt Luftbild; Dachteile im Kreis (x, z, r) ab Höhe minY bekommen eine eigene Farbe
+const LANDMARK_LOD2 = {
+  Spitaltor: { wall: '#b3a68c', roof: '#4b5262' },
+  Judentor: { wall: '#a99c86', roof: '#4f5866' },
+  Ketschentor: { wall: '#b3a68c', upper: { y: 13, c: '#e2b84c' }, roof: '#4b5262' },
+  Rathaus: { parts: [{ x: -9.3, z: 62.4, r: 4.5, minY: 19, c: '#5f9a86' }] },
+  Stadthaus: {},                          // nur vormerken: Erker in props.js
+};
 // Altstadt mit Steinweg und Steintor (Spielkoordinaten, grob)
 const ALTSTADT_BOX = { minX: -175, maxX: 340, minZ: -470, maxZ: 360 };
 // Gebäudetypen, die ohne Angabe ein geneigtes (Walm-)Dach bekommen
@@ -839,6 +848,7 @@ class World {
   buildLod2(K) {
     const { walls, plain, roofTarget, photoCol, rnd, BAY_W, BAY_H } = K;
     this.lod2Grid = new U.Grid(32);           // LoD2-Grundrisse, um doppelte OSM-Häuser zu erkennen
+    this.landmarkLod2 = [];                   // Wahrzeichen für Details (Torbögen, Uhren, Erker in props.js)
     const flatRoofCol = U.color('#7c7973', 0, rnd);
     let count = 0;
     for (const b of this.lod2.buildings) {
@@ -872,7 +882,10 @@ class World {
       const plainType = PLAIN_TYPES.has(b.t) || /^31001_246/.test(b.k || '') || (!b.t && area < 30 && maxY < 4.5);
       const wallCol = U.color(this.wallColorHex(b, plainType, rnd, ox, oz), 0.1, rnd);
       const roofCol = U.color(TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)], 0.12, rnd);
-      const wb = plainType ? plain.get(ox, oz) : walls.get(ox, oz);
+      const lm = LANDMARK_LOD2[b.n];
+      const wb = plainType || (lm && lm.wall) ? plain.get(ox, oz) : walls.get(ox, oz);
+      const lmWall = lm && lm.wall ? U.color(lm.wall, 0.04, rnd) : null, lmUpper = lm && lm.upper ? U.color(lm.upper.c, 0.04, rnd) : null;
+      if (lm) this.landmarkLod2.push({ name: b.n, b, X, Z, RY, y0 });
 
       // Wände: Fenstertextur entlang der Wand, Fensterreihen ab Bodenhöhe
       for (const poly of b.w) {
@@ -886,7 +899,9 @@ class World {
         for (const i of rings[0]) d0 = Math.min(d0, X[i] * tx + Z[i] * tz);
         const uv = i => [(X[i] * tx + Z[i] * tz - d0) / BAY_W, (WY[i] - y0) / BAY_H];
         const p = i => [X[i], WY[i], Z[i]];
-        this.triPoly(rings, X, WY, Z, n, (i, j, k) => wb.tri(p(i), p(j), p(k), wallCol, uv(i), uv(j), uv(k), n[0], n[1], n[2]));
+        let col = lmWall || wallCol;
+        if (lmUpper) { let ym = 0; for (const i of rings[0]) ym += Y[i]; if (ym / rings[0].length > lm.upper.y) col = lmUpper; }
+        this.triPoly(rings, X, WY, Z, n, (i, j, k) => wb.tri(p(i), p(j), p(k), col, uv(i), uv(j), uv(k), n[0], n[1], n[2]));
       }
       // Dächer: Luftbild von oben (oder Ziegel- bzw. Flachdachfarbe ohne Luftbild)
       const rt = roofTarget(ox, oz);
@@ -894,9 +909,12 @@ class World {
         const rings = this.lodRings(poly);
         const n = this.newell(rings[0], X, RY, Z);
         if (!n) continue;
-        const col = this.ortho ? photoCol : n[1] > 0.97 ? flatRoofCol : roofCol;
+        let col = this.ortho ? photoCol : n[1] > 0.97 ? flatRoofCol : roofCol, target = rt;
+        // Wahrzeichen: Schiefer- oder Kupferfarbe statt Luftbild (auf steilen Hauben verschmiert das Foto)
+        const part = lm && lm.parts && lm.parts.find(q => rings[0].every(i => Math.hypot(X[i] - q.x, Z[i] - q.z) < q.r && Y[i] > q.minY));
+        if (part || (lm && lm.roof)) { col = U.color(part ? part.c : lm.roof, 0.03, rnd); target = { b: plain.get(ox, oz) }; }
         const p = i => [X[i], RY[i], Z[i]];
-        this.triPoly(rings, X, RY, Z, n, (i, j, k) => this.roofTri(rt, p(i), p(j), p(k), col, n[0], n[1], n[2]));
+        this.triPoly(rings, X, RY, Z, n, (i, j, k) => this.roofTri(target, p(i), p(j), p(k), col, n[0], n[1], n[2]));
       }
       // Kollision und Abfragen
       for (const rings of foot) {
