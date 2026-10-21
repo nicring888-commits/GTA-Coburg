@@ -31,6 +31,29 @@ const AWNING_COLORS = ['#b8322a', '#2f6b3a', '#1f4f8a', '#8a2a3a', '#d58a1e', '#
 const PARASOL_COLORS = ['#efe6cf', '#b8322a', '#2f6b3a', '#1f3f6f', '#e8d24a', '#ffffff', '#7a2a2a'];
 const STALL_COLORS = ['#c0392b', '#2e7d32', '#1565c0', '#ef6c00', '#6a1b9a'];
 
+// Ladenschilder: Farben nach Marke, sonst nach Art des Ladens [Hintergrund, Schrift]
+const SIGN_BRANDS = [
+  [/^H&M$/, '#ffffff', '#e50010'], [/^Müller$/, '#f39200', '#ffffff'], [/^Thalia/, '#ffffff', '#1d4f91'],
+  [/^Woolworth/, '#ffffff', '#d2001f'], [/W[ÖO]HRL/i, '#1b1b1b', '#ffffff'], [/^dm$/, '#ffffff', '#002878'],
+  [/Deichmann/, '#ffffff', '#00843d'], [/Sparkasse/, '#ff0000', '#ffffff'], [/Telekom/, '#e20074', '#ffffff'],
+  [/Vodafone/, '#e60000', '#ffffff'], [/^O2$/i, '#0019a5', '#ffffff'], [/Targobank/, '#ffffff', '#003a7d'],
+  [/Commerzbank/, '#ffcc00', '#002e3c'], [/Deutsche Bank/, '#0018a8', '#ffffff'], [/VR-Bank|Raiffeisen/, '#0066b3', '#ffffff'],
+  [/Riemann/, '#7a1e22', '#f3e7cf'], [/Apotheke/, '#ffffff', '#d4001a'], [/Rossmann/, '#e2001a', '#ffffff'],
+  [/Ernsting/, '#ffffff', '#e2001a'], [/TK Maxx/, '#ffffff', '#c8102e'], [/Bijou Brigitte/, '#000000', '#d8b56d'],
+  [/Netto/, '#ffe500', '#d4001a'], [/NORMA/, '#e30613', '#ffffff'], [/TEDi/, '#e30613', '#ffffff'],
+];
+const SIGN_KINDS = {
+  'amenity=fast_food': ['#b8322a', '#ffd84a'], 'amenity=restaurant': ['#23402f', '#e8c766'],
+  'amenity=cafe': ['#5a3b2a', '#f3e7cf'], 'amenity=ice_cream': ['#f4d7e0', '#9c2a55'], 'amenity=bar': ['#1c1c22', '#f0b84a'],
+  'amenity=pub': ['#3b2418', '#e8c766'], 'amenity=bank': ['#173a6a', '#ffffff'], 'amenity=pharmacy': ['#ffffff', '#d4001a'],
+  'shop=bakery': ['#f3e7cf', '#7a4a1e'], 'shop=butcher': ['#ffffff', '#a01d1d'], 'shop=clothes': ['#151515', '#ffffff'],
+  'shop=shoes': ['#2b2b2b', '#f2f2f2'], 'shop=jewelry': ['#141c33', '#d8b56d'], 'shop=hairdresser': ['#ffffff', '#222222'],
+  'shop=optician': ['#ffffff', '#1d3f73'], 'shop=books': ['#f3e7cf', '#3a2a1a'], 'shop=mobile_phone': ['#1f4f8a', '#ffffff'],
+  'shop=florist': ['#2f5d32', '#ffffff'], 'shop=supermarket': ['#ffffff', '#c0392b'], 'shop=travel_agency': ['#0f6aa8', '#ffffff'],
+};
+const SIGN_DEFAULT = ['#f1ece0', '#2b2b2b'];
+const FOOD_KINDS = /amenity=(fast_food|restaurant|cafe|ice_cream|bar|pub)|shop=bakery/;
+
 class CityProps {
   constructor(world, scene, peds, fx, ui) {
     this.world = world; this.scene = scene; this.peds = peds; this.fx = fx; this.ui = ui;
@@ -65,6 +88,7 @@ class CityProps {
     this.marketSquare();
     this.cafes();
     this.furniture();
+    this.shopSigns();
     this.awnings();
     this.fountainsBuild();
     this.makeMeshes();
@@ -121,6 +145,139 @@ class CityProps {
     }
   }
 
+  // ---------- Echte Ladenschilder (data/shops.js) ----------
+  // Jedes Schild hängt über dem Erdgeschoss an der Hauswand, die zur nächsten Straße zeigt. Gaststätten bekommen
+  // dazu ein Nasenschild quer zur Wand. Die Schrift steht in wenigen großen Texturatlanten.
+  shopSigns() {
+    const S = window.COBURG_SHOPS, W = this.world;
+    this.signMats = [];
+    if (!S || !S.length) return;
+    const H = 0.62;                                   // Schildhöhe in Metern
+    const ATLAS = 2048, ROW = 128;
+    const atlases = [];
+    let atlas = null, cx = 0, cy = 0;
+    const newAtlas = () => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = ATLAS;
+      atlas = { cv, c: cv.getContext('2d'), quads: [] }; atlases.push(atlas); cx = 0; cy = 0;
+    };
+    // Schild auf die Leinwand malen; gibt Atlas und UV-Rechteck zurück
+    const paint = (name, bg, fg) => {
+      if (!atlas) newAtlas();
+      const c = atlas.c;
+      let fs = 74;
+      c.font = `bold ${fs}px "Segoe UI", Arial, sans-serif`;
+      let tw = c.measureText(name).width;
+      if (tw > 1150) { fs = Math.floor(fs * 1150 / tw); c.font = `bold ${fs}px "Segoe UI", Arial, sans-serif`; tw = c.measureText(name).width; }
+      const cw = Math.ceil(U.clamp(tw + 60, 220, 1240));
+      if (cx + cw > ATLAS) { cx = 0; cy += ROW; }
+      if (cy + ROW > ATLAS) newAtlas();
+      const a = atlas, x0 = cx, y0 = cy;
+      a.c.font = `bold ${fs}px "Segoe UI", Arial, sans-serif`;
+      a.c.fillStyle = bg; a.c.fillRect(x0 + 2, y0 + 2, cw - 4, ROW - 4);
+      a.c.strokeStyle = fg; a.c.globalAlpha = 0.35; a.c.lineWidth = 4; a.c.strokeRect(x0 + 9, y0 + 9, cw - 18, ROW - 18); a.c.globalAlpha = 1;
+      a.c.fillStyle = fg; a.c.textAlign = 'center'; a.c.textBaseline = 'middle';
+      a.c.fillText(name, x0 + cw / 2, y0 + ROW / 2 + 3);
+      cx += cw;
+      return { a, u0: x0 / ATLAS, u1: (x0 + cw) / ATLAS, v0: 1 - (y0 + ROW) / ATLAS, v1: 1 - y0 / ATLAS, w: cw / ROW * H };
+    };
+    // Rechteck (Mitte m, Schreibrichtung e, Breite w, Höhe h) in den Atlas eintragen
+    const quad = (t, m, ex, ez, w, h) => {
+      const hw = w / 2, hh = h / 2;
+      const p = (s, u) => [m[0] + ex * hw * s, m[1] + hh * u, m[2] + ez * hw * s];
+      t.a.quads.push([p(-1, -1), p(1, -1), p(1, 1), p(-1, 1)], [t.u0, t.v0, t.u1, t.v0, t.u1, t.v1, t.u0, t.v1]);
+    };
+
+    let placed = 0;
+    for (const [name, kind, px, pz] of S) {
+      if (Math.hypot(px, pz) > 1600) continue;
+      const r = W.nearestRoad(px, pz, 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
+      if (!r) continue;
+      // Haus des Ladens: Punkt selbst oder auf der Linie Straße → Laden (bis 8 m dahinter)
+      let dx = px - r.x, dz = pz - r.z;
+      const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+      let b = W.insideBuilding(px, pz, 0);
+      for (let t = 0; !b && t < dl + 8; t += 0.5) b = W.insideBuilding(r.x + dx * t, r.z + dz * t, 0);
+      if (!b) continue;
+      // Wand des Hauses, die der Straße am nächsten liegt und zu ihr zeigt
+      const p = b.p;
+      let best = null;
+      for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+        const ax = p[j], az = p[j + 1], bx = p[i], bz = p[i + 1];
+        const len = Math.hypot(bx - ax, bz - az);
+        if (len < 1.8) continue;
+        let nx = -(bz - az) / len, nz = (bx - ax) / len;
+        const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        if (U.pointInPoly(mx + nx * 0.3, mz + nz * 0.3, p)) { nx = -nx; nz = -nz; }
+        const c = U.closestOnSeg(r.x, r.z, ax, az, bx, bz);
+        if ((r.x - c[0]) * nx + (r.z - c[1]) * nz < 0.3) continue;   // Wand zeigt nicht zur Straße
+        const d = Math.hypot(r.x - c[0], r.z - c[1]);
+        if (!best || d < best.d) best = { ax, az, bx, bz, len, nx, nz, d };
+      }
+      if (!best || best.d > 25) continue;
+      const ex = (best.bx - best.ax) / best.len, ez = (best.bz - best.az) / best.len;
+      const st = (SIGN_BRANDS.find(s => s[0].test(name)) || [null, ...(SIGN_KINDS[kind] || SIGN_DEFAULT)]).slice(1);
+      // Platz auf der Wand: dem Laden gegenüber, ganz auf der Wand, nicht auf einem anderen Schild
+      const tex = paint(name, st[0], st[1]);
+      let w = Math.min(tex.w, best.len - 0.4);
+      if (w < 1.1) continue;
+      const half = best.len / 2 - w / 2 - 0.2;
+      let along = U.clamp((px - best.ax) * ex + (pz - best.az) * ez - best.len / 2, -half, half);
+      let fx = best.ax + ex * (best.len / 2 + along), fz = best.az + ez * (best.len / 2 + along);
+      if (this.crowded(fx, fz, Math.max(1.6, w * 0.6), 'shop')) {
+        const alt = along + (along > 0 ? -1 : 1) * (w + 0.4);
+        if (Math.abs(alt) > half) continue;
+        along = alt; fx = best.ax + ex * (best.len / 2 + along); fz = best.az + ez * (best.len / 2 + along);
+        if (this.crowded(fx, fz, Math.max(1.6, w * 0.6), 'shop')) continue;
+      }
+      this.mark(fx, fz, 'shop');
+      const ground = W.heightAt(fx + best.nx * 1.5, fz + best.nz * 1.5);
+      // Schreibrichtung so, dass die Vorderseite zur Straße zeigt (bei schmaler Wand wird die Schrift gestaucht)
+      const qx = best.nz, qz = -best.nx;
+      quad(tex, [fx + best.nx * 0.1, ground + 3.55, fz + best.nz * 0.1], qx, qz, w, H);
+      if (FOOD_KINDS.test(kind) && best.len > 3) {
+        // Nasenschild: zwei Seiten, damit die Schrift von beiden Richtungen lesbar ist
+        const bw = Math.min(1.25, tex.w * 0.5), bh = H * 0.8, off = 0.18 + bw / 2;
+        const sx = fx + ex * (w / 2 + 0.35), sz = fz + ez * (w / 2 + 0.35);
+        if (Math.abs(along) + w / 2 + 0.35 < best.len / 2) {
+          const m = [sx + best.nx * off, ground + 2.9, sz + best.nz * off];
+          quad(tex, [m[0] - qx * 0.03, m[1], m[2] - qz * 0.03], best.nx, best.nz, bw, bh);
+          quad(tex, [m[0] + qx * 0.03, m[1], m[2] + qz * 0.03], -best.nx, -best.nz, bw, bh);
+          this.add('signArm', { x: sx + best.nx * (off / 2 + 0.05), y: ground + 2.9 + bh / 2 + 0.05, z: sz + best.nz * (off / 2 + 0.05),
+            ry: Math.atan2(best.nx, best.nz), s: [1, 1, off + 0.1] });
+        }
+      }
+      placed++;
+    }
+    // ein Mesh je Atlas; die Vorderseite zeigt zur Straße (Normalen aus der Dreiecksreihenfolge)
+    for (const a of atlases) {
+      if (!a.quads.length) continue;
+      const pos = [], uv = [], nor = [], idx = [];
+      for (let q = 0; q < a.quads.length; q += 2) {
+        const P = a.quads[q], T = a.quads[q + 1], base = pos.length / 3;
+        const u = [P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]], v = [P[3][0] - P[0][0], P[3][1] - P[0][1], P[3][2] - P[0][2]];
+        let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        const nl = Math.hypot(...n) || 1; n = n.map(c => c / nl);
+        for (const pt of P) { pos.push(...pt); nor.push(...n); }
+        uv.push(...T);
+        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      g.computeBoundingSphere();
+      const t = new THREE.CanvasTexture(a.cv);
+      t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      const mat = new THREE.MeshLambertMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0 });
+      this.signMats.push(mat);
+      const m = new THREE.Mesh(g, mat);
+      m.castShadow = false; m.receiveShadow = true;
+      this.scene.add(m);
+    }
+    console.info(`Ladenschilder: ${placed} von ${S.length}`);
+  }
+
   // ---------- Markisen und Ladenschilder ----------
   awnings() {
     const R = this.rnd, W = this.world;
@@ -145,7 +302,8 @@ class CityProps {
         const c = new THREE.Color(AWNING_COLORS[Math.floor(R() * AWNING_COLORS.length)]);
         const w = 2.4 + R() * 1.4;
         if (R() < 0.75) this.add('awning', { x: fx + nx * 0.08, y: ground + 3.1, z: fz + nz * 0.08, ry, rx: 0.38, s: [w, 1, 1.25], c });
-        if (R() < 0.6) this.add('sign', { x: fx + nx * 0.06, y: ground + 3.95, z: fz + nz * 0.06, ry, s: [1.2 + R() * 1.4, 1, 1],
+        // namenlose Schilder nur, wo kein echtes Ladenschild hängt
+        if (R() < 0.6 && !this.crowded(fx, fz, 6, 'shop')) this.add('sign', { x: fx + nx * 0.06, y: ground + 3.95, z: fz + nz * 0.06, ry, s: [1.2 + R() * 1.4, 1, 1],
           c: new THREE.Color(R() < 0.5 ? c.getHex() : AWNING_COLORS[Math.floor(R() * AWNING_COLORS.length)]).multiplyScalar(1.15) });
       }
     }
@@ -294,6 +452,7 @@ class CityProps {
         [BOX(0.05, 0.05, 0.95), 0, 0.62, 0], [BOX(0.04, 0.5, 0.04), 0, 0.5, -0.15], [BOX(0.45, 0.04, 0.04), 0, 0.98, 0.42]]), white, 'color']],
       awning: [[mergeGeos([[BOX(1, 0.05, 1), 0, 0, 0.5]]), striped, 'color']],
       sign: [[mergeGeos([[BOX(1, 0.5, 0.1), 0, 0, 0]]), this.signMat, 'color', 'sign']],
+      signArm: [[mergeGeos([[BOX(0.04, 0.04, 1), 0, 0, 0]]), lam('#1d2124')]],
       table: [[mergeGeos([[CYL(0.42, 0.42, 0.04, 12), 0, 0.74, 0], [CYL(0.04, 0.04, 0.72, 6), 0, 0.37, 0], [CYL(0.25, 0.25, 0.03, 8), 0, 0.02, 0]]), lam('#d8d4cc')]],
       chair: [[mergeGeos([[BOX(0.42, 0.05, 0.42), 0, 0.45, 0], [BOX(0.42, 0.45, 0.05), 0, 0.68, -0.19], [BOX(0.04, 0.45, 0.04), 0.18, 0.22, 0.18], [BOX(0.04, 0.45, 0.04), -0.18, 0.22, 0.18], [BOX(0.04, 0.45, 0.04), 0.18, 0.22, -0.18], [BOX(0.04, 0.45, 0.04), -0.18, 0.22, -0.18]]), lam('#3a3a3a')]],
       parasol: [[mergeGeos([[new THREE.ConeGeometry(1.35, 0.5, 8), 0, 2.45, 0]]), white, 'color'], [mergeGeos([[CYL(0.03, 0.03, 2.3, 5), 0, 1.15, 0]]), lam('#e0e0e0')]],
@@ -365,6 +524,7 @@ class CityProps {
     this.lampMat.emissiveIntensity = n ? 2.2 : 0.05;
     if (this.glowMesh) this.glowMesh.visible = n;
     if (this.signMesh) this.signMesh.material = n ? this.signNightMat : this.signMat;
+    for (const m of this.signMats || []) m.emissiveIntensity = n ? 0.85 : 0;
   }
 
   // Tauben aufscheuchen, Wasser sprühen, Grillrauch

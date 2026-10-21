@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.2.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 1.3.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -102,13 +102,14 @@ und müssen dort bleiben.
 | `js/police.js` | Fahndung, Streifenwagen (Verfolgen, Rammen, Anhalten), Polizisten zu Fuß, Festnahme, Straßensperren, Entkommen |
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
 | `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes |
-| `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
+| `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, echte Ladenschilder (`shopSigns`, Texturatlas), Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
 | `js/places.js` | Lackierereien und Autohändler (Lage, Säulen, Schilder) |
 | `js/property.js` | Besitz (seit v1.2.0): Wohnungsliste, Haustür an der nächsten Fassade (`placeHome`/`facade`), Autohäuser, Garage mit eigenen Autos (`deliver`/`stow`/`carSold`), gemeinsames Menü (`#menu`), Betreten/Verlassen, Interaktionen und Licht drinnen, Speicherstand |
 | `js/interiors.js` | Innenräume (`Room`): Raumhülle, Fenster mit Ausblick, Möbel aus Quadern mit gemalten Texturen, Kollision als Rechtecke (`collide`, `walker` ersetzt die Welt-Abfragen für die Spielfigur), Kamera innerhalb der Wände (`clampCam`), Stellen zum Benutzen; drei Grundrisse `buildSmallRoom`/`buildModernRoom`/`buildLuxuryRoom` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
+| `data/shops.js` | **Erzeugt** von `tools/convert-shops.js` aus `recherche/pois-coburg.json`: Läden und Lokale als `window.COBURG_SHOPS` ([Name, Art, x, z, geprüft]) |
 | `data/raw/` | Rohdaten: `coburg.osm.json`, `relations.osm.json`, `elevation.json` |
 | `data/raw/lod2/` | LoD2-Rohdaten: 9 CityGML-Kacheln `{ost}_{nord}.gml` (UTM 32N, ≈ 430 MB, werden vom Spiel nicht geladen) |
 | `tools/config.js` | Kartenausschnitt und Nullpunkt |
@@ -134,6 +135,7 @@ node tools/convert.js
 node tools/fetch-ortho.js     # bei geändertem Ausschnitt vorher den Ordner data/ortho leeren
 node tools/fetch-lod2.js      # lädt nur fehlende oder geänderte Kacheln
 node tools/convert-lod2.js    # nach jedem convert.js neu ausführen (Geländebezug und OSM-Namen)
+node tools/convert-shops.js   # nach Änderungen an recherche/pois-coburg.json
 ```
 
 **Luftbilder in der Welt (`js/world.js`):** Jede Kachel ist ein eigenes Geländestück mit eigener Textur. Die Normalen
@@ -203,6 +205,16 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - ⚠️ Grenzen von LoD2: Fassaden, Fenster und Wandfarben sind weiter erfunden (LoD2 hat keine Fassadentexturen).
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
+
+- ✅ v1.3.0 (21.10.2026): **Echte Ladenschilder.** 332 von 345 Läden und Lokalen (OSM, 27 per Google Maps geprüft,
+  geschlossene entfernt) tragen ihren Namen auf einem Schild über dem Erdgeschoss, an der Hauswand zur nächsten Straße.
+  Farben nach Marke (H&M, Müller, Thalia, Sparkasse, Telekom …) oder nach Art (Döner rot/gelb, Restaurant grün/gold,
+  Café braun, Bäckerei creme …). Gaststätten und Bäckereien haben zusätzlich ein zweiseitiges Nasenschild am Arm.
+  Nachts leuchten die Schilder. Namenlose Zufallsschilder erscheinen nur noch, wo kein echtes Schild hängt.
+  Getestet im Browser: Aufbau ohne Fehler, Spitalgasse (Thalia, Fexcom) und Herrngasse (Goldenes Kreuz, Petra Reuther).
+- ⚠️ Grenzen v1.3.0: Das Schild sitzt auf der Wand des Hauses, in dem der OSM-/Google-Punkt liegt, nicht immer genau
+  über der echten Ladentür; bei mehreren Läden in einem Haus werden manche weggelassen; die Schrift ist eine
+  Standardschrift (keine Logos).
 
 - ✅ v1.2.1 (21.10.2026): **Echtere Altstadt nach Straßenfotos** (Grundlage `recherche/referenz-coburg.md`).
   - Fassadenfarben je Lage statt reinem Zufall (`World.facadePalette`): bunte Altstadt-Palette (Cremeweiß, Ocker,
@@ -284,7 +296,7 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   (`recherche/referenz-coburg.md`: Street View, Bildersuche, Farbpalette, Straßen- und Platzbeschreibungen,
   Umbauvorschläge; `recherche/pois-coburg.json`: 349 Läden/Lokale mit Spielkoordinaten, 27 per Google Maps geprüft;
   `recherche/streetview-panos.json`: 802 Street-View-Aufnahmepunkte). Umgesetzt in v1.2.1: Fassadenfarben je Straße,
-  Pflaster der Fußgängerzone. Offen: Ladenschilder, Fensterläden/Sandstein-Gewände, Wahrzeichen-Details (Tortürme,
+  Pflaster der Fußgängerzone; v1.3.0: Ladenschilder. Offen: Fensterläden/Sandstein-Gewände, Wahrzeichen-Details (Tortürme,
   Stadthaus-Erker, Rathaus-Türmchen), Gehwegplatten mit Granitrinne, historische Laternen
 
 - [ ] Fußgänger als KI-Figuren auf Gehwegen und Plätzen
@@ -296,7 +308,7 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - [ ] Kartenausschnitt erweitern (z. B. Cortendorf, Ketschendorf) und Daten bei Bedarf kachelweise laden
 - [ ] Polizeihubschrauber ab 4 Sternen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
-- [ ] Echte Ladennamen an den Schildern (Daten liegen in `recherche/pois-coburg.json`), Weihnachtsmarkt im Winter
+- [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)
 - [ ] Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge
 - [ ] Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
 - [ ] Mehr Fahrzeugtypen (Bus, Lieferwagen, Motorrad)
