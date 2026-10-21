@@ -266,11 +266,22 @@ class CityProps {
   // Jedes Schild hängt über dem Erdgeschoss an der Hauswand, die zur nächsten Straße zeigt. Gaststätten bekommen
   // dazu ein Nasenschild quer zur Wand. Die Schrift steht in wenigen großen Texturatlanten.
   shopSigns() {
-    const S = window.COBURG_SHOPS, W = this.world;
     this.signMats = [];
-    if (!S || !S.length) return;
+    const res = this.signsFor(window.COBURG_SHOPS, {
+      crowded: (x, z, r) => this.crowded(x, z, r, 'shop'), mark: (x, z) => this.mark(x, z, 'shop'), addArm: o => this.add('signArm', o),
+    });
+    for (const m of res.meshes) this.scene.add(m);
+    this.signMats.push(...res.mats);
+    if (window.COBURG_SHOPS) console.info(`Ladenschilder: ${res.placed} von ${window.COBURG_SHOPS.length}`);
+  }
+
+  // Ladenschilder für eine Liste [Name, Art, x, z] an die Hauswand zur nächsten Straße setzen (auch fürs Umland).
+  // opts: atlas (Pixel), maxDist (vom Markt), crowded(x, z, r), mark(x, z), addArm(o) für Nasenschild-Arme
+  signsFor(S, opts) {
+    const W = this.world, out = { meshes: [], mats: [], placed: 0 };
+    if (!S || !S.length) return out;
     const H = 0.62;                                   // Schildhöhe in Metern
-    const ATLAS = 2048, ROW = 128;
+    const ATLAS = opts.atlas || 2048, ROW = 128;
     const atlases = [];
     let atlas = null, cx = 0, cy = 0;
     const newAtlas = () => {
@@ -304,9 +315,8 @@ class CityProps {
       t.a.quads.push([p(-1, -1), p(1, -1), p(1, 1), p(-1, 1)], [t.u0, t.v0, t.u1, t.v0, t.u1, t.v1, t.u0, t.v1]);
     };
 
-    let placed = 0;
     for (const [name, kind, px, pz] of S) {
-      if (Math.hypot(px, pz) > 1600) continue;
+      if (Math.hypot(px, pz) > (opts.maxDist ?? 1600)) continue;
       if (typeof VENUES !== 'undefined' && VENUES.some(v => v.road && v.name === name)) continue; // eigenes Schild über der Tür (venues.js)
       const r = W.nearestRoad(px, pz, 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
       if (!r) continue;
@@ -341,13 +351,13 @@ class CityProps {
       const half = best.len / 2 - w / 2 - 0.2;
       let along = U.clamp((px - best.ax) * ex + (pz - best.az) * ez - best.len / 2, -half, half);
       let fx = best.ax + ex * (best.len / 2 + along), fz = best.az + ez * (best.len / 2 + along);
-      if (this.crowded(fx, fz, Math.max(1.6, w * 0.6), 'shop')) {
+      if (opts.crowded(fx, fz, Math.max(1.6, w * 0.6))) {
         const alt = along + (along > 0 ? -1 : 1) * (w + 0.4);
         if (Math.abs(alt) > half) continue;
         along = alt; fx = best.ax + ex * (best.len / 2 + along); fz = best.az + ez * (best.len / 2 + along);
-        if (this.crowded(fx, fz, Math.max(1.6, w * 0.6), 'shop')) continue;
+        if (opts.crowded(fx, fz, Math.max(1.6, w * 0.6))) continue;
       }
-      this.mark(fx, fz, 'shop');
+      opts.mark(fx, fz);
       const ground = W.heightAt(fx + best.nx * 1.5, fz + best.nz * 1.5);
       // Schreibrichtung so, dass die Vorderseite zur Straße zeigt (bei schmaler Wand wird die Schrift gestaucht)
       const qx = best.nz, qz = -best.nx;
@@ -360,11 +370,11 @@ class CityProps {
           const m = [sx + best.nx * off, ground + 2.9, sz + best.nz * off];
           quad(tex, [m[0] - qx * 0.03, m[1], m[2] - qz * 0.03], best.nx, best.nz, bw, bh);
           quad(tex, [m[0] + qx * 0.03, m[1], m[2] + qz * 0.03], -best.nx, -best.nz, bw, bh);
-          this.add('signArm', { x: sx + best.nx * (off / 2 + 0.05), y: ground + 2.9 + bh / 2 + 0.05, z: sz + best.nz * (off / 2 + 0.05),
+          if (opts.addArm) opts.addArm({ x: sx + best.nx * (off / 2 + 0.05), y: ground + 2.9 + bh / 2 + 0.05, z: sz + best.nz * (off / 2 + 0.05),
             ry: Math.atan2(best.nx, best.nz), s: [1, 1, off + 0.1] });
         }
       }
-      placed++;
+      out.placed++;
     }
     // ein Mesh je Atlas; die Vorderseite zeigt zur Straße (Normalen aus der Dreiecksreihenfolge)
     for (const a of atlases) {
@@ -388,12 +398,12 @@ class CityProps {
       const t = new THREE.CanvasTexture(a.cv);
       t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
       const mat = new THREE.MeshLambertMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0 });
-      this.signMats.push(mat);
+      out.mats.push(mat);
       const m = new THREE.Mesh(g, mat);
       m.castShadow = false; m.receiveShadow = true;
-      this.scene.add(m);
+      out.meshes.push(m);
     }
-    console.info(`Ladenschilder: ${placed} von ${S.length}`);
+    return out;
   }
 
   // ---------- Markisen und Ladenschilder ----------

@@ -125,7 +125,7 @@ const TL = computeTiles(T, EL), { state } = TL, stateAt = TL.stateAt;
 const tiles = new Map();
 const tileData = (x, z) => {
   const [ti, tj] = tileOf(x, z), k = tkey(ti, tj);
-  if (!tiles.has(k)) tiles.set(k, { b: [], a: [], t: [], w: [], r: [] });
+  if (!tiles.has(k)) tiles.set(k, { b: [], a: [], t: [], w: [], r: [], s: [] });
   return tiles.get(k);
 };
 console.log(`Kacheln: ${state.filter(s => s === 2).length} befahrbar, ${state.filter(s => s === 1).length} Rand (${ni} × ${nj})`);
@@ -274,7 +274,10 @@ const AREA_KIND = {
   'landuse=greenhouse_horticulture': 'farmland', 'landuse=plant_nursery': 'allotments', 'natural=scrub': 'scrub',
   'natural=grassland': 'meadow', 'natural=heath': 'meadow', 'natural=wetland': 'meadow',
 };
-const kindOf = t => { for (const k of ['natural', 'leisure', 'landuse', 'amenity']) if (t[k] && AREA_KIND[k + '=' + t[k]]) return AREA_KIND[k + '=' + t[k]]; return null; };
+const kindOf = t => {
+  // Flussflächen (Uferlinien von Itz, Rodach …) folgen dem Gefälle, Seen und Teiche liegen flach
+  if (t.natural === 'water' && /river|stream|canal|riverbank/.test(t.water || '') || t.waterway === 'riverbank') return 'river';
+  for (const k of ['natural', 'leisure', 'landuse', 'amenity']) if (t[k] && AREA_KIND[k + '=' + t[k]]) return AREA_KIND[k + '=' + t[k]]; return null; };
 // Vieleck an einem Rechteck abschneiden (Sutherland–Hodgman)
 function clipRing(ring, x0, z0, x1, z1) {
   let pts = ring;
@@ -319,7 +322,7 @@ for (const s of areaSources) {
     if (outer.length < 3 || Math.abs(ringArea(outer)) < 4) continue;
     const holes = rings.slice(1).map(h => clipRing(h, x0, z0, x1, z1)).filter(h => h.length >= 3);
     const key = tkey(ti, tj);
-    if (!tiles.has(key)) tiles.set(key, { b: [], a: [], t: [], w: [], r: [] });
+    if (!tiles.has(key)) tiles.set(key, { b: [], a: [], t: [], w: [], r: [], s: [] });
     const a = [s.k, enc(outer)];
     if (holes.length) a.push(holes.map(enc));
     tiles.get(key).a.push(a);
@@ -349,10 +352,24 @@ for (const w of ways.values()) {
     const mx = (pts[k][0] + pts[k - 1][0]) / 2, mz = (pts[k][1] + pts[k - 1][1]) / 2;
     const st = stateAt(mx, mz);
     const key = st ? tkey(...tileOf(mx, mz)) : null;
-    if (key !== runKey) { flush(); run = key ? [pts[k - 1]] : []; runKey = key; if (key && !tiles.has(key)) tiles.set(key, { b: [], a: [], t: [], w: [], r: [] }); }
+    if (key !== runKey) { flush(); run = key ? [pts[k - 1]] : []; runKey = key; if (key && !tiles.has(key)) tiles.set(key, { b: [], a: [], t: [], w: [], r: [], s: [] }); }
     if (key) run.push(pts[k]);
   }
   flush();
+}
+
+// ---------- Läden und Lokale (Ladenschilder, begehbare Lokale) ----------
+let nshop = 0;
+const shopFile = path.join(RAW, 'shops.json');
+if (fs.existsSync(shopFile)) {
+  for (const e of JSON.parse(fs.readFileSync(shopFile, 'utf8')).elements) {
+    const t = e.tags || {}, la = e.lat ?? (e.center && e.center.lat), lo = e.lon ?? (e.center && e.center.lon);
+    if (la == null || !t.name) continue;
+    const x = projX(lo), z = projZ(la);
+    if (inCore(x, z) || stateAt(x, z) !== 2) continue;
+    tileData(x, z).s.push([t.name, t.shop ? 'shop=' + t.shop : 'amenity=' + t.amenity, dm(x), dm(z)]);
+    nshop++;
+  }
 }
 
 // ---------- Orte ----------
@@ -379,7 +396,7 @@ for (const [k, v] of tiles) {
   const [ti, tj] = k.split(',').map(Number), i = ti - i0, j = tj - j0;
   if (i < 0 || j < 0 || i >= ni || j >= nj || !state[j * ni + i]) continue;
   const o = {};
-  for (const f of ['b', 'a', 't', 'w', 'r']) if (v[f].length) o[f] = v[f];
+  for (const f of ['b', 'a', 't', 'w', 'r', 's']) if (v[f].length) o[f] = v[f];
   if (Object.keys(o).length) tileObj[k] = o;
 }
 const region = {
@@ -397,6 +414,6 @@ const js = '// Automatisch erzeugt von tools/convert-region.js – nicht von Han
   '// Kartendaten © OpenStreetMap-Mitwirkende (ODbL); Höhen: Terrarium (Mapzen, AWS Open Data), Europa: EU-DEM\n' +
   'window.COBURG_REGION = ' + JSON.stringify(region) + ';\n';
 fs.writeFileSync(OUT, js);
-console.log(`Gebäude ${nb}, Flächenstücke ${na}, Bäume ${ntree}, Orte ${places.length}, Netz ${gNodes.length / 2} Knoten / ${edges.length} Kanten ` +
+console.log(`Gebäude ${nb}, Flächenstücke ${na}, Bäume ${ntree}, Läden ${nshop}, Orte ${places.length}, Netz ${gNodes.length / 2} Knoten / ${edges.length} Kanten ` +
   `(${roadKm.toFixed(0)} km), Namen ${names.length}`);
 console.log(`Geschrieben: data/region.js (${(js.length / 1024 / 1024).toFixed(2)} MB)`);

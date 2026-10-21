@@ -682,7 +682,8 @@ Object.assign(Property.prototype, {
     const v = { ...def, venue: true, x, z, ox: best.nx, oz: best.nz, sx: x + best.nx * 1.4, sz: z + best.nz * 1.4,
       heading: Math.atan2(best.nx, best.nz) };
     v.y = W.heightAt(v.sx, v.sz);
-    this.scene.add(this.doorMesh(v));
+    v.door = this.doorMesh(v);
+    this.scene.add(v.door);
     const food = VENUE_FOOD.has(def.type);
     v.label = makeLabel(def.name, food ? VENUE_COLOR.food : VENUE_COLOR.store, `${INTERIOR_TYPES[def.type].title} · F betreten`);
     v.label.position.set(v.sx, v.y + 3.2, v.sz);
@@ -692,12 +693,22 @@ Object.assign(Property.prototype, {
     if (def.road) this.venueSign(v);
     if (def.garden) this.beerGarden(v);
     if (def.host) this.placeHost(v, def.host);
+    return v;
+  },
+
+  // Lokal wieder entfernen (Umland-Kachel wird abgebaut)
+  removeVenue(v) {
+    const i = this.venues.indexOf(v);
+    if (i >= 0) this.venues.splice(i, 1);
+    if (v.door) { this.scene.remove(v.door); v.door.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    if (v.label) { this.ui.removeLabel(v.label); v.label.material.map.dispose(); v.label.material.dispose(); }
   },
 
   venueRoom(v) {
     const key = 'v:' + v.id;
     if (!this.rooms[key]) {
-      const r = VENUE_BUILDERS[v.type](10 + VENUES.indexOf(VENUES.find(q => q.id === v.id)), v);
+      const idx = VENUES.findIndex(q => q.id === v.id);
+      const r = VENUE_BUILDERS[v.type](10 + (idx >= 0 ? idx : U.hashStr(v.id) % 997), v);
       this.indoorRoot.add(r.group);
       this.rooms[key] = r;
     }

@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.0.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 2.1.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -63,6 +63,9 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Strecken (Landkreis, seit v2.0.0) | **Callenberg-Bergsprint** (Coburg → Schloss Callenberg) · **Rosenau-Rallye** (6,7 km, Dörfles-Esbach → Rödental → Schloss Rosenau) · **Neustadt-Express** (9,3 km, Rödental → Mönchröden → Neustadt Markt) · **Rodachtal-Rennen** (12,8 km, Wiesenfeld → Meeder → Bad Rodach) · **Seßlach-Classic** (10,3 km, Weitramsdorf → Tambach → Seßlach) · **Itzgrund-Sprint** (Untersiemau → Großheirath → Rossach → Kaltenbrunn) · **Sonnefelder Runde** (21,5 km, Ebersdorf → Sonnefeld → Weidhausen → Ebersdorf) · **Lautertal-Tour** (Coburg-Neuses → Tiefenlauter → Froschgrundsee) · **Hohenstein-Hügelrennen** (7,8 km, Ahorn → Schloss Hohenstein → Scherneck) · **Großer Preis des Landkreises** (50,3 km, Bahnhof → Rödental → Neustadt → Fürth am Berg → Sonnefeld → Ebersdorf → Grub am Forst → Niederfüllbach → Coburg; € 9.000 für den Sieg). Wegpunkte als Breite/Länge (`geo` in `RACES`); auf langen Strecken liegen die Checkpoints weiter auseinander (≈ 45 je Strecke) |
 | Lackiererei (grün) | Langsam hineinfahren: Reparatur € 100, mit Fahndung € 250 (neue Farbe, Sterne weg). Geht nicht, solange die Polizei dich sieht. In der Stadt Nord, Süd, Ost; im Landkreis Rödental, Neustadt, Bad Rodach, Ebersdorf, Seßlach |
 | Autohändler (orange) | `F`: Auto verkaufen; Preis je nach Typ und Zustand (Sportwagen bis € 1.400). Streifenwagen nimmt keiner. Zwei in der Stadt, dazu Neustadt, Ebersdorf, Untersiemau |
+| Orte im Landkreis (seit v2.1.0) | In jeder Ortskachel (ab 12 Häusern) im Umkreis von 650 m: Straßenlaternen alle ≈ 30 m an Ortsstraßen (nachts mit Lichtkegel), Ladenschilder mit echten Namen an den Fassaden (800 Läden und Lokale aus OSM), bis zu 4 begehbare Lokale je Kachel nach Art (Döner, Gasthaus/Restaurant/Pizzeria, Café/Bäckerei, Mode, Drogerie, Bücher) mit den Innenräumen und Speisekarten der Innenstadt, und bis zu 45 Fußgänger auf den Gehsteigen |
+| Wasser (seit v2.1.0) | Flüsse, Bäche, Seen und Teiche haben ein ausgehobenes Bett (1,7 m, Bäche 0,8 m) und eine bewegte Wasseroberfläche. Flüsse ab 5 m Breite und Gewässer ab 150 m² sind Hindernisse für Figuren und Autos: Wer dem Flusslauf näher kommt als die halbe Breite, wird ans eigene Ufer zurückgeschoben; Seen und Flussflächen haben Uferkanten. An Straßen und Brücken bleibt frei (dort wird auch nicht gegraben). Bäume stehen nicht im Wasser. Gilt in der Innenstadt (Itz, Lauter) und im Landkreis |
+| Brücken (seit v2.1.0) | Brücken, die mehr als 1,5 m über dem Gelände liegen (A 73 über das Itztal bis 16 m hoch, B 4), haben eine gerade Fahrbahn zwischen den Brückenenden mit Platte, Brüstung und Pfeilern alle ≈ 28 m. Autos und Figuren fahren bzw. laufen oben (`World.groundAt` mit der jetzigen Höhe), darunter bleibt das Tal frei befahrbar |
 | Landkreis (seit v2.0.0) | Die Ortsanzeige zeigt Straße und Ort („Marktplatz · Neustadt bei Coburg“), beim Ankommen in einem Ort erscheint der Ortsname. Schnellreise zu 18 Orten (Rödental, Neustadt, Bad Rodach, Seßlach, Sonnefeld …) und Sehenswürdigkeiten (Schloss Rosenau, Callenberg, Hohenstein, Tambach, Muppberg …). Die Karte (`M`) zoomt von der Altstadt bis zum ganzen Landkreis mit Ortsnamen. Verkehr und Polizei fahren überall; am Rand (Landkreis + 600 m) ist Schluss |
 | Fußgänger (seit v1.1.0) | Bis zu 150 Passanten im Umkreis von 170 m, gut die Hälfte gezielt in der Fußgängerzone (Markt, Spitalgasse, Steinweg, Ketschengasse, Herrngasse …). Sie laufen über Fußwege, Plätze und Gehsteige (rechts der Laufrichtung), bleiben stehen, gehen zu zweit, darunter Kinder. Sie springen vor schnellen Autos zur Seite, fliehen bei Explosionen und vor der Hupe (`H`). Anfahren: Person fällt um, Zeugen rufen die Polizei (bei Polizei in Sichtweite sicher, sonst 40 %). Dazu ≈ 130 feste Figuren: Café-Gäste, Leute auf Bänken, Händler, Kunden am Bratwurststand |
 | Stadtdetails (seit v1.1.0) | ≈ 1.600 Straßenlaternen (bis 1,3 km um den Markt, nachts mit Lichtkegel am Boden), ≈ 120 Altstadtlaternen in der Fußgängerzone, gestreifte Markisen (≈ 280) und Ladenschilder (≈ 220, nachts leuchtend) an den Fassaden der Fußgängerzone, Café-Terrassen mit Sonnenschirmen vor echten Cafés und Restaurants aus OSM (≈ 90 Tische), Bänke, Mülleimer, Blumenkübel, abgestellte Fahrräder, 17 Brunnen mit Wasserstrahl (OSM `fountain`). Am Markt: Prinz-Albert-Denkmal, sechs Marktstände, Coburger-Bratwurststand mit Grillrauch und Kundschaft, 30 Tauben, die vor Spieler, Autos und Explosionen auffliegen. Stimmengewirr, je mehr Leute in der Nähe sind. Laternen, Bänke, Tische, Stände und Brunnen sind Hindernisse für Autos |
@@ -89,6 +92,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Umland: Gebäude | 78.786 | OSM `building`, Höhe aus `height`/`building:levels` oder geschätzt, Sattel-/Walm-/Flachdach |
 | Umland: Straßennetz | 11.660 Knoten / 13.613 Kanten, 1.899 km (Autobahn bis Wohnstraße, Tempo aus `maxspeed`) | OSM `highway`; ersetzt im Spiel das Netz der Innenstadt |
 | Umland: Gelände | 801 × 761 Punkte im Raster der Innenstadt (≈ 49,5 m), 246–815 m ü. NN; im Spiel ×4 verfeinert | Terrarium-Höhenkacheln (Mapzen/AWS Open Data, in Europa EU-DEM), Zoom 12; im Kern genau die Innenstadt-Werte, 900 m Übergang |
+| Umland: scharfe Luftbilder (seit v2.1.0) | 1024 × 1024 px (≈ 1 m pro Pixel) für die 396 Ortskacheln; das Spiel nimmt sie für Kacheln unter 450 m Abstand. Bisher 29 (Thüringer Grenzgebiet), die 367 bayerischen fehlen noch (siehe 7) | `tools/fetch-region-ortho-hd.js` → `data/region/ortho/hd…jpg`, `data/region/ortho-hd.js` |
+| Umland: Läden und Lokale | 800 im befahrbaren Landkreis (2.077 im Ausschnitt) | OSM `shop`/`amenity` mit Namen, `tools/fetch-region-shops.js` |
 | Umland: Luftbilder | 1.055 Kacheln à 512 × 512 px (≈ 1,9 m pro Pixel), 60 MB | Bayern: DOP 40 (CC BY 4.0); Thüringer Gebiet: GDI-Th `th_dop` (CC BY 4.0, „© GDI-Th“); Mischkacheln setzt der Browser zusammen |
 | Schnellreiseziele | 12 in der Stadt + 18 Orte und Sehenswürdigkeiten im Landkreis | Marktplatz, Rathaus, St. Moriz, Schloss Ehrenburg, Landestheater, Hofgarten, Veste, Albertsplatz, Kongresshaus Rosengarten, Bahnhof, Bismarckturm, Hexenturm |
 
@@ -103,6 +108,7 @@ und müssen dort bleiben.
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen |
+| `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
 | `js/vehicle.js` | Automodelle (Pkw, Sportwagen mit Spoiler, Taxi mit Dachschild, Streifenwagen mit Blaulicht), Fahrwerte je Typ, Arcade-Fahrphysik (Längs- und Seitenhaftung, Handbremse, Steigung, Teilschritte gegen Durchtunneln), Schaden, Brand, Wrack, Auto-gegen-Auto-Kollision |
@@ -159,6 +165,8 @@ node tools/convert-shops.js   # nach Änderungen an recherche/pois-coburg.json
 node tools/fetch-region-osm.js        # Overpass, oft überlastet: dauert 1–2 Stunden
 node tools/fetch-region-elevation.js
 node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
+node tools/fetch-region-ortho-hd.js   # scharfe Ortskacheln, nach convert-region.js
+node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
 node tools/convert-region.js
 ```
 
@@ -193,8 +201,27 @@ unter ihm sofort, sonst höchstens eine pro Bild), Bäume unter 1,1 km; ab 2,8 k
 geladenen Kacheln ab. Das Straßennetz des ganzen Landkreises ersetzt das der Innenstadt; Verkehr, Polizei und
 `randomPoint` suchen deshalb über Raster in Spielernähe, und Dijkstra hat eine Kostengrenze (`costsFrom(loc, maxCost)`).
 Gemessen: in Neustadt 56 Kacheln geladen, ≈ 0,9 Mio. Dreiecke, ≈ 10 ms pro Bild (Spiellogik und Zeichnen).
+Seit v2.1.0 hat jede Kachel zwei Höhenraster: `hg0` (Gelände) und `hg` (mit ausgehobenen Gewässern; dafür werden die
+Gewässer der acht Nachbarkacheln mitgelesen, damit die Ränder passen). Häuser stehen auf `heightAt0`, Fahrzeuge und
+Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (`buildLife`/`dropLife`) nutzt
+`CityProps.signsFor` (Ladenschilder, aus `shopSigns` herausgelöst), `Property.placeVenue`/`removeVenue` und
+`Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v2.1.0 (21.10.2026): **Wasser, Talbrücken, Leben in den Orten, schärfere Luftbilder.**
+  - Echtes Wasser in Stadt und Landkreis: ausgehobenes Bett, Wasseroberfläche mit Wellen, Ufer als Hindernis
+  - Hochbrücken (A 73 Itztal, B 4) mit gerader Fahrbahn, Brüstung und Pfeilern; befahrbar oben und unten
+  - Orte im Landkreis mit Laternen, Ladenschildern, begehbaren Lokalen und Fußgängern
+  - Schärfere Luftbilder (1 m pro Pixel) in der Nähe des Spielers, wo vorhanden
+  - Getestet im Browser: Neustadt (46 Fußgänger, Lokale wie Mega-Döner, Café-Bistro Marktbäckerei, Buchhandlung
+    Stache), Rödental nachts, Fahrt über die 857 m lange A-73-Brücke (bis 13 m über dem Tal, ohne Hänger),
+    Itz bei Niederfüllbach und in der Innenstadt: an 17 von 17 Prüfstellen kein Durchlaufen; 3,7 ms pro Bild in Rödental
+- ⚠️ Grenzen v2.1.0: Der bayerische Luftbilddienst (geodaten.bayern.de) hat nach dem Massendownload für v2.0.0 den
+  Zugriff gesperrt („aus sicherheitstechnischen Gründen nicht verfügbar“); die scharfen Bilder gibt es deshalb erst
+  im Thüringer Grenzgebiet. Laternen im Umland sind kein Hindernis. Fußgänger im Umland nur auf Ortsstraßen.
+  Schwimmen gibt es nicht (Wasser schiebt zurück). Nur Brücken, die in OSM als Brücke eingetragen sind und
+  mindestens 1,5 m über dem Gelände liegen, bekommen ein Bauwerk.
 
 - ✅ v2.0.0 (21.10.2026): **Der ganze Landkreis Coburg.**
   - Umland in Kacheln mit echtem Gelände, Luftbildern (Bayern und Thüringer Grenzgebiet), allen Straßen von der A 73
@@ -399,15 +426,17 @@ Gemessen: in Neustadt 56 Kacheln geladen, ≈ 0,9 Mio. Dreiecke, ≈ 10 ms pro B
   Rathaus-Wandfelder, Stadthaus-Fensterrahmen, Tore durchfahrbar, Gehwegplatten mit Granitrinne, historische Laternen
 
 - [ ] Fußgänger als KI-Figuren auf Gehwegen und Plätzen
-- [ ] Brücken über die Itz mit eigener Höhe
+- [x] ~~Brücken über die Itz mit eigener Höhe~~ Talbrücken seit v2.1.0; flache Itz-Brücken liegen weiter auf dem Gelände (das Flussbett ist dort nicht ausgehoben)
 - [ ] Spielziele: Taxi- oder Lieferaufträge zwischen Sehenswürdigkeiten, Sammelobjekte, Zeitrennen
 - [ ] Straßenlaternen und Ampeln (aus OSM `highway=street_lamp`, `traffic_signals`)
 - [ ] Touch-Steuerung für Smartphone und Tablet
 - [ ] Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)
 - [x] ~~Kartenausschnitt erweitern~~ Erledigt in v2.0.0 (ganzer Landkreis, kachelweise)
+- [ ] **Scharfe Luftbilder fertig laden:** `node tools/fetch-region-ortho-hd.js` erneut starten, sobald
+  geodaten.bayern.de wieder antwortet (lädt nur die fehlenden 367 Ortskacheln, eine Anfrage alle 1,5 s)
 - [ ] LoD2-Häuser für das ganze Umland (≈ 175 CityGML-Kacheln, mehrere GB; dann je Kachel als JSON nachladen)
-- [ ] Umland: Fußgänger und Laternen in den Ortskernen (Neustadt, Rödental, Bad Rodach, Seßlach), Wohnungen und Läden dort
-- [ ] Ferne Wälder als einfache Baumkulisse, Talbrücken der A 73 mit eigener Höhe, schärfere Luftbilder nah am Spieler
+- [x] ~~Umland: Fußgänger, Laternen und Läden in den Orten~~ Erledigt in v2.1.0 (Wohnungen dort fehlen noch)
+- [ ] Ferne Wälder als einfache Baumkulisse; Schwimmen statt Zurückschieben am Wasser
 - [ ] Polizeihubschrauber ab 4 Sternen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
 - [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)

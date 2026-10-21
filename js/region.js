@@ -13,7 +13,21 @@ const REGION = {
   skirt: 5,           // Schürze an den Kachelrändern gegen Lichtspalten (m)
   roadY: 0.12,
   budgetMs: 9,        // Bauzeit pro Bild, wenn nichts dringend ist
+  life: 650,          // Laternen, Ladenschilder, Lokale und Fußgänger nur in der Nähe
+  lifeDrop: 950,
+  townBuildings: 12,  // ab so vielen Häusern gilt eine Kachel als Ort
 };
+const LAMP_ROADS = /residential|living_street|tertiary|secondary|primary|unclassified/;
+// begehbare Lokale und Läden im Landkreis: Art aus OSM -> Raumtyp (venues.js)
+function regionVenueType(name, kind) {
+  if (kind === 'amenity=fast_food' && /kebab|kebap|döner|doner|dürüm/i.test(name)) return 'doener';
+  if (/amenity=(restaurant|pub|biergarten)/.test(kind)) return 'gasthaus';
+  if (kind === 'amenity=cafe' || kind === 'shop=bakery' || kind === 'shop=pastry') return 'cafe';
+  if (kind === 'shop=chemist') return 'drugstore';
+  if (kind === 'shop=clothes') return 'fashion';
+  if (kind === 'shop=books') return 'books';
+  return null;
+}
 // Putzfarben auf dem Land, Holz- und Ziegeltöne für Scheunen
 const RURAL_FACADES = ['#efe9dc', '#e9dfc6', '#e6d3a8', '#f0ebe0', '#ddd3c0', '#e8c9a4', '#d9d0bd', '#efe0b8', '#d8c3a5',
   '#e5ddd0', '#f1ece0', '#e2c48f', '#cdd3c2'];
@@ -56,6 +70,9 @@ class Region {
     this._near = [];
     this.stats = { built: 0, ms: 0 };
     this.anchors = new Map();       // Kachel -> Objekte, deren Höhe beim Bauen der Kachel nachgeführt wird
+    this.lifeOn = new Set();
+    this.night = false;
+    this.initBridges();
   }
 
   // Objekt (Säule, Schild) auf das Gelände stellen; im Umland stimmt die Höhe erst, wenn die Kachel gebaut ist
@@ -82,6 +99,7 @@ class Region {
     const G = this.R.graph, names = this.R.names, cls = this.R.classes;
     this.graph = { nodes: G.nodes.map(v => v / 10), edges: [] };
     this.runs = new Map();          // Kachel -> [Kante, erster Punkt, letzter Punkt]
+    this.netGrid = new U.Grid(40);  // alle Straßenabschnitte (Gewässer an Straßen offen lassen, auch ungebaute Kacheln)
     G.edges.forEach((e, ei) => {
       const p = [];
       let x = 0, z = 0;
@@ -89,6 +107,7 @@ class Region {
       const h = cls[e[2]];
       this.graph.edges.push({ a: e[0], b: e[1], p, s: e[6] / 10, o: e[5] & 1 ? 1 : undefined, n: e[4] >= 0 ? names[e[4]] : undefined,
         h, w: e[3] / 10, br: !!(e[5] & 2) });
+      for (let k = 0; k + 3 < p.length; k += 2) this.netGrid.insert(ei * 4096 + k / 2, Math.min(p[k], p[k + 2]), Math.min(p[k + 1], p[k + 3]), Math.max(p[k], p[k + 2]), Math.max(p[k + 1], p[k + 3]));
       // Abschnitte nach Kachel (Mitte des Abschnitts); in der Innenstadt zeichnet die Innenstadt selbst
       let run = null;
       for (let k = 0; k + 3 < p.length; k += 2) {
@@ -105,7 +124,78 @@ class Region {
     });
   }
 
+  // Straße (oder flache Brücke) in der Nähe? Hohe Brücken zählen nicht: unter ihnen bleibt das Wasser.
+  roadNear(x, z, margin) {
+    const list = this.netGrid.query(x, z, 14, this._rq || (this._rq = []));
+    for (const code of list) {
+      const e = this.graph.edges[Math.floor(code / 4096)], k = (code % 4096) * 2;
+      if (e.deck) continue;
+      const c = U.closestOnSeg(x, z, e.p[k], e.p[k + 1], e.p[k + 2], e.p[k + 3]);
+      if (Math.hypot(c[0] - x, c[1] - z) < e.w / 2 + margin) return true;
+    }
+    return false;
+  }
+
+  // ---------------- Brücken ----------------
+  // Brücken über Täler: Fahrbahn als Gerade zwischen den Brückenenden statt auf dem Gelände
+  initBridges() {
+    this.bridgeGrid = new U.Grid(30);
+    this.bridges = [];
+    this.graph.edges.forEach((e, ei) => {
+      if (!e.br) return;
+      const p = e.p, n = p.length / 2;
+      if (p.every((v, k) => k % 2 || this.inCore(v, p[k + 1]))) return;
+      const cum = [0];
+      for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1]));
+      const len = cum[n - 1];
+      if (len < 8) return;
+      const hA = this.fineAt(p[0], p[1]), hB = this.fineAt(p[n * 2 - 2], p[n * 2 - 1]);
+      const B = { ei, p, cum, len, hA, hB, w: e.w };
+      // nur echte Hochbrücken: irgendwo mindestens 1,5 m über dem Gelände
+      let gap = 0;
+      for (let s = 0; s <= len; s += 4) { const q = this.along(B, s); gap = Math.max(gap, this.deckH(B, s) - this.fineAt(q[0], q[1])); }
+      if (gap < 1.5) return;
+      e.deck = B;
+      this.bridges.push(B);
+      for (let i = 0; i < n - 1; i++) this.bridgeGrid.insert({ B, i }, Math.min(p[i * 2], p[i * 2 + 2]) - e.w, Math.min(p[i * 2 + 1], p[i * 2 + 3]) - e.w,
+        Math.max(p[i * 2], p[i * 2 + 2]) + e.w, Math.max(p[i * 2 + 1], p[i * 2 + 3]) + e.w);
+    });
+  }
+  deckH(B, s) { return B.hA + (B.hB - B.hA) * U.clamp(s / B.len, 0, 1); }
+  along(B, s) {
+    const p = B.p, cum = B.cum;
+    let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+    const t = U.clamp((s - cum[i - 1]) / ((cum[i] - cum[i - 1]) || 1), 0, 1);
+    return [p[i * 2 - 2] + (p[i * 2] - p[i * 2 - 2]) * t, p[i * 2 - 1] + (p[i * 2 + 1] - p[i * 2 - 1]) * t];
+  }
+  // Fahrbahnhöhe an (x, z), falls dort eine Hochbrücke ist (sonst null)
+  deckAt(x, z) {
+    let best = null;
+    for (const { B, i } of this.bridgeGrid.query(x, z, 0, this._bq || (this._bq = []))) {
+      const p = B.p, c = U.closestOnSeg(x, z, p[i * 2], p[i * 2 + 1], p[i * 2 + 2], p[i * 2 + 3]);
+      if (Math.hypot(c[0] - x, c[1] - z) > B.w / 2 + 0.4) continue;
+      const h = this.deckH(B, B.cum[i] + (B.cum[i + 1] - B.cum[i]) * c[2]);
+      if (best === null || h > best) best = h;
+    }
+    return best;
+  }
+  groundAt(x, z, y) {
+    const h = this.world.heightAt(x, z);
+    if (!this.bridges.length) return h;
+    const d = this.deckAt(x, z);
+    if (d !== null && d > h + 0.2 && (y === undefined || y > d - 2.5)) return d;
+    return h;
+  }
+
   // ---------------- Höhen ----------------
+  // Gelände ohne Gewässer an beliebiger Stelle (auch in ungebauten Kacheln), wie das feine Gitter
+  fineAt(x, z) {
+    const fc = (x - this.minX) / this.fx, fr = (z - this.minZ) / this.fz;
+    const c = Math.floor(fc), r = Math.floor(fr), tx = fc - c, tz = fr - r;
+    const h00 = this.fine(c, r), h10 = this.fine(c + 1, r), h01 = this.fine(c, r + 1), h11 = this.fine(c + 1, r + 1);
+    if (tx + tz <= 1) return h00 + (h10 - h00) * tx + (h01 - h00) * tz;
+    return h11 + (h01 - h11) * (1 - tx) + (h10 - h11) * (1 - tz);
+  }
   coarse(c, r) {
     c = U.clamp(c - this.gc0, 0, this.gcols - 1); r = U.clamp(r - this.gr0, 0, this.grows - 1);
     return this.gh[r * this.gcols + c];
@@ -123,7 +213,46 @@ class Region {
     const N = this.N, S = N + 3, g = new Float32Array(S * S);
     const fc0 = t.ti * N - 1, fr0 = t.tj * N - 1;
     for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) g[r * S + c] = this.fine(fc0 + c, fr0 + r);
-    t.hg = g; t.hs = S;
+    t.hg0 = g; t.hs = S;
+    t.hg = g;
+    if (t.st !== 2 || typeof WaterSet === 'undefined') return;
+    // Gewässer dieser und der Nachbarkacheln (damit die Ränder zueinander passen)
+    const areas = [], lines = [];
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const w = this.waterOf(t.ti + a, t.tj + b);
+      areas.push(...w.areas); lines.push(...w.lines);
+    }
+    t.waterAll = new WaterSet(areas, lines);
+    if (t.waterAll.empty) return;
+    t.hg = Float32Array.from(g);
+    const x0 = this.tileX(t.ti) - this.fx, z0 = this.tileZ(t.tj) - this.fz;
+    t.waterAll.carveGrid(t.hg, S * S, i => [x0 + (i % S) * this.fx, z0 + Math.floor(i / S) * this.fz],
+      (x, z) => this.inCore(x, z) || this.roadNear(x, z, WATER.roadGap));
+  }
+  // Gewässer einer Kachel (Flächen und Mittellinien), zwischengespeichert
+  waterOf(ti, tj) {
+    const key = ti + ',' + tj;
+    this._water = this._water || new Map();
+    let w = this._water.get(key);
+    if (!w) {
+      const d = this.stateOf(ti, tj) ? this.decodeTile({ ti, tj }) : { areas: [], water: [] };
+      w = { areas: d.areas.filter(a => a.k === 'water' || a.k === 'river'), lines: d.water };
+      if (this._water.size > 200) this._water.clear();
+      this._water.set(key, w);
+    }
+    return w;
+  }
+  heightAt0(x, z) {
+    let fc = (x - this.minX) / this.fx, fr = (z - this.minZ) / this.fz;
+    const N = this.N, ti = Math.floor(fc / N), tj = Math.floor(fr / N);
+    const t = this.loaded.get(tileKey(ti, tj));
+    if (!t || !t.hg0) return this.heightAt(x, z);
+    let lc = U.clamp(fc - ti * N, 0, N - 0.0001), lr = U.clamp(fr - tj * N, 0, N - 0.0001);
+    const c = Math.floor(lc), r = Math.floor(lr), tx = lc - c, tz = lr - r, S = t.hs, g = t.hg0;
+    const i = (r + 1) * S + c + 1;
+    const h00 = g[i], h10 = g[i + 1], h01 = g[i + S], h11 = g[i + S + 1];
+    if (tx + tz <= 1) return h00 + (h10 - h00) * tx + (h01 - h00) * tz;
+    return h11 + (h01 - h11) * (1 - tx) + (h10 - h11) * (1 - tz);
   }
 
   heightAt(x, z) {
@@ -164,6 +293,10 @@ class Region {
         const treeOn = this.treesOn.has(key);
         if (!treeOn && d < REGION.trees && t.st === 2) want.push({ ti, tj, key, st, d, trees: true });
         else if (treeOn && d > REGION.treesDrop) this.dropTrees(t);
+        this.hdNear(t, d);
+        const lifeOn = this.lifeOn.has(key);
+        if (!lifeOn && d < REGION.life && t.town) want.push({ ti, tj, key, st, d, life: true });
+        else if (lifeOn && d > REGION.lifeDrop) this.dropLife(t);
       }
     }
     // Kacheln weit außerhalb (nach einer Schnellreise) abbauen
@@ -174,6 +307,7 @@ class Region {
       const urgent = force || w.d < 350;
       if (!urgent && performance.now() - t0 > REGION.budgetMs) break;
       if (w.trees) { const t = this.loaded.get(w.key); if (t) this.buildTrees(t); }
+      else if (w.life) { const t = this.loaded.get(w.key); if (t) this.buildLife(t); }
       else this.buildTile(w);
       if (!urgent) break; // höchstens eine nicht dringende Kachel pro Bild
     }
@@ -191,6 +325,7 @@ class Region {
       let t = this.loaded.get(key);
       if (!t) t = this.buildTile({ ti, tj, key, st });
       if (st === 2 && !this.treesOn.has(key) && this.rectDist(ti, tj, x, z) < REGION.trees) this.buildTrees(t);
+      if (t.town && !this.lifeOn.has(key) && this.rectDist(ti, tj, x, z) < REGION.life) this.buildLife(t);
     }
   }
 
@@ -208,7 +343,9 @@ class Region {
     if (t.st === 2) {
       t.d = t.d || this.decodeTile(t);
       this.buildRoads(t);
+      this.buildWater(t);
       this.buildBuildings(t);
+      t.town = t.buildings.length >= REGION.townBuildings;
     }
     this.world.group.add(t.group);
     for (const a of this.anchors.get(t.key) || []) a.obj.position.y = this.world.heightAt(a.x, a.z) + a.dy;
@@ -218,10 +355,12 @@ class Region {
 
   dispose(t) {
     this.dropTrees(t);
+    this.dropLife(t);
     t.group.traverse(o => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
     this.world.group.remove(t.group);
     for (const m of t.mats || []) m.dispose();
     if (t.tex) t.tex.dispose();
+    if (t.texHd) t.texHd.dispose();
     t.disposed = true;
     this.loaded.delete(t.key);
   }
@@ -237,6 +376,7 @@ class Region {
       trees: line(raw.t || []),
       water: (raw.w || []).map(w => ({ w: w[0] / 10, p: line(w, 1) })),
       rails: (raw.r || []).map(r => line(r)),
+      shops: (raw.s || []).map(q => ({ name: q[0], kind: q[1], x: q[2] / 10, z: q[3] / 10 })),
     };
   }
 
@@ -269,6 +409,7 @@ class Region {
     tex.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     t.tex = tex;
+    if (t.hd === 'an') return; // schärferes Bild liegt schon
     t.terrainMat.map = tex; t.roofMat.map = tex;
   }
   // flag 1: Bayern, 2: nur Thüringen, 3: beides (weiße Flächen im bayerischen Bild aus dem thüringischen füllen)
@@ -288,6 +429,29 @@ class Region {
     }) : img(url(flag === 2 ? 'th' : 'by')).then(im => { const tx = new THREE.Texture(im); tx.needsUpdate = true; return tx; });
     job.then(tex => this.setTexture(t, tex)).catch(e => console.warn('Luftbild fehlt', t.ti, t.tj, e));
   }
+  // Schärferes Luftbild (tools/fetch-region-ortho-hd.js) für Kacheln direkt um den Spieler, weiter weg wieder das normale
+  hdNear(t, d) {
+    const H = window.COBURG_REGION_ORTHO_HD;
+    if (!H || !this.ortho || !H.tiles[t.ti + ',' + t.tj]) return;
+    if (d < 450 && !t.hd) {
+      t.hd = 'laden';
+      const im = new Image();
+      im.onload = () => {
+        if (t.disposed || t.hd !== 'laden') return;
+        const tx = new THREE.Texture(im);
+        tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
+        tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; tx.needsUpdate = true;
+        t.texHd = tx; t.hd = 'an';
+        t.terrainMat.map = tx; t.roofMat.map = tx;
+      };
+      im.onerror = () => { t.hd = 'fehlt'; };
+      im.src = `data/region/ortho/hd${t.ti}_${t.tj}.jpg`;
+    } else if (d > 900 && t.hd === 'an') {
+      t.terrainMat.map = t.tex || this.placeholder(); t.roofMat.map = t.tex || this.placeholder();
+      t.texHd.dispose(); t.texHd = null; t.hd = null;
+    } else if (d > 900 && t.hd === 'laden') t.hd = null;
+  }
+
   // Gemalte Bodentextur einer Kachel (ohne Luftbild)
   paintTile(t, px) {
     const cv = document.createElement('canvas'); cv.width = cv.height = px;
@@ -297,7 +461,7 @@ class Region {
     const order = Object.keys(AREA_STYLE);
     const d = t.d || { areas: [], water: [], rails: [] };
     for (const a of d.areas.slice().sort((x, y) => order.indexOf(x.k) - order.indexOf(y.k))) {
-      c.fillStyle = AREA_STYLE[a.k] || AREA_STYLE[{ farmyard: 'farmland', orchard: 'meadow', scrub: 'meadow' }[a.k]] || '#8a9f5a';
+      c.fillStyle = AREA_STYLE[a.k] || AREA_STYLE[{ farmyard: 'farmland', orchard: 'meadow', scrub: 'meadow', river: 'water' }[a.k]] || '#8a9f5a';
       this.world.pathPoly(c, a.p, a.ho); c.fill('evenodd');
     }
     c.lineCap = c.lineJoin = 'round';
@@ -383,6 +547,11 @@ class Region {
       }
       const pts = W.resample(raw, 4), n = pts.length / 2, half = e.w / 2;
       const col = U.color(/motorway|trunk/.test(e.h) ? '#45484c' : '#3d4045', 0.08, rnd);
+      // Hochbrücke: Höhe entlang der Kante (Abstand ab Kantenanfang)
+      const B = e.deck;
+      const sAt = [];
+      if (B) { let acc = B.cum[run.k0]; sAt.push(acc); for (let i = 1; i < n; i++) { acc += Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]); sAt.push(acc); } }
+      const hAt = (x, z, i) => B ? this.deckH(B, sAt[i]) : W.heightAt(x, z);
       const L = [], R = [];
       for (let i = 0; i < n; i++) {
         const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
@@ -396,9 +565,10 @@ class Region {
         const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
         const miter = Math.min(1 / Math.max(0.35, tx * d2x + tz * d2z), 2.5);
         const nx = -tz * half * miter, nz = tx * half * miter, x = pts[i * 2], z = pts[i * 2 + 1];
-        L.push([x + nx, W.heightAt(x + nx, z + nz) + y, z + nz]);
-        R.push([x - nx, W.heightAt(x - nx, z - nz) + y, z - nz]);
+        L.push([x + nx, hAt(x + nx, z + nz, i) + y, z + nz]);
+        R.push([x - nx, hAt(x - nx, z - nz, i) + y, z - nz]);
       }
+      if (B) this.bridgeStructure(t, B, pts, sAt, L, R);
       for (let i = 0; i < n - 1; i++) {
         const b = roads.get(pts[i * 2], pts[i * 2 + 1]);
         b.tri(L[i], R[i], R[i + 1], col, null, null, null, 0, 1, 0);
@@ -406,8 +576,9 @@ class Region {
       }
       // runde Enden an echten Kantenenden (Kreuzungen)
       const ends = [];
-      if (run.k0 === 0) ends.push(0);
-      if (run.k1 === e.p.length / 2 - 1) ends.push(n - 1);
+      if (B) { /* Brückenenden liegen auf dem Gelände, die Kreuzung zeichnet die Nachbarstraße */ }
+      else if (run.k0 === 0) ends.push(0);
+      if (!B && run.k1 === e.p.length / 2 - 1) ends.push(n - 1);
       for (const ei of ends) {
         const x = pts[ei * 2], z = pts[ei * 2 + 1], b = roads.get(x, z);
         const c = [x, W.heightAt(x, z) + y, z];
@@ -418,11 +589,180 @@ class Region {
         }
       }
       // Mittellinie auf zweispurigen Straßen
-      if (e.w >= 5.5 && !e.o && !/residential|living_street/.test(e.h)) W.dashes(pts, 3, 6, 0.07, y + 0.02, marks, white);
+      if (!B && e.w >= 5.5 && !e.o && !/residential|living_street/.test(e.h)) W.dashes(pts, 3, 6, 0.07, y + 0.02, marks, white);
     }
     const [rm, mm] = this.roadMaterials();
+    if (t.bridgeParts) t.bridgeParts.meshes(this.world.buildingMaterials().plain, { cast: true, receive: true }).forEach(m => t.group.add(m));
     roads.meshes(rm, { receive: true }).forEach(m => t.group.add(m));
     marks.meshes(mm, { receive: true }).forEach(m => t.group.add(m));
+  }
+
+  // Brückenbauwerk: Platte unter der Fahrbahn, Geländer, Pfeiler bis zum Gelände
+  bridgeStructure(t, B, pts, sAt, L, R) {
+    const parts = t.bridgeParts || (t.bridgeParts = new Chunks());
+    const W = this.world, n = pts.length / 2;
+    const concrete = new THREE.Color('#a9a59c'), rail = new THREE.Color('#8d8a84');
+    const quad = (b, a, c, d, e, col, nx, ny, nz) => { b.tri(a, c, d, col, null, null, null, nx, ny, nz); b.tri(a, d, e, col, null, null, null, nx, ny, nz); };
+    const dn = (p, h) => [p[0], p[1] - h, p[2]];
+    for (let i = 0; i < n - 1; i++) {
+      const b = parts.get(pts[i * 2], pts[i * 2 + 1]);
+      const dx = pts[i * 2 + 2] - pts[i * 2], dz = pts[i * 2 + 3] - pts[i * 2 + 1], l = Math.hypot(dx, dz) || 1;
+      const ox = -dz / l, oz = dx / l; // links
+      // Unterseite und Seitenflächen der Platte (0,9 m stark)
+      quad(b, dn(L[i], 0.9), dn(L[i + 1], 0.9), dn(R[i + 1], 0.9), dn(R[i], 0.9), concrete, 0, -1, 0);
+      quad(b, L[i], L[i + 1], dn(L[i + 1], 0.9), dn(L[i], 0.9), concrete, ox, 0, oz);
+      quad(b, R[i], dn(R[i], 0.9), dn(R[i + 1], 0.9), R[i + 1], concrete, -ox, 0, -oz);
+      // Geländer: Brüstung 0,9 m hoch auf beiden Seiten
+      for (const [P, s] of [[L, 1], [R, -1]]) {
+        const a = P[i], c = P[i + 1], up = q => [q[0], q[1] + 0.9, q[2]];
+        quad(b, a, c, up(c), up(a), rail, ox * s, 0, oz * s);
+        quad(b, a, up(a), up(c), c, rail, -ox * s, 0, -oz * s);
+      }
+    }
+    // Pfeiler alle ≈ 28 m, wo die Brücke hoch genug ist
+    for (let i = 3; i < n - 3; i += 7) {
+      const x = pts[i * 2], z = pts[i * 2 + 1], top = this.deckH(B, sAt[i]) - 0.9, ground = W.heightAt(x, z);
+      if (top - ground < 2) continue;
+      const b = parts.get(x, z), r = Math.min(0.9, B.w * 0.12);
+      const c = [[-r, -r], [r, -r], [r, r], [-r, r]];
+      for (let k = 0; k < 4; k++) {
+        const [ax, az] = c[k], [bx, bz] = c[(k + 1) % 4];
+        quad(b, [x + ax, ground - 1, z + az], [x + bx, ground - 1, z + bz], [x + bx, top, z + bz], [x + ax, top, z + az], concrete, (ax + bx), 0, (az + bz));
+      }
+      // (keine Kollision: die Hindernisse sind flach und würden sonst auch oben auf der Fahrbahn bremsen)
+    }
+  }
+
+  // ---------------- Wasser ----------------
+  buildWater(t) {
+    if (typeof WaterSet === 'undefined') return;
+    const own = this.waterOf(t.ti, t.tj);
+    if (!own.areas.length && !own.lines.length) return;
+    const ws = new WaterSet(own.areas, own.lines);
+    const inside = (x, z) => x >= t.x0 && x < t.x1 && z >= t.z0 && z < t.z1 && !this.inCore(x, z);
+    const surf = new Chunks();
+    ws.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside);
+    surf.meshes(waterMaterial(), { receive: true }).forEach(m => t.group.add(m));
+    ws.edges((ax, az, bx, bz) => {
+      t.edges.push(ax, az, bx, bz);
+      t.edgeGrid.insert(t.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
+    }, (x, z) => this.roadNear(x, z, WATER.roadGap), { x0: t.x0, z0: t.z0, x1: t.x1, z1: t.z1 }, (x, z) => !this.inCore(x, z));
+    t.rivers = new U.Grid(20);
+    ws.riverPieces(q => t.rivers.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw),
+      (x, z) => this.roadNear(x, z, WATER.roadGap), (x, z) => !this.inCore(x, z));
+  }
+
+  // ---------------- Orte: Laternen, Ladenschilder, Lokale, Fußgänger ----------------
+  lifeAssets() {
+    if (!this._life) {
+      const pole = mergeGeos([[new THREE.CylinderGeometry(0.06, 0.09, 5.2, 6), 0, 2.6, 0], [new THREE.BoxGeometry(0.06, 0.06, 1.0), 0, 5.15, 0.45]]);
+      const head = mergeGeos([[new THREE.BoxGeometry(0.5, 0.14, 0.3), 0, 5.08, 0.9]]);
+      const glowTex = (() => {
+        const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+        const c = cv.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+        g.addColorStop(0, 'rgba(255,214,140,0.55)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+        c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+        return new THREE.CanvasTexture(cv);
+      })();
+      const glow = new THREE.PlaneGeometry(10, 10); glow.rotateX(-Math.PI / 2);
+      const P = this.props;
+      this._life = { pole, head, glow, poleMat: new THREE.MeshLambertMaterial({ color: '#2e3236' }),
+        headMat: P && P.lampMat ? P.lampMat : new THREE.MeshLambertMaterial({ color: '#fff4d6', emissive: '#ffd890', emissiveIntensity: 0.05 }),
+        glowMat: new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2 }) };
+    }
+    return this._life;
+  }
+  buildLife(t) {
+    if (this.lifeOn.has(t.key) || !t.d) return;
+    this.lifeOn.add(t.key);
+    const W = this.world, life = t.life = { meshes: [], venues: [], segs: [] };
+    const near = (x, z, r) => t.polyGrid.query(x, z, r, W._tmp).some(b => Math.abs(b.bb.minX - x) < r + 30 && Math.abs(b.bb.minZ - z) < r + 30);
+    // Laternen alle ≈ 30 m an Ortsstraßen (abwechselnd links und rechts), Gehwege für Fußgänger
+    const lamps = [];
+    for (const run of this.runs.get(t.key) || []) {
+      const e = this.graph.edges[run.e];
+      if (!LAMP_ROADS.test(e.h) || e.deck) continue;
+      const p = e.p;
+      let segStart = 0, nextAt = 15, side = (run.e % 2) ? 1 : -1;
+      for (let k = run.k0; k < run.k1; k++) {
+        const ax = p[k * 2], az = p[k * 2 + 1], bx = p[k * 2 + 2], bz = p[k * 2 + 3], len = Math.hypot(bx - ax, bz - az);
+        if (len < 0.1) continue;
+        const dx = (bx - ax) / len, dz = (bz - az) / len, mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        const town = near(mx, mz, 30);
+        if (town) life.segs.push({ ax, az, bx, bz, n: e.n, k: 'road', h: e.h, w: e.w });
+        for (; nextAt < segStart + len; nextAt += 30) {
+          const s = nextAt - segStart, x0 = ax + dx * s, z0 = az + dz * s;
+          if (!near(x0, z0, 25)) { side = -side; continue; }
+          const off = e.w / 2 + 0.7, x = x0 - dz * off * side, z = z0 + dx * off * side;
+          side = -side;
+          if (this.insideBuilding(x, z, 0.4, t) || W.collideCircle(x, z, 0.3, {}).hit) continue;
+          lamps.push({ x, z, y: W.heightAt(x, z), ry: Math.atan2(dz * -side, -dx * -side) });
+        }
+        segStart += len;
+      }
+    }
+    if (lamps.length) {
+      const A = this.lifeAssets(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), ps = new THREE.Vector3();
+      const poles = new THREE.InstancedMesh(A.pole, A.poleMat, lamps.length), heads = new THREE.InstancedMesh(A.head, A.headMat, lamps.length);
+      const glows = new THREE.InstancedMesh(A.glow, A.glowMat, lamps.length);
+      lamps.forEach((l, i) => {
+        q.setFromAxisAngle(up, l.ry); ps.set(l.x, l.y, l.z); m4.compose(ps, q, one);
+        poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4);
+        ps.set(l.x + Math.sin(l.ry) * 0.9, l.y + 0.08, l.z + Math.cos(l.ry) * 0.9); q.identity(); m4.compose(ps, q, one); glows.setMatrixAt(i, m4);
+      });
+      poles.castShadow = heads.castShadow = true; glows.visible = this.night;
+      for (const m of [poles, heads, glows]) { m.computeBoundingSphere(); t.group.add(m); life.meshes.push(m); }
+      life.glow = glows;
+    }
+    // Ladenschilder an den Fassaden und begehbare Lokale (Döner, Gasthaus, Café, Mode, Drogerie, Bücher)
+    if (t.d.shops.length && this.props && this.props.signsFor) {
+      const placed = new U.Grid(20);
+      const res = this.props.signsFor(t.d.shops.map(q => [q.name, q.kind, q.x, q.z]), {
+        atlas: 1024, maxDist: Infinity,
+        crowded: (x, z, r) => placed.query(x, z, r).some(o => Math.hypot(o.x - x, o.z - z) < r),
+        mark: (x, z) => placed.insert({ x, z }, x, z, x, z),
+      });
+      for (const m of res.meshes) { t.group.add(m); life.meshes.push(m); }
+      life.signMats = res.mats;
+      for (const mt of res.mats) mt.emissiveIntensity = this.night ? 0.85 : 0;
+    }
+    if (this.property) {
+      let n = 0;
+      for (const q of t.d.shops) {
+        const type = regionVenueType(q.name, q.kind);
+        if (!type || n >= 4) continue;
+        const r = W.nearestRoad(q.x, q.z, 60, s => !!s.n);
+        const v = this.property.placeVenue({ id: 'r' + Math.round(q.x) + '_' + Math.round(q.z), name: q.name, street: r ? r.seg.n : '', type, x: q.x, z: q.z });
+        if (v) { life.venues.push(v); n++; }
+      }
+    }
+    this.lifeChanged = true;
+  }
+  dropLife(t) {
+    if (!this.lifeOn.has(t.key)) return;
+    this.lifeOn.delete(t.key);
+    const life = t.life;
+    t.life = null;
+    this.lifeChanged = true;
+    if (!life) return;
+    for (const m of life.meshes) { t.group.remove(m); if (m.isInstancedMesh) m.dispose(); else if (m.geometry) m.geometry.dispose(); }
+    for (const mt of life.signMats || []) { if (mt.map) mt.map.dispose(); mt.dispose(); }
+    if (this.property) for (const v of life.venues) this.property.removeVenue(v);
+  }
+  // Gehwege aller Orte in der Nähe (für die Fußgänger)
+  lifeSegments() {
+    const out = [];
+    for (const key of this.lifeOn) { const t = this.loaded.get(key); if (t && t.life) out.push(...t.life.segs); }
+    return out;
+  }
+  setNight(n) {
+    this.night = n;
+    for (const key of this.lifeOn) {
+      const t = this.loaded.get(key);
+      if (!t || !t.life) continue;
+      if (t.life.glow) t.life.glow.visible = n;
+      for (const mt of t.life.signMats || []) mt.emissiveIntensity = n ? 0.85 : 0;
+    }
   }
 
   // ---------------- Gebäude ----------------
@@ -437,7 +777,7 @@ class Region {
     for (const b of list) {
       const ring = b.p, n = ring.length / 2;
       let minH = Infinity, maxH = -Infinity;
-      for (let i = 0; i < ring.length; i += 2) { const h = W.heightAt(ring[i], ring[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
+      for (let i = 0; i < ring.length; i += 2) { const h = W.heightAt0(ring[i], ring[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
       const isCanopy = b.t === 'roof' || b.t === 'carport';
       const top = Math.max(minH + b.h, maxH + 2.2), base = isCanopy ? top - 0.6 : minH - 2;
       const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
@@ -498,7 +838,8 @@ class Region {
     this.treesOn.add(t.key);
     const pts = [];
     const d = t.d;
-    for (let i = 0; i < d.trees.length; i += 2) pts.push([d.trees[i], d.trees[i + 1], 0]);
+    const wet = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0; // keine Bäume im Wasser
+    for (let i = 0; i < d.trees.length; i += 2) if (!wet(d.trees[i], d.trees[i + 1])) pts.push([d.trees[i], d.trees[i + 1], 0]);
     let budget = 7000;
     for (const a of d.areas) {
       const dens = REGION_TREE_DENSITY[a.k];
@@ -510,7 +851,7 @@ class Region {
         const x = bb.minX + rnd() * (bb.maxX - bb.minX), z = bb.minZ + rnd() * (bb.maxZ - bb.minZ);
         if (this.inCore(x, z) || !U.pointInPoly(x, z, a.p)) continue;
         if (a.ho && a.ho.some(h => U.pointInPoly(x, z, h))) continue;
-        if (this.insideBuilding(x, z, 1.5, t) || this.nearRoad(x, z, 1.5, t)) continue;
+        if (this.insideBuilding(x, z, 1.5, t) || this.nearRoad(x, z, 1.5, t) || wet(x, z)) continue;
         pts.push([x, z, a.k === 'forest' && rnd() < 0.5 ? 1 : 0]);
         made++;
       }
@@ -601,6 +942,10 @@ class Region {
           out.nx += nx; out.nz += nz; out.hit = true; moved = true;
         }
       }
+      if (t.rivers) {
+        out.x = x; out.z = z;
+        if (pushFromRivers(t.rivers, out, r, this.world._tmp)) { x = out.x; z = out.z; moved = true; }
+      }
       if (!t.treeGrid) continue;
       const TR = t.trees, tl = t.treeGrid.query(x, z, r + 1, this.world._tmp);
       for (let n = 0; n < tl.length; n++) {
@@ -688,7 +1033,7 @@ class Region {
     const keys = Object.keys(this.R.data);
     const order = Object.keys(MAP_STYLE);
     let k = 0;
-    const MAPK = { farmyard: 'farmland', orchard: 'meadow', scrub: 'meadow' };
+    const MAPK = { farmyard: 'farmland', orchard: 'meadow', scrub: 'meadow', river: 'water' };
     const stepPaint = () => {
       const t0 = performance.now();
       while (k < keys.length && performance.now() - t0 < 12) {

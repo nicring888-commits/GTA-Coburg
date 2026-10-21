@@ -117,6 +117,8 @@
     life = new TownLife(world, scene, peds, props, ui);
     spawn = bahnhofSpawn();
     if (world.region) {
+      // Laternen, Ladenschilder und Lokale in den Orten nutzen dieselben Bausteine wie die Innenstadt
+      world.region.props = props; world.region.property = property;
       progress('Landkreis um den Bahnhof aufbauen …', 0.995);
       world.region.ensure(spawn.x, spawn.z, 1400);
       // Übersichtskarte des Landkreises nebenbei malen
@@ -465,6 +467,7 @@
     sun.intensity = s.sun; sun.color.set(s.sunColor);
     hemi.intensity = s.hemi; hemi.color.set(s.hemiSky); hemi.groundColor.set(s.hemiGround);
     world.setNight(night);
+    if (world.region) world.region.setNight(night);
     props.setNight(night);
     life.setNight(night);
     carMaterials().head.emissiveIntensity = night ? 2.5 : 0.2;
@@ -827,7 +830,11 @@
     T.speed = Math.hypot(T.vx, T.vz);
     prevPX = px; prevPZ = pz;
 
-    if (world.region) world.region.update(px, pz);
+    if (world.region) {
+      world.region.update(px, pz);
+      if (world.region.lifeChanged) { world.region.lifeChanged = false; peds.setExtra(world.region.lifeSegments()); }
+      peds.cap = world.inCoreRect(px, pz) ? 0 : 45;
+    }
     const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars());
     traffic.update(dt, px, pz, obstacles);
     police.update(dt, T, cam.yaw);
@@ -924,6 +931,7 @@
       headlight.target.position.set(car.x + fx * 20, car.y - 1, car.z + fz * 20);
     } else headlight.intensity = 0;
     peds.draw(camera.position.x, camera.position.z);
+    waterTick(dt);
     ui.updateLabels(camera);
     renderer.render(scene, camera);
   }

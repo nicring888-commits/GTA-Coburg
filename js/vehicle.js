@@ -156,7 +156,7 @@ class Vehicle {
 
   place(x, z, heading, world) {
     this.x = x; this.z = z; this.heading = heading; this.vx = this.vz = 0;
-    this.y = world.heightAt(x, z);
+    this.y = Infinity; // oberste Fläche (auf Brücken die Fahrbahn)
     this.updateGround(world, 1, true);
     this.sync();
   }
@@ -280,10 +280,11 @@ class Vehicle {
   updateGround(world, dt, snap) {
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     const lx = fz, lz = -fx; // links
-    const hf = world.heightAt(this.x + fx * 1.4, this.z + fz * 1.4);
-    const hbk = world.heightAt(this.x - fx * 1.4, this.z - fz * 1.4);
-    const hl = world.heightAt(this.x + lx * 0.85, this.z + lz * 0.85);
-    const hr = world.heightAt(this.x - lx * 0.85, this.z - lz * 0.85);
+    const y0 = snap ? Infinity : this.y;
+    const hf = world.groundAt(this.x + fx * 1.4, this.z + fz * 1.4, y0);
+    const hbk = world.groundAt(this.x - fx * 1.4, this.z - fz * 1.4, y0);
+    const hl = world.groundAt(this.x + lx * 0.85, this.z + lz * 0.85, y0);
+    const hr = world.groundAt(this.x - lx * 0.85, this.z - lz * 0.85, y0);
     const pitch = Math.atan2(hf - hbk, 2.8);
     const roll = Math.atan2(hl - hr, 1.7);
     const y = (hf + hbk + hl + hr) / 4 + 0.03;

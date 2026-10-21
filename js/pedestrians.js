@@ -31,9 +31,13 @@ class Pedestrians {
   }
 
   // Wegenetz aus den Straßenstücken der Welt: Knoten = gemeinsame Endpunkte (auf 0,5 m gerundet)
-  buildGraph() {
-    const segs = new Set();
-    for (const arr of this.world.roadGrid.map.values()) for (const s of arr) segs.add(s);
+  buildGraph(extra) {
+    if (!this.coreSegs) {
+      const set = new Set();
+      for (const arr of this.world.roadGrid.map.values()) for (const s of arr) set.add(s);
+      this.coreSegs = [...set];
+    }
+    const segs = extra && extra.length ? this.coreSegs.concat(extra) : this.coreSegs;
     this.segs = [];
     this.nodes = new Map();
     const key = (x, z) => Math.round(x * 2) + ',' + Math.round(z * 2);
@@ -50,6 +54,14 @@ class Pedestrians {
     this.segGrid = new U.Grid(20);
     for (const e of this.segs) this.segGrid.insert(e, Math.min(e.s.ax, e.s.bx), Math.min(e.s.az, e.s.bz), Math.max(e.s.ax, e.s.bx), Math.max(e.s.az, e.s.bz));
     this._q = [];
+  }
+
+  // Gehwege der Orte im Landkreis dazunehmen (js/region.js); Fußgänger auf weggefallenen Wegen verschwinden
+  setExtra(extra) {
+    this.buildGraph(extra);
+    const alive = new Set(this.segs);
+    this.list = this.list.filter(p => alive.has(p.e));
+    for (const p of this.list) if (p.buddy && !this.list.includes(p.buddy)) p.buddy = null;
   }
 
   buildMeshes() {
@@ -217,8 +229,9 @@ class Pedestrians {
     }
     this.spawnT -= dt;
     let n = 0;
-    while (this.list.length < PEDS.max && n++ < 6 && this.spawnT <= 0) this.spawn(px, pz);
-    if (this.list.length >= PEDS.max) this.spawnT = 0.5;
+    const max = this.cap || PEDS.max; // im Landkreis weniger als in der Fußgängerzone
+    while (this.list.length < max && n++ < 6 && this.spawnT <= 0) this.spawn(px, pz);
+    if (this.list.length >= max) this.spawnT = 0.5;
 
     const tmp = this._tmpPos || (this._tmpPos = {});
     for (const p of this.list) {

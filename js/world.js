@@ -158,6 +158,7 @@ class World {
     if (!this.ortho) await step('Bodentextur malen …', 0.15, () => this.paintGround());
     await step('Gelände formen …', 0.3, () => this.buildTerrainMesh());
     await step('Straßen bauen …', 0.4, () => this.buildRoads());
+    await step('Flüsse füllen …', 0.5, () => this.buildWater());
     await step('Gebäude errichten …', 0.55, () => this.buildBuildings());
     await step('Bäume pflanzen …', 0.8, () => this.buildTrees());
     await step('Stadtplan zeichnen …', 0.92, () => this.paintMap());
@@ -185,6 +186,65 @@ class World {
       }
     }
     this.hgrid = g;
+    this.carveCoreWater();
+  }
+
+  // Fluss- und Seebetten der Innenstadt ausheben; hgrid0 behält das ursprüngliche Gelände (Häuser, Wasseroberfläche)
+  carveCoreWater() {
+    this.hgrid0 = Float32Array.from(this.hgrid);
+    if (typeof WaterSet === 'undefined') return;
+    const d = this.data;
+    this.water = new WaterSet(d.areas.filter(a => a.k === 'water'), d.waterways.map(w => ({ w: w.w, p: w.p })));
+    // an Straßen und Wegen nicht graben (Brücken liegen flach auf dem Gelände)
+    const roads = new U.Grid(25);
+    for (const r of d.roads) {
+      if (r.k === 'plazaArea' || !r.p) continue;
+      for (let i = 0; i + 3 < r.p.length; i += 2) {
+        const ax = r.p[i], az = r.p[i + 1], bx = r.p[i + 2], bz = r.p[i + 3];
+        roads.insert({ ax, az, bx, bz, w: r.w }, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
+      }
+    }
+    const tmp = [];
+    const skip = (x, z) => roads.query(x, z, 12, tmp).some(s => {
+      const c = U.closestOnSeg(x, z, s.ax, s.az, s.bx, s.bz);
+      return Math.hypot(c[0] - x, c[1] - z) < s.w / 2 + WATER.roadGap;
+    });
+    const cols = this.tcols;
+    this.water.carveGrid(this.hgrid, this.hgrid.length, i => [this.tminX + (i % cols) * this.tstepX, this.tminZ + Math.floor(i / cols) * this.tstepZ], skip);
+  }
+
+  // Wasseroberflächen und Ufer als Hindernis (nach den Straßen, weil die Ufer an Straßen offen bleiben)
+  buildWater() {
+    if (!this.water || this.water.empty) return;
+    const surf = new Chunks();
+    const inside = this.region ? (x, z) => this.inCoreRect(x, z) : null;
+    this.water.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside);
+    surf.meshes(waterMaterial(), { receive: true }).forEach(m => this.group.add(m));
+    this.water.edges((ax, az, bx, bz) => {
+      this.edges.push(ax, az, bx, bz);
+      this.edgeGrid.insert(this.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
+    }, (x, z) => !!this.nearRoad(x, z, WATER.roadGap), null, inside);
+    this.riverGrid = new U.Grid(20);
+    this.water.riverPieces(q => this.riverGrid.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw),
+      (x, z) => !!this.nearRoad(x, z, WATER.roadGap), inside);
+  }
+
+  // Gelände ohne ausgehobene Gewässer (Häuser stehen darauf, Wasseroberfläche liegt knapp darunter)
+  heightAt0(x, z) {
+    if (this.region && !this.inCoreRect(x, z)) return this.region.heightAt0(x, z);
+    const g = this.hgrid0 || this.hgrid;
+    if (!g) return 0;
+    let fc = (x - this.tminX) / this.tstepX, fr = (z - this.tminZ) / this.tstepZ;
+    fc = U.clamp(fc, 0, this.tcols - 1.0001); fr = U.clamp(fr, 0, this.trows - 1.0001);
+    const c = Math.floor(fc), r = Math.floor(fr), tx = fc - c, tz = fr - r, i = r * this.tcols + c;
+    const h00 = g[i], h10 = g[i + 1], h01 = g[i + this.tcols], h11 = g[i + this.tcols + 1];
+    if (tx + tz <= 1) return h00 + (h10 - h00) * tx + (h01 - h00) * tz;
+    return h11 + (h01 - h11) * (1 - tx) + (h10 - h11) * (1 - tz);
+  }
+
+  // Boden für Figuren und Autos: auf Brücken die Fahrbahn, sonst das Gelände. y: jetzige Höhe (Infinity = oberste Fläche)
+  groundAt(x, z, y) {
+    return this.region ? this.region.groundAt(x, z, y) : this.heightAt(x, z);
   }
 
   // Umland aus data/region.js; ersetzt das Straßennetz der Innenstadt durch das des ganzen Landkreises
@@ -798,7 +858,7 @@ class World {
       const n = outer.length / 2;
       let minH = Infinity, maxH = -Infinity;
       for (let i = 0; i < outer.length; i += 2) {
-        const h = this.heightAt(outer[i], outer[i + 1]);
+        const h = this.heightAt0(outer[i], outer[i + 1]);
         if (h < minH) minH = h; if (h > maxH) maxH = h;
       }
       const isCanopy = b.t === 'roof';
@@ -917,7 +977,7 @@ class World {
       for (const rings of foot) {
         const o = rings[0];
         area += Math.abs(U.polyArea(o));
-        for (let i = 0; i < o.length; i += 2) { const h = this.heightAt(o[i], o[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
+        for (let i = 0; i < o.length; i += 2) { const h = this.heightAt0(o[i], o[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
       }
       // Auf steilem Gelände nicht ganz eingraben: mindestens 30 % der Höhe ragen über den höchsten Geländepunkt
       const y0 = Math.max(minH, maxH - maxY * 0.7), top = y0 + maxY, bottom = minH - 2;
@@ -1182,8 +1242,9 @@ class World {
   buildTrees() {
     const pts = [];
     const d = this.data;
-    for (let i = 0; i < d.trees.length; i += 2) pts.push([d.trees[i], d.trees[i + 1], 0]);
-    const keep = (x, z) => !this.region || this.inCoreRect(x, z); // außerhalb pflanzt das Umland
+    const wet = (x, z) => this.water && this.water.carveAt(x, z) > 0; // keine Bäume im Wasser
+    for (let i = 0; i < d.trees.length; i += 2) if (!wet(d.trees[i], d.trees[i + 1])) pts.push([d.trees[i], d.trees[i + 1], 0]);
+    const keep = (x, z) => (!this.region || this.inCoreRect(x, z)) && !wet(x, z); // außerhalb pflanzt das Umland
     const DENSITY = { forest: 1 / 70, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600, meadow: 1 / 2500, residential: 1 / 1800 };
     let budget = 16000;
     for (const a of d.areas) {
@@ -1350,6 +1411,10 @@ class World {
           x += nx * (rr - d); z += nz * (rr - d);
           out.nx += nx; out.nz += nz; out.hit = true; moved = true;
         }
+      }
+      if (this.riverGrid) {
+        out.x = x; out.z = z;
+        if (pushFromRivers(this.riverGrid, out, r, this._tmp)) { x = out.x; z = out.z; moved = true; }
       }
       if (this.region) {
         out.x = x; out.z = z;

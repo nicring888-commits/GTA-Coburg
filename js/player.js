@@ -45,7 +45,7 @@ class Player {
   }
 
   place(x, z, world) {
-    this.x = x; this.z = z; this.y = world.heightAt(x, z); this.vy = 0;
+    this.x = x; this.z = z; this.y = world.groundAt ? world.groundAt(x, z, Infinity) : world.heightAt(x, z); this.vy = 0;
     this.sync();
   }
 
@@ -67,7 +67,7 @@ class Player {
       this.x = r.x; this.z = r.z;
       for (const c of cars) this.pushFromCar(c);
     }
-    const ground = world.heightAt(this.x, this.z);
+    const ground = world.groundAt ? world.groundAt(this.x, this.z, this.y) : world.heightAt(this.x, this.z);
     if (move.jump && this.onGround) { this.vy = WALK.jump; this.onGround = false; }
     this.vy -= WALK.gravity * dt;
     this.y += this.vy * dt;
