@@ -169,6 +169,14 @@ button { font: inherit; cursor: pointer; }
 @keyframes menupop { from { transform: translateY(12px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
 .menu-panel.theme-home { --acc: #b57cff; }
 .menu-panel.theme-shop { --acc: #2ed3c6; }
+.menu-panel.theme-venue { --acc: #ff8a3d; }
+.vn-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; padding-right: 4px; }
+.vn-row { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.vn-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vn-txt b { font-size: 15px; }
+.vn-txt span { color: var(--muted); font-size: 12.5px; }
+.vn-txt .vn-hp { color: #7ee36f; font-weight: 700; }
+.vn-price { font: 400 22px/1 Impact, "Arial Black", sans-serif; color: #ffe066; letter-spacing: 0.5px; }
 .menu-panel.theme-garage { --acc: #e9b949; }
 .mn-head { display: flex; align-items: center; gap: 12px; }
 .mn-head h2 { margin: 0; flex: 1; font: 400 30px/1.1 Impact, "Arial Black", sans-serif; letter-spacing: 1px; text-shadow: 0 3px 0 #000; }

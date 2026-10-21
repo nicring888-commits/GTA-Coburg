@@ -90,6 +90,7 @@
     ui.addLabels(scene);
     traffic = new Traffic(world, scene);
     player = new Player(scene);
+    player.setOutfit(save.outfit);
     nav = new RoadNav(world);
     fx = new FX(scene);
     police = new Police({ world, scene, nav, traffic, fx, ui,
@@ -311,7 +312,7 @@
 
   // ---------- Geld ----------
   function addMoney(n) {
-    save.money = Math.max(0, Math.round(save.money + n));
+    save.money = Math.max(0, Math.round((save.money + n) * 100) / 100); // auf Cent genau (Essen, Einkäufe)
     persist();
     if (n > 0) audio.cash();
   }
@@ -611,7 +612,7 @@
   function indoorStep(dt) {
     if (pressed.F1) $('help').classList.toggle('hidden');
     if (pressed.KeyN) toggleNight();
-    if (pressed.KeyM || pressed.KeyG) ui.toast('Erst die Wohnung verlassen', 1.5);
+    if (pressed.KeyM || pressed.KeyG) ui.toast(property.inside.home.venue ? 'Erst nach draußen gehen' : 'Erst die Wohnung verlassen', 1.5);
     const io = property.inside, mv = walkInput();
     mv.run = false; // drinnen wird nicht gerannt
     player.update(dt, mv, io.room.walker, []);
@@ -623,7 +624,7 @@
     ui.setBars(player.health, null);
     ui.setBust(0); ui.setSpeed(0, '', false);
     ui.setPrompt(property.menuOpen ? null : prompt);
-    if (property.inside) ui.setLocation(io.home.name, io.viewing ? 'Besichtigung' : 'zu Hause');
+    if (property.inside) ui.setLocation(io.home.name, io.home.venue ? INTERIOR_TYPES[io.home.type].title : io.viewing ? 'Besichtigung' : 'zu Hause');
   }
 
   // Kamera drinnen: näher dran und immer innerhalb der Wände

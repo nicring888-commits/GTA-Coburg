@@ -277,3 +277,20 @@ Nur in OSM, laut Fotos plausibel:
    Die LoD2-Hüllen liefern die Form, dazu kommen Farbe und Details aus diesem Dokument.
 6. **Ausstattung:** historische Laternen in der Altstadt, Linden mit Baumgittern an der Mohrenstraße, Pflanzkübel und Marktstände am Markt.
 7. **Läden einbauen:** zuerst die bestätigten Einträge. Geschlossene oder nicht gefundene Läden weglassen.
+
+---
+
+## 7. Innenräume (Bildersuche, 21.10.2026)
+
+Grundlage für die betretbaren Läden und Lokale in `js/venues.js`. Die Fotos dienen nur als Vorlage, im Spiel ist alles aus einfachen Formen und gemalten Texturen gebaut.
+
+| Ort | Was die Fotos zeigen | Umsetzung im Spiel |
+|---|---|---|
+| **Stadt Döner** (Judengasse 2) | Theke mit Glasvitrine und Edelstahlschalen (Rotkraut, Salat, Tomate, Zwiebel, Mais), senkrechter Dönerspieß vor dem Grillstrahler, Pizzaofen aus Edelstahl, beleuchtete Menütafel mit Bildern, weiß gefliest; außen Sandsteinfassade mit Rundbogenfenster | Edelstahltheke mit acht farbigen Schalen und Spuckschutz, drehender Spieß vor glühendem Strahler, Pizzaofen, Leuchttafel mit Name und Preisen, weiße Wand- und anthrazit Bodenfliesen, Kühlschrank mit Flaschen, Tische mit roten Stühlen |
+| **Umut’s Döner / Coburger Kebaphaus** | (keine eigenen Innenfotos gefunden) | gleicher Imbiss-Grundriss, andere Farben der Menütafel |
+| **Ratskeller** (Markt 1) | weiß verputzte Gewölbe mit Gurtbögen, Bogenfenster mit Sprossen, Hängelampen mit warmen Glühbirnen, dunkle Holztische und -stühle, geschwungene Holztheke, Bilder an der Wand | zwei Tonnengewölbe mit Pfeilern und Bögen, Bogenfenster, Pendelleuchte über jedem Tisch, dunkles Holz, Theke mit beleuchtetem Flaschenregal |
+| **Gasthaus Goldenes Kreuz** (Herrngasse 1) | dunkle Holzbalkendecke, Holztäfelung, lange Tafeln mit weißen Decken und roten Läufern, Tischlampen mit weißen Schirmen, Bleiglasfenster mit goldenem Kreuz | genau so: Balken, Täfelung, zwei lange Tafeln mit Läufer und Lämpchen, Bleiglasfenster mit Kreuz |
+| **Café Pfannküchle** (Markt 11) | Theke mit Holzkisten voller Brötchen, Granitplatte, langer Holztisch mit dunkelgrünen Stühlen, Kronleuchter, Ziegelwand | Theke mit Brotkisten und Kuchenvitrine, Siebträger, Ziegelwand, langer Tisch mit grünen Stühlen, zwei Kronleuchter |
+| **H&M** (Spitalgasse 16) | helle Fliesen, Kleiderstangen aus Metall, Tische mit gefalteten Stapeln, Schaufensterpuppen, Wandregale, Kasse mit Logo | Kleiderstangen mit bunten Teilen, Stapeltische, Wandregal, zwei Puppen, drei Umkleidekabinen, Kasse mit rotem Logo |
+| **Müller** (Spitalgasse 3) | helle Gänge mit weißen Regalen voller bunter Packungen, orange Leitsystem-Schilder, Kosmetikwand | sechs doppelseitige Regale mit Packungstextur und orangen Kopfschildern, Kosmetikwand, orange Kasse |
+| **Thalia** (Spitalgasse 21) | schwarze Bücherregale, Holz-/Fischgrätboden, Tische mit Buchstapeln, Leseecke, Schild „Bestseller“ | schwarze Regale an zwei Wänden, vier Stapeltische, rote Sessel, Schild „BESTSELLER“, Kasse |

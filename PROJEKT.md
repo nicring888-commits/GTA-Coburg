@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.3.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 1.4.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -102,6 +102,7 @@ und müssen dort bleiben.
 | `js/police.js` | Fahndung, Streifenwagen (Verfolgen, Rammen, Anhalten), Polizisten zu Fuß, Festnahme, Straßensperren, Entkommen |
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
 | `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes |
+| `js/venues.js` | Läden und Lokale zum Hineingehen (seit v1.4.0): `VENUES` (Ort, Typ), `VENUE_MENUS` (Speisekarten, Sortimente), sieben Innenraum-Bauer auf Basis der Raum-Klasse aus `interiors.js`, erweitert `Property` um `placeVenue`, `venueRoom`, `openVenueMenu` |
 | `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, echte Ladenschilder (`shopSigns`, Texturatlas), Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
 | `js/places.js` | Lackierereien und Autohändler (Lage, Säulen, Schilder) |
 | `js/property.js` | Besitz (seit v1.2.0): Wohnungsliste, Haustür an der nächsten Fassade (`placeHome`/`facade`), Autohäuser, Garage mit eigenen Autos (`deliver`/`stow`/`carSold`), gemeinsames Menü (`#menu`), Betreten/Verlassen, Interaktionen und Licht drinnen, Speicherstand |
@@ -205,6 +206,20 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - ⚠️ Grenzen von LoD2: Fassaden, Fenster und Wandfarben sind weiter erfunden (LoD2 hat keine Fassadentexturen).
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
+
+- ✅ v1.4.0 (21.10.2026): **Läden und Lokale zum Hineingehen** (`js/venues.js`). Neun echte Orte haben eine Tür an
+  der Fassade unter ihrem Ladenschild (orange bzw. pinke Markierung auf Minikarte und Stadtplan, Schild „F betreten“):
+  - Dönerläden Stadt Döner, Umut’s Döner Kebab, Coburger Kebaphaus: Döner, Dürüm, Döner-Teller, Lahmacun, Pommes, Ayran
+  - Ratskeller (Gewölbekeller), Gasthaus Goldenes Kreuz (Holzbalken, Bleiglasfenster), Café Pfannküchle: fränkische
+    Gerichte, Kuchen, Kaffee
+  - H&M (Kleidung kaufen und sofort anziehen, wird gespeichert), Müller (Pflaster, Verbandskasten, Getränke),
+    Thalia (Bücher mit kleinen Texten)
+  Essen füllt das Leben auf. Bestellen an der Theke mit `E` oder überall drinnen mit `F`. Die Einrichtung folgt Fotos
+  der echten Räume (`recherche/referenz-coburg.md`, Abschnitt 7). Geld ist jetzt auf den Cent genau.
+  Getestet im Browser: alle neun Räume betreten und angesehen, Döner bestellt (Leben 40 → 85, Geld −7,50 €), Hemd bei
+  H&M gekauft (Farbe der Figur wechselt, im Spielstand), Hinausgehen an die richtige Tür; keine Fehler in der Konsole.
+- ⚠️ Grenzen v1.4.0: Gäste und Personal stehen still; Umut’s und Kebaphaus teilen sich den Grundriss von Stadt Döner;
+  die Räume sind nicht so groß oder so geschnitten wie die echten; Essen hat keine Animation.
 
 - ✅ v1.3.1 (21.10.2026): **Wahrzeichen genauer.** Die LoD2-Formen von Spitaltor, Judentor, Ketschentor und Rathaus
   bekommen echte Farben statt Fensterraster und Luftbild (`LANDMARK_LOD2` in `world.js`): Tortürme in grauem

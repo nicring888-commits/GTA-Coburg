@@ -28,6 +28,7 @@ class Player {
     box(0.34, 0.2, 0.08, hair, 0, 1.8, -0.15);
     if (look.cap) { box(0.38, 0.12, 0.38, mat(look.cap), 0, 1.95, 0); box(0.36, 0.04, 0.16, mat('#111'), 0, 1.9, 0.22); }
     this.group = g;
+    this.mats = { shirt, pants };
     this.health = 100;
     scene.add(g);
     this.x = 0; this.z = 0; this.y = 0; this.vy = 0;
@@ -36,6 +37,12 @@ class Player {
   }
 
   set visible(v) { this.group.visible = v; }
+
+  // Kleidung wechseln (z. B. nach dem Einkauf im Modegeschäft)
+  setOutfit(o) {
+    if (o && o.shirt) this.mats.shirt.color.set(o.shirt);
+    if (o && o.pants) this.mats.pants.color.set(o.pants);
+  }
 
   place(x, z, world) {
     this.x = x; this.z = z; this.y = world.heightAt(x, z); this.vy = 0;

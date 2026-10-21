@@ -25,7 +25,7 @@ const SHOP_MODELS = [
 const GARAGE_SLOTS = 8;
 const PROP_COLOR = { flat: '#b57cff', home: '#e9b949', shop: '#2ed3c6' };
 
-const euro = n => '€ ' + Math.round(n).toLocaleString('de-DE');
+const euro = n => '€ ' + (Math.abs(n - Math.round(n)) > 0.004 ? n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(n).toLocaleString('de-DE'));
 
 // Seitenansicht eines Autos als SVG (für Autohaus und Garage)
 function carSVG(kind, color) {
@@ -53,6 +53,7 @@ class Property {
     s.garage = Array.isArray(s.garage) ? s.garage.filter(c => c && VEHICLE_KINDS[c.kind] && c.kind !== 'police') : [];
     s.carSeq = s.carSeq || s.garage.length + 1;
     this.homes = [];
+    this.venues = [];           // Läden und Lokale zum Hineingehen (venues.js)
     this.shops = [];
     this.rooms = {};
     this.out = new Map();       // eigene Autos, die gerade in der Stadt stehen: id → Vehicle
@@ -66,6 +67,7 @@ class Property {
     this.musicT = 0; this.musicI = 0;
     for (const h of HOMES) this.placeHome(h);
     for (const p of CAR_SHOPS) this.placeShop(p);
+    if (typeof VENUES !== 'undefined') for (const v of VENUES) this.placeVenue(v);
     this.bindMenu();
   }
 
@@ -184,13 +186,16 @@ class Property {
     this.shops.push({ ...p, x, z });
   }
 
-  doorAt(x, z) { return this.homes.find(h => Math.hypot(h.sx - x, h.sz - z) < 1.9) || null; }
+  doorAt(x, z) {
+    return this.homes.find(h => Math.hypot(h.sx - x, h.sz - z) < 1.9) || this.venues.find(v => Math.hypot(v.sx - x, v.sz - z) < 1.9) || null;
+  }
   shopAt(x, z) { return this.shops.find(p => Math.hypot(p.x - x, p.z - z) < 5.5) || null; }
 
   // Hinweis draußen (zu Fuß oder im Auto)
   prompt(x, z, walking) {
     if (walking) {
       const h = this.doorAt(x, z);
+      if (h && h.venue) return `<kbd>F</kbd> ${h.name} betreten`;
       if (h) return this.owns(h.id) ? `<kbd>F</kbd> Nach Hause: ${h.name}` : `<kbd>F</kbd> ${h.name} · ${euro(h.price)}`;
     }
     const s = this.shopAt(x, z);
@@ -204,6 +209,7 @@ class Property {
       ? { type: 'home', name: 'Zuhause: ' + h.name, x: h.sx, z: h.sz }
       : { type: 'flat', name: `${h.name} (${euro(h.price)})`, x: h.sx, z: h.sz });
     for (const s of this.shops) list.push({ type: 'shop', name: s.name, x: s.x, z: s.z });
+    for (const v of this.venues) list.push({ type: VENUE_FOOD.has(v.type) ? 'food' : 'store', name: v.name, x: v.sx, z: v.sz });
     for (const [id, c] of this.out) if (!c.disposed && c !== this.car()) list.push({ type: 'mycar', name: 'Dein ' + c.spec.name, x: c.x, z: c.z });
     return list;
   }
@@ -243,6 +249,7 @@ class Property {
 
   // Wohnung: ansehen, kaufen, betreten, Garage
   openHome(h) {
+    if (h.venue) { this.enter(h, false); return; }
     const room = this.room(h.type);
     const T = INTERIOR_TYPES[h.type];
     this.openMenu('theme-home', () => {
@@ -467,8 +474,8 @@ class Property {
 
   enter(h, viewing) {
     if (this.stars() > 0) { this.ui.toast('Mit Fahndung lässt dich keiner rein!', 2); return; }
-    const room = this.room(h.type), p = this.player();
-    if (this.owns(h.id)) viewing = false;
+    const room = h.venue ? this.venueRoom(h) : this.room(h.type), p = this.player();
+    if (h.venue || this.owns(h.id)) viewing = false;
     this.inside = { home: h, room, viewing };
     for (const r of Object.values(this.rooms)) r.group.visible = r === room;
     this.indoorRoot.visible = true;
@@ -482,7 +489,7 @@ class Property {
     this.applyLight();
     this.flash();
     this.updateBanner();
-    this.ui.toast(viewing ? `Besichtigung: ${h.name}` : `Willkommen zu Hause`, 2);
+    this.ui.toast(h.venue ? `Willkommen bei ${h.name}` : viewing ? `Besichtigung: ${h.name}` : `Willkommen zu Hause`, 2);
   }
 
   exit() {
@@ -511,6 +518,11 @@ class Property {
     if (!io) { el.classList.add('hidden'); return; }
     const T = INTERIOR_TYPES[io.home.type];
     el.classList.remove('hidden');
+    if (io.home.venue) {
+      el.className = 'own';
+      el.innerHTML = `<span class="ib-tag">${T.label}</span><b>${io.home.name}</b><span>${io.home.street}</span><span class="ib-key"><kbd>F</kbd> ${VENUE_FOOD.has(io.home.type) ? 'Speisekarte' : 'Sortiment'}</span>`;
+      return;
+    }
     el.className = io.viewing ? 'view' : 'own';
     el.innerHTML = io.viewing
       ? `<span class="ib-tag">Besichtigung</span><b>${io.home.name}</b><span>${T.title} · ${T.size} m² · ${euro(io.home.price)}</span><span class="ib-key"><kbd>F</kbd> kaufen</span>`
@@ -537,7 +549,7 @@ class Property {
     if (room.state.music) this.music(dt);
     const sp = room.nearestSpot(p.x, p.z);
     if (pressed.KeyE && sp) { this.use(sp); if (!this.inside) return null; }
-    if (pressed.KeyF) { this.openHome(io.home); return null; }
+    if (pressed.KeyF) { if (io.home.venue) this.openVenueMenu(io.home); else this.openHome(io.home); return null; }
     return sp ? `<kbd>E</kbd> ${sp.label(room.state)}` : null;
   }
 
@@ -546,6 +558,7 @@ class Property {
     const ownOnly = msg => { if (io.viewing) { this.ui.toast(msg || 'Erst kaufen, dann gehört das dir', 1.8); return true; } return false; };
     switch (sp.act) {
       case 'exit': this.exit(); break;
+      case 'order': this.openVenueMenu(io.home); break;
       case 'sleep':
         if (ownOnly('Schlafen erst nach dem Kauf')) break;
         this.sleep();

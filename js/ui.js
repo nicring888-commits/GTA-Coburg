@@ -2,7 +2,7 @@
 'use strict';
 
 // Farben der Orte auf Minikarte und Stadtplan
-const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066' };
+const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066', food: '#ff8a3d', store: '#ff5fa2' };
 
 class UI {
   constructor(world) {
@@ -196,7 +196,8 @@ class UI {
   setMoney(m) {
     if (m === this._money) return;
     this._money = m;
-    this.$('money').textContent = '€ ' + Math.round(m).toLocaleString('de-DE');
+    const cents = Math.abs(m - Math.round(m)) > 0.004;
+    this.$('money').textContent = '€ ' + m.toLocaleString('de-DE', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: 2 });
   }
 
   setWanted(stars, flashing) {
