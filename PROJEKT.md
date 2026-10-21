@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.3.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 1.3.1 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -206,6 +206,16 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   Dachüberstände, Balkone und Gauben-Details fehlen. Weil das Gelände (EU-DEM) ungenau ist, stehen Häuser einzeln
   auf dem Spielgelände; Treppen und Stufen zwischen Nachbarhäusern am Hang sind daher nicht ganz echt.
 
+- ✅ v1.3.1 (21.10.2026): **Wahrzeichen genauer.** Die LoD2-Formen von Spitaltor, Judentor, Ketschentor und Rathaus
+  bekommen echte Farben statt Fensterraster und Luftbild (`LANDMARK_LOD2` in `world.js`): Tortürme in grauem
+  Sandstein mit Schieferhauben, Ketschentor oben ockergelb, Rathaus-Türmchen mit grüner Kupferhaube. Dazu
+  (`CityProps.landmarks`): dunkle Torbögen und Uhren (zehn nach zehn) auf beiden Straßenseiten der Tore, die beiden
+  ochsenblutroten Eckerker des Stadthauses zum Markt mit weißen Bändern, Fenstern und Schieferhelm.
+  Getestet im Browser: Spitaltor aus der Spitalgasse, Ketschentor aus der Ketschengasse, Stadthaus und Rathaus vom Markt.
+- ⚠️ Grenzen v1.3.1: Die Torbögen sind aufgemalt, durchfahren kann man die Tore weiterhin nicht; die Hauben haben die
+  LoD2-Form (eckig statt Zwiebel); das Rathaus hat noch keine blauen Wandfelder und das Stadthaus keine roten
+  Fensterrahmen.
+
 - ✅ v1.3.0 (21.10.2026): **Echte Ladenschilder.** 332 von 345 Läden und Lokalen (OSM, 27 per Google Maps geprüft,
   geschlossene entfernt) tragen ihren Namen auf einem Schild über dem Erdgeschoss, an der Hauswand zur nächsten Straße.
   Farben nach Marke (H&M, Müller, Thalia, Sparkasse, Telekom …) oder nach Art (Döner rot/gelb, Restaurant grün/gold,
@@ -296,8 +306,8 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
   (`recherche/referenz-coburg.md`: Street View, Bildersuche, Farbpalette, Straßen- und Platzbeschreibungen,
   Umbauvorschläge; `recherche/pois-coburg.json`: 349 Läden/Lokale mit Spielkoordinaten, 27 per Google Maps geprüft;
   `recherche/streetview-panos.json`: 802 Street-View-Aufnahmepunkte). Umgesetzt in v1.2.1: Fassadenfarben je Straße,
-  Pflaster der Fußgängerzone; v1.3.0: Ladenschilder. Offen: Fensterläden/Sandstein-Gewände, Wahrzeichen-Details (Tortürme,
-  Stadthaus-Erker, Rathaus-Türmchen), Gehwegplatten mit Granitrinne, historische Laternen
+  Pflaster der Fußgängerzone; v1.3.0: Ladenschilder. v1.3.1: Tortürme, Stadthaus-Erker, Rathaus-Türmchen. Offen: Fensterläden/Sandstein-Gewände,
+  Rathaus-Wandfelder, Stadthaus-Fensterrahmen, Tore durchfahrbar, Gehwegplatten mit Granitrinne, historische Laternen
 
 - [ ] Fußgänger als KI-Figuren auf Gehwegen und Plätzen
 - [ ] Brücken über die Itz mit eigener Höhe
