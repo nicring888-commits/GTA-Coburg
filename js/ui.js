@@ -38,7 +38,32 @@ class UI {
       ['Bismarckturm', find(/Bismarckturm/)],
       ['Hexenturm', find(/Hexenturm/)],
     ];
-    return list.filter(l => l[1]).map(([name, p]) => ({ name, x: p.x, z: p.z }));
+    const out = list.filter(l => l[1]).map(([name, p]) => ({ name, x: p.x, z: p.z }));
+    // Landkreis: Städte, Märkte und Sehenswürdigkeiten
+    const R = this.world.region;
+    if (R) {
+      const findR = (re, k) => R.places.find(p => re.test(p.n) && (!k || k.test(p.k)));
+      const towns = [
+        ['Rödental', /^Rödental$/], ['Neustadt bei Coburg', /^Neustadt bei Coburg$/], ['Bad Rodach', /^Bad Rodach$/],
+        ['Seßlach', /^Seßlach$/], ['Sonnefeld', /^Sonnefeld$/], ['Ebersdorf bei Coburg', /^Ebersdorf b(ei|\.) Coburg$/],
+        ['Dörfles-Esbach', /^Dörfles-Esbach$/], ['Untersiemau', /^Untersiemau$/], ['Großheirath', /^Großheirath$/],
+        ['Ahorn', /^Ahorn$/], ['Meeder', /^Meeder$/], ['Lautertal (Tiefenlauter)', /^Tiefenlauter$/], ['Weitramsdorf', /^Weitramsdorf$/],
+        ['Grub am Forst', /^Grub am Forst$/], ['Niederfüllbach', /^Niederfüllbach$/], ['Weidhausen', /^Weidhausen b(ei|\.) Coburg$/],
+        ['Itzgrund (Kaltenbrunn)', /^Kaltenbrunn$/], ['Frohnlach', /^Frohnlach$/],
+      ];
+      const sights = [
+        ['Schloss Rosenau', /^Schloss Rosenau$/], ['Schloss Callenberg', /^Schloss Callenberg$/], ['Schloss Hohenstein', /Hohenstein/],
+        ['Schloss Tambach', /^Schloss Tambach$/], ['Wildpark Tambach', /Wildpark Schloss Tambach|Wildpark Tambach/],
+        ['Goldbergsee', /^Goldbergsee$/], ['Froschgrundsee', /^Froschgrundsee$/], ['Muppberg', /^Muppberg$/],
+        ['Schloss Ahorn', /^Schloss Ahorn$/], ['Thermalbad Bad Rodach', /ThermeNatur|Thermalbad/],
+      ];
+      const seen = new Set(out.map(l => l.name));
+      for (const [name, re] of towns.concat(sights)) {
+        const p = findR(re);
+        if (p && !seen.has(name)) { out.push({ name, x: p.x, z: p.z, region: true }); seen.add(name); }
+      }
+    }
+    return out;
   }
 
   // Schwebende Ortsschilder über den Sehenswürdigkeiten
@@ -143,7 +168,14 @@ class UI {
     ctx.scale(k, k);
     ctx.translate(-px, -pz);
     ctx.imageSmoothingEnabled = true;
+    const RM = w.regionMap, outside = w.region && !w.inCoreRect(px, pz);
+    if (RM && !outside) {
+      const L = w.limits;
+      ctx.drawImage(RM.canvas, L.minX, L.minZ, RM.canvas.width / RM.scale, RM.canvas.height / RM.scale);
+    }
     ctx.drawImage(w.mapCanvas, B.minX, B.minZ, w.mapCanvas.width / S, w.mapCanvas.height / S);
+    // Umland: Häuser und Straßen der gebauten Kacheln scharf darüber
+    if (outside) w.region.drawNear(ctx, px, pz, metersAcross * 0.75, k);
     // Rennstrecke
     const race = extra.race;
     if (race) {
@@ -243,10 +275,16 @@ class UI {
     const wrap = this.$('map-canvas-wrap');
     this.big.width = wrap.clientWidth * devicePixelRatio;
     this.big.height = wrap.clientHeight * devicePixelRatio;
-    const B = this.world.bounds;
+    const B = this.world.bounds, L = this.world.limits;
     if (!this.view) {
+      // Start auf die Innenstadt, herauszoomen bis zum ganzen Landkreis
       const fit = Math.min(this.big.width / (B.maxX - B.minX), this.big.height / (B.maxZ - B.minZ));
-      this.view = { cx: (B.minX + B.maxX) / 2, cz: (B.minZ + B.maxZ) / 2, scale: fit, min: fit * 0.9 };
+      const all = Math.min(this.big.width / (L.maxX - L.minX), this.big.height / (L.maxZ - L.minZ));
+      this.view = { cx: (B.minX + B.maxX) / 2, cz: (B.minZ + B.maxZ) / 2, scale: fit, min: all * 0.9 };
+    }
+    // außerhalb der Innenstadt auf den Spieler zentrieren
+    if (this.world.region && !this.world.inCoreRect(px, pz)) {
+      this.view.cx = px; this.view.cz = pz; this.view.scale = Math.min(this.view.scale, 0.35);
     }
     this.player = { x: px, z: pz };
     if (!this._mapBound) this.bindMap();
@@ -332,7 +370,7 @@ class UI {
     this.big.addEventListener('wheel', e => {
       e.preventDefault();
       const before = toWorld(e);
-      this.view.scale = U.clamp(this.view.scale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), this.view.min, 4);
+      this.view.scale = U.clamp(this.view.scale * (e.deltaY < 0 ? 1.25 : 1 / 1.25), this.view.min, 4);
       const after = toWorld(e);
       this.view.cx += before.x - after.x; this.view.cz += before.z - after.z;
       this.drawBigMap();
@@ -346,10 +384,29 @@ class UI {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#2c3528'; ctx.fillRect(0, 0, W, H);
     ctx.setTransform(v.scale, 0, 0, v.scale, W / 2 - v.cx * v.scale, H / 2 - v.cz * v.scale);
+    if (w.regionMap) {
+      const L = w.limits, RM = w.regionMap;
+      ctx.drawImage(RM.canvas, L.minX, L.minZ, RM.canvas.width / RM.scale, RM.canvas.height / RM.scale);
+    }
     ctx.drawImage(w.mapCanvas, B.minX, B.minZ, w.mapCanvas.width / S, w.mapCanvas.height / S);
     const px = 1 / v.scale;
+    // Ortsnamen im Landkreis (beim Herauszoomen nur die größeren)
+    if (w.region) {
+      ctx.textAlign = 'center';
+      for (const p of w.region.places) {
+        const big = p.k === 'town' || p.k === 'city', vil = p.k === 'village';
+        if (!(big || (vil && v.scale > 0.06) || (/suburb|hamlet/.test(p.k) && v.scale > 0.25))) continue;
+        if (w.inCoreRect(p.x, p.z) && v.scale > 0.3) continue;
+        const fs = (big ? 15 : vil ? 12 : 10.5) * devicePixelRatio * px;
+        ctx.font = `${big ? 700 : 600} ${fs}px Segoe UI, sans-serif`;
+        ctx.lineWidth = 3 * devicePixelRatio * px; ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.strokeText(p.n, p.x, p.z); ctx.fillStyle = big ? '#1d2430' : '#3b4150'; ctx.fillText(p.n, p.x, p.z);
+      }
+      ctx.textAlign = 'left';
+    }
     ctx.font = `600 ${13 * devicePixelRatio * px}px Segoe UI, sans-serif`;
     for (const l of this.landmarks) {
+      if (!l.region && v.scale < 0.12) continue; // Innenstadt-Ziele erst beim Hineinzoomen
       ctx.fillStyle = '#c0392b';
       ctx.beginPath(); ctx.arc(l.x, l.z, 5 * devicePixelRatio * px, 0, 6.283); ctx.fill();
       ctx.lineWidth = 3 * devicePixelRatio * px; ctx.strokeStyle = 'rgba(255,255,255,0.9)';

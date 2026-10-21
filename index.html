@@ -24,11 +24,11 @@
 <div id="start" class="hidden">
   <div class="start-box">
     <h1 class="logo">Grand Theft <span>Coburg</span></h1>
-    <p class="sub">Die echte Coburger Innenstadt. Du kommst am Bahnhof an: Schnapp dir ein Auto, fahr Straßenrennen
-      um Preisgeld und häng die Polizei ab.</p>
+    <p class="sub">Die echte Coburger Innenstadt und der ganze Landkreis drumherum. Du kommst am Bahnhof an: Schnapp dir
+      ein Auto, fahr Straßenrennen bis nach Rödental, Neustadt oder Bad Rodach und häng die Polizei ab.</p>
     <div class="features">
       <div><b>🚗 Autos</b><span>Jedes Auto lässt sich klauen. Sportwagen sind schnell, Streifenwagen sind heiße Ware. Geklaute Autos bringen beim Autohändler Geld.</span></div>
-      <div><b>🏁 Rennen</b><span>Fahr in eine blaue Säule und starte mit <kbd>F</kbd> ein Rennen gegen drei Gegner. Vier Strecken, Preisgeld und Bestzeiten.</span></div>
+      <div><b>🏁 Rennen</b><span>Fahr in eine blaue Säule und starte mit <kbd>F</kbd> ein Rennen gegen drei Gegner. 14 Strecken von der Altstadt bis Neustadt, Bad Rodach und Seßlach, Preisgeld und Bestzeiten.</span></div>
       <div><b>🚓 Polizei</b><span>Autodiebstahl, Rammen und Rasen bringen Sterne. Bleib außer Sicht, bis die Sterne verschwinden, oder fahr in eine grüne Lackiererei.</span></div>
       <div><b>🏠 Besitz</b><span>Kauf dir Wohnungen (violette Türen) und Neuwagen im türkisen Autohaus. Deine Autos holst du mit <kbd>G</kbd> aus der Garage.</span></div>
     </div>
@@ -72,7 +72,7 @@
   <div id="toast" class="hidden"></div>
   <div id="indoor" class="hidden"></div>
   <div id="bigmsg" class="hidden"></div>
-  <div id="attribution">Kartendaten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> · Höhen: EU-DEM<span id="attr-ortho"> · Luftbilder: <a href="https://geodaten.bayern.de/opengeodata/" target="_blank" rel="noopener">Bayerische Vermessungsverwaltung</a> (<a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>)</span><span id="attr-lod2"> · 3D-Gebäude LoD2: <a href="https://geodaten.bayern.de/opengeodata/OpenDataDetail.html?pn=lod2" target="_blank" rel="noopener">Bayerische Vermessungsverwaltung – www.geodaten.bayern.de</a> (<a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>)</span></div>
+  <div id="attribution">Kartendaten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> · Höhen: EU-DEM, Terrarium · <span id="attr-ortho">Luftbilder</span><span id="attr-lod2"> und 3D-Gebäude</span><span id="attr-bvv">: <a href="https://geodaten.bayern.de/opengeodata/" target="_blank" rel="noopener">Bayerische Vermessungsverwaltung – www.geodaten.bayern.de</a></span><span id="attr-th">, Thüringen: © GDI-Th</span> (<a href="https://creativecommons.org/licenses/by/4.0/deed.de" target="_blank" rel="noopener">CC BY 4.0</a>)</div>
 </div>
 <div id="fade" class="hidden"></div>
 <div id="blackout" class="hidden"></div>
@@ -84,7 +84,7 @@
 <div id="map-overlay" class="hidden">
   <div class="map-panel">
     <div class="map-head">
-      <h2>Stadtplan Coburg</h2>
+      <h2>Karte Coburg und Landkreis</h2>
       <span class="map-tip" id="map-tip">Klick auf die Karte = dorthin reisen</span>
       <button id="map-close" aria-label="Schließen">✕</button>
     </div>
@@ -142,8 +142,11 @@
 <script src="data/ortho/tiles.js"></script>
 <script src="data/lod2.js"></script>
 <script src="data/shops.js"></script>
+<script src="data/region.js"></script>
+<script src="data/region/ortho.js"></script>
 <script src="js/util.js"></script>
 <script src="js/world.js"></script>
+<script src="js/region.js"></script>
 <script src="js/vehicle.js"></script>
 <script src="js/traffic.js"></script>
 <script src="js/player.js"></script>

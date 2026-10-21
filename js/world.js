@@ -144,12 +144,15 @@ class World {
     this.trees = [];                  // [x, z, r]
     this._tmp = [];
     this.windowMaterials = [];
+    this.region = null;               // Umland (Landkreis), siehe js/region.js
+    this.limits = this.bounds;        // befahrbarer Bereich (mit Umland: alle Landkreis-Kacheln)
   }
 
   // Baut die Welt Schritt für Schritt; progress(text, anteil)
   async build(progress) {
     const step = async (text, f, fn) => { progress(text, f); await new Promise(r => setTimeout(r, 0)); fn(); };
     await step('Gelände berechnen …', 0.05, () => this.buildTerrainData());
+    await step('Landkreis vorbereiten …', 0.08, () => this.initRegion());
     progress('Luftbilder laden …', 0.1);
     await this.loadOrtho(f => progress('Luftbilder laden …', 0.1 + f * 0.1));
     if (!this.ortho) await step('Bodentextur malen …', 0.15, () => this.paintGround());
@@ -183,6 +186,19 @@ class World {
     }
     this.hgrid = g;
   }
+
+  // Umland aus data/region.js; ersetzt das Straßennetz der Innenstadt durch das des ganzen Landkreises
+  initRegion() {
+    const R = window.COBURG_REGION;
+    if (!R || !this.hgrid || typeof Region === 'undefined') return;
+    const reg = new Region(this, R);
+    if (!reg.ok) { console.warn('data/region.js passt nicht zu data/coburg.js – bitte node tools/convert-region.js neu ausführen'); return; }
+    this.region = reg;
+    this.data.graph = reg.graph;
+    this.limits = reg.limits;
+    this.coreRect = reg.core;
+  }
+  inCoreRect(x, z) { const C = this.coreRect; return !C || (x >= C.minX && x <= C.maxX && z >= C.minZ && z <= C.maxZ); }
 
   // ---------------- Luftbilder ----------------
   // Kacheln aus data/ortho (tools/fetch-ortho.js). Fehlt etwas, bleibt es bei der gemalten Bodentextur.
@@ -280,6 +296,7 @@ class World {
   heightAt(x, z) {
     const g = this.hgrid;
     if (!g) return 0;
+    if (this.region && !this.inCoreRect(x, z)) return this.region.heightAt(x, z);
     let fc = (x - this.tminX) / this.tstepX, fr = (z - this.tminZ) / this.tstepZ;
     fc = U.clamp(fc, 0, this.tcols - 1.0001); fr = U.clamp(fr, 0, this.trows - 1.0001);
     const c = Math.floor(fc), r = Math.floor(fr), tx = fc - c, tz = fr - r;
@@ -417,7 +434,7 @@ class World {
   buildTerrainMesh() {
     const B = this.bounds;
     const W = B.maxX - B.minX, H = B.maxZ - B.minZ;
-    if (this.ortho) { this.buildOrthoTerrain(); this.buildSkirt(); return; }
+    if (this.ortho) { this.buildOrthoTerrain(); if (!this.region) this.buildSkirt(); return; }
     let cols, rows, sx, sz, x0, z0;
     if (this.hgrid) { cols = this.tcols; rows = this.trows; sx = this.tstepX; sz = this.tstepZ; x0 = this.tminX; z0 = this.tminZ; }
     else { cols = 2; rows = 2; sx = W; sz = H; x0 = B.minX; z0 = B.minZ; }
@@ -440,7 +457,7 @@ class World {
     const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: this.groundTexture }));
     mesh.receiveShadow = true;
     this.group.add(mesh);
-    this.buildSkirt();
+    if (!this.region) this.buildSkirt();
   }
 
   // Umland außerhalb des Kartenausschnitts (grobes Gitter, etwas tiefer)
@@ -497,6 +514,28 @@ class World {
       }
       const hidden = this.ortho && PHOTO_HIDE.has(r.k);
       if (hidden && r.k !== 'plaza') continue;
+      // mit Umland nur die Stücke innerhalb des Innenstadt-Geländes (außen zeichnet js/region.js)
+      const pieces = this.region ? this.clipToCore(pts) : [pts];
+      for (const pts of pieces) this.roadRibbon(r, pts, style, col, hidden, chunks, marks, white);
+    }
+    this.finishRoads(chunks, marks);
+  }
+
+  // Polylinie in die Stücke zerlegen, deren Abschnitte im Innenstadt-Gelände liegen
+  clipToCore(pts) {
+    const out = [];
+    let cur = null;
+    for (let i = 0; i + 3 < pts.length; i += 2) {
+      const inside = this.inCoreRect((pts[i] + pts[i + 2]) / 2, (pts[i + 1] + pts[i + 3]) / 2);
+      if (inside) { if (!cur) { cur = [pts[i], pts[i + 1]]; out.push(cur); } cur.push(pts[i + 2], pts[i + 3]); }
+      else cur = null;
+    }
+    return out;
+  }
+
+  roadRibbon(r, pts, style, col, hidden, chunks, marks, white) {
+      const n = pts.length / 2;
+      const half = r.w / 2;
       const L = [], R = [];
       for (let i = 0; i < n; i++) {
         const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
@@ -553,7 +592,9 @@ class World {
       }
       // Treppenstufen andeuten
       if (r.k === 'steps') this.dashes(pts, 0.12, 0.3, half, style.y + 0.015, marks, new THREE.Color('#6f6a62'));
-    }
+  }
+
+  finishRoads(chunks, marks) {
     const mat = (o) => new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 });
     const order = { path: 0, track: 0, foot: 1, steps: 1, plaza: 2, road: 3 };
     for (const k in chunks) chunks[k].meshes(mat(order[k]), { receive: true }).forEach(m => this.group.add(m));
@@ -830,6 +871,7 @@ class World {
     });
     const plainMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide });
     this.windowMaterials.push(wallMat);
+    this._buildingMats = { wall: wallMat, plain: plainMat };
     walls.meshes(wallMat, { cast: true, receive: true }).forEach(m => this.group.add(m));
     plain.meshes(plainMat, { cast: true, receive: true }).forEach(m => this.group.add(m));
     for (const [ti, bucket] of photoRoofs) {
@@ -840,6 +882,9 @@ class World {
       this.group.add(m);
     }
   }
+
+  // Wand- und Nebengebäude-Material (auch für das Umland)
+  buildingMaterials() { return this._buildingMats; }
 
   // ---------------- Gebäude aus LoD2 ----------------
   // Wand- und Dachflächen der amtlichen 3D-Gebäudemodelle (data/lod2.js aus tools/convert-lod2.js).
@@ -1138,6 +1183,7 @@ class World {
     const pts = [];
     const d = this.data;
     for (let i = 0; i < d.trees.length; i += 2) pts.push([d.trees[i], d.trees[i + 1], 0]);
+    const keep = (x, z) => !this.region || this.inCoreRect(x, z); // außerhalb pflanzt das Umland
     const DENSITY = { forest: 1 / 70, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600, meadow: 1 / 2500, residential: 1 / 1800 };
     let budget = 16000;
     for (const a of d.areas) {
@@ -1150,7 +1196,7 @@ class World {
       let made = 0;
       for (let tries = 0; made < count && tries < count * 4; tries++) {
         const x = bb.minX + rnd() * (bb.maxX - bb.minX), z = bb.minZ + rnd() * (bb.maxZ - bb.minZ);
-        if (!U.pointInPoly(x, z, a.p)) continue;
+        if (!keep(x, z) || !U.pointInPoly(x, z, a.p)) continue;
         if (a.ho && a.ho.some(h => U.pointInPoly(x, z, h))) continue;
         if (this.insideBuilding(x, z, 1.5) || this.nearRoad(x, z, 1.2)) continue;
         pts.push([x, z, a.k === 'forest' && rnd() < 0.45 ? 1 : 0]);
@@ -1245,7 +1291,7 @@ class World {
       if (x < b.bb.minX - margin || x > b.bb.maxX + margin || z < b.bb.minZ - margin || z > b.bb.maxZ + margin) continue;
       if (U.pointInPoly(x, z, b.p) && !(b.ho && b.ho.some(h => U.pointInPoly(x, z, h)))) return b;
     }
-    return null;
+    return this.region ? this.region.insideBuilding(x, z, margin) : null;
   }
 
   nearRoad(x, z, margin) {
@@ -1254,7 +1300,7 @@ class World {
       const c = U.closestOnSeg(x, z, s.ax, s.az, s.bx, s.bz);
       if (Math.hypot(c[0] - x, c[1] - z) < s.w / 2 + margin) return s;
     }
-    return null;
+    return this.region ? this.region.nearRoad(x, z, margin) : null;
   }
 
   // Nächster Straßenabschnitt (optional gefiltert) im Umkreis
@@ -1267,7 +1313,7 @@ class World {
       const dd = Math.hypot(c[0] - x, c[1] - z);
       if (dd < bestD) { bestD = dd; best = { seg: s, x: c[0], z: c[1], d: dd }; }
     }
-    return best;
+    return this.region ? this.region.nearestRoad(x, z, maxDist, filter, best) : best;
   }
 
   // Schiebt einen Kreis aus Gebäuden und Bäumen heraus. Gibt {x, z, nx, nz, hit} zurück.
@@ -1305,10 +1351,16 @@ class World {
           out.nx += nx; out.nz += nz; out.hit = true; moved = true;
         }
       }
+      if (this.region) {
+        out.x = x; out.z = z;
+        if (this.region.collide(out, r)) { x = out.x; z = out.z; moved = true; }
+      }
       if (!moved) break;
     }
     const nl = Math.hypot(out.nx, out.nz);
     if (nl > 0) { out.nx /= nl; out.nz /= nl; }
+    out.x = x; out.z = z;
+    if (this.region) { this.region.clamp(out); return out; }
     // Kartenrand
     const B = this.bounds, m = 3;
     if (x < B.minX + m) { x = B.minX + m; out.hit = true; out.nx = 1; out.nz = 0; }

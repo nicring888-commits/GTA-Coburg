@@ -169,7 +169,7 @@ class Police {
     if (wanted && this.routeT <= 0) {
       this.routeT = 0.6;
       const loc = this.nav.locate(T.x, T.z, 300);
-      this.costs = loc ? this.nav.costsFrom(loc) : null;
+      this.costs = loc ? this.nav.costsFrom(loc, 150) : null;
     }
 
     // Einheiten auffüllen bzw. überzählige abziehen
@@ -204,7 +204,7 @@ class Police {
       else if (u.mode === 'leave') {
         if (!u.driver.path || u.driver.done) {
           const p = this.nav.randomPoint(c.x, c.z, 250, 500);
-          if (p) { const loc = this.nav.locate(p.x, p.z); u.driver.setPath(resamplePath(this.nav.route(this.nav.costsFrom(loc), c.x, c.z, 600), 4)); }
+          if (p) { const loc = this.nav.locate(p.x, p.z); u.driver.setPath(resamplePath(this.nav.route(this.nav.costsFrom(loc, 150), c.x, c.z, 600), 4)); }
         }
         u.driver.maxSpeed = 14;
         input = u.driver.steer(dt, null, Infinity, others);

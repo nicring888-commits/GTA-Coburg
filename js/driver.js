@@ -18,7 +18,9 @@ class RoadNav {
     this.adj = Array.from({ length: this.n }, () => []);
     this.segGrid = new U.Grid(30);
     // Straßen, die durch Gebäude führen (Durchfahrten, die im 3D-Modell zu sind), meiden
+    // (nur in der Innenstadt nötig, wo die LoD2-Häuser über OSM-Straßen ragen)
     const blocked = e => {
+      if (world.region && !e.p.some((v, k) => k % 2 === 0 && world.inCoreRect(v, e.p[k + 1]))) return false;
       for (let k = 0; k + 2 < e.p.length; k += 2) {
         const ax = e.p[k], az = e.p[k + 1], bx = e.p[k + 2], bz = e.p[k + 3];
         const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 2.5));
@@ -59,8 +61,9 @@ class RoadNav {
     return best;
   }
 
-  // Dijkstra (Fahrzeit) von einem Punkt auf dem Netz aus; liefert Kosten zu jedem Knoten
-  costsFrom(loc) {
+  // Dijkstra (Fahrzeit) von einem Punkt auf dem Netz aus; liefert Kosten zu jedem Knoten.
+  // maxCost (Sekunden) begrenzt die Suche, damit sie im großen Landkreis-Netz schnell bleibt.
+  costsFrom(loc, maxCost = Infinity) {
     const dist = new Float64Array(this.n).fill(Infinity);
     const e = this.edges[loc.edge];
     const heap = [];
@@ -90,6 +93,7 @@ class RoadNav {
     while (heap.length) {
       const [d, node] = pop();
       if (d > dist[node]) continue;
+      if (d > maxCost) break;
       for (const ei of this.adj[node]) {
         const ed = this.edges[ei], other = ed.a === node ? ed.b : ed.a;
         push(other, d + ed.cost);
@@ -128,7 +132,7 @@ class RoadNav {
     this.appendEdge(e, start.s, node === e.a ? 0 : e.len, out);
     let len = node === e.a ? start.s : e.len - start.s;
     const ge = this.edges[goal.edge];
-    for (let guard = 0; guard < 400 && len < maxLen; guard++) {
+    for (let guard = 0; guard < 20000 && len < maxLen; guard++) {
       // am Zielkantenende angekommen?
       if (node === ge.a && Math.abs(dist[node] - goal.s / ge.s) < 1e-6) { this.appendEdge(ge, 0, goal.s, out); break; }
       if (node === ge.b && Math.abs(dist[node] - (ge.len - goal.s) / ge.s) < 1e-6) { this.appendEdge(ge, ge.len, goal.s, out); break; }
@@ -147,19 +151,23 @@ class RoadNav {
     return out;
   }
 
-  // Zufälliger Punkt auf dem Netz in einem Abstandsring um (x, z)
+  // Zufälliger Punkt auf dem Netz in einem Abstandsring um (x, z) (Abschnitte aus dem Suchraster)
   randomPoint(x, z, rMin, rMax, filter) {
+    const list = this.segGrid.query(x, z, rMax, []);
+    if (!list.length) return null;
     for (let tries = 0; tries < 300; tries++) {
-      const e = this.edges[Math.floor(Math.random() * this.edges.length)];
+      const code = list[Math.floor(Math.random() * list.length)];
+      const e = this.edges[Math.floor(code / 4096)], i = code % 4096 + 1;
       if (e.len < 8) continue;
-      const s = Math.random() * e.len;
-      let i = 1; while (i < e.cum.length - 1 && e.cum[i] < s) i++;
-      const t = (s - e.cum[i - 1]) / ((e.cum[i] - e.cum[i - 1]) || 1);
+      const t = Math.random();
       const px = e.p[(i - 1) * 2] + (e.p[i * 2] - e.p[(i - 1) * 2]) * t, pz = e.p[(i - 1) * 2 + 1] + (e.p[i * 2 + 1] - e.p[(i - 1) * 2 + 1]) * t;
       const d = Math.hypot(px - x, pz - z);
       if (d < rMin || d > rMax) continue;
-      const B = this.world.bounds;
-      if (px < B.minX + 20 || px > B.maxX - 20 || pz < B.minZ + 20 || pz > B.maxZ - 20) continue;
+      if (this.world.region) { if (!this.world.region.walkable(px, pz)) continue; }
+      else {
+        const B = this.world.bounds;
+        if (px < B.minX + 20 || px > B.maxX - 20 || pz < B.minZ + 20 || pz > B.maxZ - 20) continue;
+      }
       const dx = e.p[i * 2] - e.p[(i - 1) * 2], dz = e.p[i * 2 + 1] - e.p[(i - 1) * 2 + 1];
       const p = { x: px, z: pz, heading: Math.atan2(dx, dz) };
       if (filter && !filter(p)) continue;

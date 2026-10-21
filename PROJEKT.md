@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 1.5.0 „Grand Theft Coburg“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 2.0.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 21.10.2026
 
 ---
 
@@ -20,8 +20,11 @@ Schloss Ehrenburg bis zur Veste.
 und verkaufen, **Straßenrennen** gegen KI-Fahrer um Preisgeld und die **Polizei**, die mit Sternen fahndet, verfolgt,
 rammt, Straßensperren baut und festnimmt. Man startet am **Bahnhof** (Vorplatz an der Lossaustraße), ein Auto steht bereit.
 
-Kartenausschnitt: etwa 3,6 × 2,6 km (Breite 50,2470–50,2700, Länge 10,9420–10,9920). Er reicht vom Bahnhof im
-Nordwesten über die Altstadt und den Hofgarten bis zur Veste im Nordosten. Der Nullpunkt der Welt ist der Marktplatz.
+Kartenausschnitt: **seit v2.0.0 der ganze Landkreis Coburg mit der Stadt Coburg** (≈ 39,6 × 37,9 km, Breite
+50,074–50,411, Länge 10,690–11,225). Die Innenstadt (3,6 × 2,6 km vom Bahnhof bis zur Veste) bleibt das detaillierte
+Kerngebiet mit LoD2-Häusern, Fußgängern und Läden. Drumherum liegt das Umland in Kacheln von ≈ 1 km, die rund um den
+Spieler gebaut und wieder abgebaut werden: Gelände, Luftbild, Straßen, Häuser aus OSM und Bäume (siehe 5, „Umland“).
+Der Nullpunkt der Welt ist der Marktplatz.
 
 ## 2. Starten
 
@@ -56,9 +59,11 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Entkommen | Außer Sicht der Polizei bleiben und sich von der Stelle entfernen, an der sie dich zuletzt gesehen hat (Sterne blinken). Nach 8 s + 3,5 s je Stern ist die Fahndung vorbei: **ENTKOMMEN**, Belohnung € 150 je Stern |
 | Leben | Zu Fuß verletzen dich Autos (ab 18 km/h) und Explosionen; nach 8 s ohne Treffer heilt man langsam. Bei 0 oder im explodierenden Auto: **ERLEDIGT**, Krankenhaus € 100, Neustart am Bahnhof |
 | Rennen (blaue Säulen) | Im Auto in die Säule fahren, `F`: Countdown 3-2-1, drei KI-Gegner in Sportwagen (Kevin, Jessy, Dennis) mit Gummiband und Ausweichen. Gelbe Checkpoint-Säulen, Zielsäule kariert, Strecke gelb auf der Minikarte. Preisgeld für Platz 1–3, Bestzeiten werden gespeichert. Nur ohne Fahndung startbar |
-| Strecken | **Bahnhofs-Sprint** (2,1 km, Bahnhof → Theater → Ehrenburg → Rosengarten) · **Schnellweg-Rennen** (2,5 km, B 4 von Nord nach Süd) · **Veste-Bergrennen** (1,2 km bergauf zur Veste) · **Altstadt-Runde** (3,3 km Rundkurs) |
-| Lackiererei (grün) | Langsam hineinfahren: Reparatur € 100, mit Fahndung € 250 (neue Farbe, Sterne weg). Geht nicht, solange die Polizei dich sieht. Drei Stück: Nord, Süd, Ost |
-| Autohändler (orange) | `F`: Auto verkaufen; Preis je nach Typ und Zustand (Sportwagen bis € 1.400). Streifenwagen nimmt keiner |
+| Strecken (Stadt) | **Bahnhofs-Sprint** (2,1 km, Bahnhof → Theater → Ehrenburg → Rosengarten) · **Schnellweg-Rennen** (2,5 km, B 4 von Nord nach Süd) · **Veste-Bergrennen** (1,2 km bergauf zur Veste) · **Altstadt-Runde** (3,5 km Rundkurs) |
+| Strecken (Landkreis, seit v2.0.0) | **Callenberg-Bergsprint** (Coburg → Schloss Callenberg) · **Rosenau-Rallye** (6,7 km, Dörfles-Esbach → Rödental → Schloss Rosenau) · **Neustadt-Express** (9,3 km, Rödental → Mönchröden → Neustadt Markt) · **Rodachtal-Rennen** (12,8 km, Wiesenfeld → Meeder → Bad Rodach) · **Seßlach-Classic** (10,3 km, Weitramsdorf → Tambach → Seßlach) · **Itzgrund-Sprint** (Untersiemau → Großheirath → Rossach → Kaltenbrunn) · **Sonnefelder Runde** (21,5 km, Ebersdorf → Sonnefeld → Weidhausen → Ebersdorf) · **Lautertal-Tour** (Coburg-Neuses → Tiefenlauter → Froschgrundsee) · **Hohenstein-Hügelrennen** (7,8 km, Ahorn → Schloss Hohenstein → Scherneck) · **Großer Preis des Landkreises** (50,3 km, Bahnhof → Rödental → Neustadt → Fürth am Berg → Sonnefeld → Ebersdorf → Grub am Forst → Niederfüllbach → Coburg; € 9.000 für den Sieg). Wegpunkte als Breite/Länge (`geo` in `RACES`); auf langen Strecken liegen die Checkpoints weiter auseinander (≈ 45 je Strecke) |
+| Lackiererei (grün) | Langsam hineinfahren: Reparatur € 100, mit Fahndung € 250 (neue Farbe, Sterne weg). Geht nicht, solange die Polizei dich sieht. In der Stadt Nord, Süd, Ost; im Landkreis Rödental, Neustadt, Bad Rodach, Ebersdorf, Seßlach |
+| Autohändler (orange) | `F`: Auto verkaufen; Preis je nach Typ und Zustand (Sportwagen bis € 1.400). Streifenwagen nimmt keiner. Zwei in der Stadt, dazu Neustadt, Ebersdorf, Untersiemau |
+| Landkreis (seit v2.0.0) | Die Ortsanzeige zeigt Straße und Ort („Marktplatz · Neustadt bei Coburg“), beim Ankommen in einem Ort erscheint der Ortsname. Schnellreise zu 18 Orten (Rödental, Neustadt, Bad Rodach, Seßlach, Sonnefeld …) und Sehenswürdigkeiten (Schloss Rosenau, Callenberg, Hohenstein, Tambach, Muppberg …). Die Karte (`M`) zoomt von der Altstadt bis zum ganzen Landkreis mit Ortsnamen. Verkehr und Polizei fahren überall; am Rand (Landkreis + 600 m) ist Schluss |
 | Fußgänger (seit v1.1.0) | Bis zu 150 Passanten im Umkreis von 170 m, gut die Hälfte gezielt in der Fußgängerzone (Markt, Spitalgasse, Steinweg, Ketschengasse, Herrngasse …). Sie laufen über Fußwege, Plätze und Gehsteige (rechts der Laufrichtung), bleiben stehen, gehen zu zweit, darunter Kinder. Sie springen vor schnellen Autos zur Seite, fliehen bei Explosionen und vor der Hupe (`H`). Anfahren: Person fällt um, Zeugen rufen die Polizei (bei Polizei in Sichtweite sicher, sonst 40 %). Dazu ≈ 130 feste Figuren: Café-Gäste, Leute auf Bänken, Händler, Kunden am Bratwurststand |
 | Stadtdetails (seit v1.1.0) | ≈ 1.600 Straßenlaternen (bis 1,3 km um den Markt, nachts mit Lichtkegel am Boden), ≈ 120 Altstadtlaternen in der Fußgängerzone, gestreifte Markisen (≈ 280) und Ladenschilder (≈ 220, nachts leuchtend) an den Fassaden der Fußgängerzone, Café-Terrassen mit Sonnenschirmen vor echten Cafés und Restaurants aus OSM (≈ 90 Tische), Bänke, Mülleimer, Blumenkübel, abgestellte Fahrräder, 17 Brunnen mit Wasserstrahl (OSM `fountain`). Am Markt: Prinz-Albert-Denkmal, sechs Marktstände, Coburger-Bratwurststand mit Grillrauch und Kundschaft, 30 Tauben, die vor Spieler, Autos und Explosionen auffliegen. Stimmengewirr, je mehr Leute in der Nähe sind. Laternen, Bänke, Tische, Stände und Brunnen sind Hindernisse für Autos |
 | Wohnungen (seit v1.2.0) | Sieben kaufbare Wohnungen mit eigener Haustür an echten Fassaden (violette Säule, Schild mit Typ, Größe, Preis): Apartment Lossaustraße € 2.500 und Altbauwohnung Judengasse € 4.500 (klein), Stadtwohnung Mohrenstraße € 9.500, Loft am Steinweg € 12.000, Wohnung Ketschengasse € 14.000 (modern), Penthouse am Glockenberg € 38.000, Villa Leopoldstraße € 55.000 (Luxus). `F` an der Tür öffnet das Menü mit Grundriss, Ausstattung und Preis: **Besichtigen** (kostenlos), **Kaufen** (nur mit genug Geld), **Betreten**, **Garage**. Gekaufte Wohnungen leuchten gold |
@@ -80,10 +85,16 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Straßennetz für den KI-Verkehr | 898 Knoten / 1.031 Kanten | befahrbare Straßen |
 | Gelände | 73 × 52 Punkte im 50-m-Raster, 290–457 m ü. NN | EU-DEM 25 m über opentopodata.org |
 | Luftbilder (Boden und Dächer) | 24 Kacheln à ≈ 600 × 640 m, ≈ 0,6 m pro Pixel, 5 MB | DOP 40 der Bayerischen Vermessungsverwaltung (CC BY 4.0), WMS `geoservices.bayern.de/od/wms/dop/v1/dop40` |
-| Schnellreiseziele | 12 | Marktplatz, Rathaus, St. Moriz, Schloss Ehrenburg, Landestheater, Hofgarten, Veste, Albertsplatz, Kongresshaus Rosengarten, Bahnhof, Bismarckturm, Hexenturm |
+| Umland: Kacheln | 869 befahrbar + 188 Randkacheln (nur Gelände und Luftbild), je 20 × 20 Geländezellen ≈ 988 × 997 m | `tools/region-tiles.js` |
+| Umland: Gebäude | 78.786 | OSM `building`, Höhe aus `height`/`building:levels` oder geschätzt, Sattel-/Walm-/Flachdach |
+| Umland: Straßennetz | 11.660 Knoten / 13.613 Kanten, 1.899 km (Autobahn bis Wohnstraße, Tempo aus `maxspeed`) | OSM `highway`; ersetzt im Spiel das Netz der Innenstadt |
+| Umland: Gelände | 801 × 761 Punkte im Raster der Innenstadt (≈ 49,5 m), 246–815 m ü. NN; im Spiel ×4 verfeinert | Terrarium-Höhenkacheln (Mapzen/AWS Open Data, in Europa EU-DEM), Zoom 12; im Kern genau die Innenstadt-Werte, 900 m Übergang |
+| Umland: Luftbilder | 1.055 Kacheln à 512 × 512 px (≈ 1,9 m pro Pixel), 60 MB | Bayern: DOP 40 (CC BY 4.0); Thüringer Gebiet: GDI-Th `th_dop` (CC BY 4.0, „© GDI-Th“); Mischkacheln setzt der Browser zusammen |
+| Schnellreiseziele | 12 in der Stadt + 18 Orte und Sehenswürdigkeiten im Landkreis | Marktplatz, Rathaus, St. Moriz, Schloss Ehrenburg, Landestheater, Hofgarten, Veste, Albertsplatz, Kongresshaus Rosengarten, Bahnhof, Bismarckturm, Hexenturm |
 
 Kartendaten © OpenStreetMap-Mitwirkende (ODbL). Luftbilder und 3D-Gebäudemodelle LoD2: Bayerische
-Vermessungsverwaltung – www.geodaten.bayern.de (CC BY 4.0). Die Quellenangaben werden im Spiel unten rechts angezeigt
+Vermessungsverwaltung – www.geodaten.bayern.de (CC BY 4.0). Luftbilder Thüringen: © GDI-Th (CC BY 4.0). Höhen im
+Umland: Terrarium (Mapzen, AWS Open Data). Die Quellenangaben werden im Spiel unten rechts angezeigt
 und müssen dort bleiben.
 
 ## 5. Architektur
@@ -92,6 +103,7 @@ und müssen dort bleiben.
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen |
+| `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
 | `js/vehicle.js` | Automodelle (Pkw, Sportwagen mit Spoiler, Taxi mit Dachschild, Streifenwagen mit Blaulicht), Fahrwerte je Typ, Arcade-Fahrphysik (Längs- und Seitenhaftung, Handbremse, Steigung, Teilschritte gegen Durchtunneln), Schaden, Brand, Wrack, Auto-gegen-Auto-Kollision |
 | `js/traffic.js` | KI-Verkehr auf dem Straßennetz: fährt rechts, beachtet Einbahnstraßen, bremst vor Kurven, Hindernissen und dem Spieler |
@@ -115,6 +127,11 @@ und müssen dort bleiben.
 | `data/raw/` | Rohdaten: `coburg.osm.json`, `relations.osm.json`, `elevation.json` |
 | `data/raw/lod2/` | LoD2-Rohdaten: 9 CityGML-Kacheln `{ost}_{nord}.gml` (UTM 32N, ≈ 430 MB, werden vom Spiel nicht geladen) |
 | `tools/config.js` | Kartenausschnitt und Nullpunkt |
+| `tools/region-config.js`, `tools/region-tiles.js` | Umland: Landkreis-Relationen, Ausschnitt, Kachelgröße, Puffer; gemeinsame Kachel-Einteilung |
+| `tools/fetch-region-osm.js` | OSM fürs Umland in 30 Teilstücken (zu große werden geviertelt; `REVERSE=1` lädt von hinten, für einen zweiten Lauf parallel) |
+| `tools/fetch-region-elevation.js` | Terrarium-PNG-Kacheln (eigener PNG-Leser ohne Bibliothek) → `data/raw/region/elevation.json` |
+| `tools/fetch-region-ortho.js` | Luftbilder je Kachel nach `data/region/ortho/by…/th….jpg` und `data/region/ortho.js` |
+| `tools/convert-region.js` | → `data/region.js` (11 MB): Gelände (Int16, base64), Kachelzustände, Straßennetz, je Kachel Häuser, zugeschnittene Flächen, Bäume, Gewässer, Gleise; Orte |
 | `tools/utm.js` | Umrechnung UTM 32N (EPSG:25832) ↔ Länge/Breite (Krüger-Reihen, millimetergenau) |
 | `tools/fetch-osm.js` | Lädt die OSM-Daten über die Overpass-API (mit Ausweichservern) |
 | `tools/fetch-elevation.js` | Lädt das Höhenraster (≈ 38 Anfragen, 1 pro Sekunde) |
@@ -138,6 +155,11 @@ node tools/fetch-ortho.js     # bei geändertem Ausschnitt vorher den Ordner dat
 node tools/fetch-lod2.js      # lädt nur fehlende oder geänderte Kacheln
 node tools/convert-lod2.js    # nach jedem convert.js neu ausführen (Geländebezug und OSM-Namen)
 node tools/convert-shops.js   # nach Änderungen an recherche/pois-coburg.json
+# Umland (Landkreis), nach convert.js:
+node tools/fetch-region-osm.js        # Overpass, oft überlastet: dauert 1–2 Stunden
+node tools/fetch-region-elevation.js
+node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
+node tools/convert-region.js
 ```
 
 **Luftbilder in der Welt (`js/world.js`):** Jede Kachel ist ein eigenes Geländestück mit eigener Textur. Die Normalen
@@ -164,7 +186,29 @@ Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
+**Umland (`js/region.js`):** Das Geländegitter der Innenstadt wird nach außen fortgesetzt; Kachel (i, j) sind die Zellen
+20i…20i+20. Gelände, Straßen und Häuser einer Kachel werden gebaut, wenn der Spieler näher als 2 km ist (die Kachel
+unter ihm sofort, sonst höchstens eine pro Bild), Bäume unter 1,1 km; ab 2,8 km wird abgebaut. Im Kern rechnet weiter
+`world.js` (Innenstadt-Straßen werden am Kernrand abgeschnitten, außen zeichnet das Umland), sonst fragt `World` die
+geladenen Kacheln ab. Das Straßennetz des ganzen Landkreises ersetzt das der Innenstadt; Verkehr, Polizei und
+`randomPoint` suchen deshalb über Raster in Spielernähe, und Dijkstra hat eine Kostengrenze (`costsFrom(loc, maxCost)`).
+Gemessen: in Neustadt 56 Kacheln geladen, ≈ 0,9 Mio. Dreiecke, ≈ 10 ms pro Bild (Spiellogik und Zeichnen).
+
 ## 6. Stand
+
+- ✅ v2.0.0 (21.10.2026): **Der ganze Landkreis Coburg.**
+  - Umland in Kacheln mit echtem Gelände, Luftbildern (Bayern und Thüringer Grenzgebiet), allen Straßen von der A 73
+    bis zur Wohnstraße und 78.786 Häusern aus OSM; Bäume in Wäldern, Parks und Streuobstwiesen
+  - Verkehr, Polizei und Navigation auf dem Netz des ganzen Landkreises (1.899 km), Tempo nach `maxspeed`
+  - 10 neue Rennen durch den Landkreis (zusammen 14), darunter der „Große Preis des Landkreises“ über 50 km
+  - Lackierereien in Rödental, Neustadt, Bad Rodach, Ebersdorf, Seßlach; Autohändler in Neustadt, Ebersdorf, Untersiemau
+  - Ortsanzeige mit Ortsnamen, Schnellreise zu 18 Orten und Sehenswürdigkeiten, Karte bis zum ganzen Landkreis
+  - Getestet im Browser: Laden ohne Fehler, Kaltenbrunn, Rödental und Neustadt (Marktplatz) aus der Luft und von der
+    Straße, alle 14 Rennen werden gebaut, KI-Gegner fahren die Rosenau-Rallye, Karte, ≈ 10 ms pro Bild
+- ⚠️ Grenzen v2.0.0: Häuser im Umland stammen aus OSM (keine LoD2-Dachformen), die Fassaden sind erfunden. Luftbilder
+  haben 1,9 m pro Pixel (aus der Nähe unscharf, Dächer blass). Brücken und Autobahn folgen dem Gelände (keine Talbrücken).
+  Fußgänger, Laternen und Läden gibt es nur in der Innenstadt; ferne Bäume fehlen (nur Luftbild). Der „Große Preis“
+  dauert ≈ 20 Minuten. Ein Durchspielen mit Tastatur steht noch aus (getestet mit Skripten).
 
 - ✅ v0.1.0 (20.10.2026): spielbare erste Version.
   - Echte Coburger Innenstadt mit Gelände, Gebäuden, Straßen, Flüssen (Itz), Gleisen, Parks, Wald und Bäumen
@@ -360,7 +404,10 @@ Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen
 - [ ] Straßenlaternen und Ampeln (aus OSM `highway=street_lamp`, `traffic_signals`)
 - [ ] Touch-Steuerung für Smartphone und Tablet
 - [ ] Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)
-- [ ] Kartenausschnitt erweitern (z. B. Cortendorf, Ketschendorf) und Daten bei Bedarf kachelweise laden
+- [x] ~~Kartenausschnitt erweitern~~ Erledigt in v2.0.0 (ganzer Landkreis, kachelweise)
+- [ ] LoD2-Häuser für das ganze Umland (≈ 175 CityGML-Kacheln, mehrere GB; dann je Kachel als JSON nachladen)
+- [ ] Umland: Fußgänger und Laternen in den Ortskernen (Neustadt, Rödental, Bad Rodach, Seßlach), Wohnungen und Läden dort
+- [ ] Ferne Wälder als einfache Baumkulisse, Talbrücken der A 73 mit eigener Höhe, schärfere Luftbilder nah am Spieler
 - [ ] Polizeihubschrauber ab 4 Sternen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
 - [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)

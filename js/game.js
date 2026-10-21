@@ -86,6 +86,8 @@
     progress('Polizei und Rennstrecken …', 0.98);
     $('attr-ortho').classList.toggle('hidden', !world.ortho);
     $('attr-lod2').classList.toggle('hidden', !world.lod2);
+    $('attr-bvv').classList.toggle('hidden', !world.ortho && !world.lod2);
+    $('attr-th').classList.toggle('hidden', !(world.region && world.region.ortho && world.region.ortho.th));
     ui = new UI(world);
     ui.addLabels(scene);
     traffic = new Traffic(world, scene);
@@ -103,7 +105,7 @@
       addMoney: (n, why) => addMoney(n),
       adopt: c => { if (!wrecks.includes(c)) wrecks.push(c); },
     });
-    places = new Places({ world, scene, ui });
+    places = new Places({ world, scene, ui, nav });
     property = new Property({ world, scene, ui, save, persist, audio, addMoney, parkCarNear, parked, hemi, sun, cam,
       player: () => player, car: () => car, mode: () => mode, stars: () => police.stars, night: () => night,
       setIndoor, sleep, lockPointer,
@@ -114,6 +116,12 @@
     props.build();
     life = new TownLife(world, scene, peds, props, ui);
     spawn = bahnhofSpawn();
+    if (world.region) {
+      progress('Landkreis um den Bahnhof aufbauen …', 0.995);
+      world.region.ensure(spawn.x, spawn.z, 1400);
+      // Übersichtskarte des Landkreises nebenbei malen
+      setTimeout(() => world.region.paintMap((canvas, scale) => { world.regionMap = { canvas, scale }; }), 1500);
+    }
     respawn(true);
     progress('Fertig', 1);
     $('loading').classList.add('hidden');
@@ -424,6 +432,7 @@
 
   function travel(x, z, name) {
     ui.closeMap();
+    if (world.region) world.region.ensure(x, z); // Kacheln am Ziel sofort bauen
     if (mode === 'drive') {
       const r = world.nearestRoad(x, z, 400, drivable);
       if (r) {
@@ -709,6 +718,7 @@
   let hudTimer = 0;
   let prevPX = 0, prevPZ = 0;
   let burnWarned = null;
+  let lastTown = null;
   function loop(now) {
     requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -817,6 +827,7 @@
     T.speed = Math.hypot(T.vx, T.vz);
     prevPX = px; prevPZ = pz;
 
+    if (world.region) world.region.update(px, pz);
     const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars());
     traffic.update(dt, px, pz, obstacles);
     police.update(dt, T, cam.yaw);
@@ -861,7 +872,12 @@
       hudTimer = 0.25;
       const r = world.nearestRoad(px, pz, 35, s => !!s.n);
       const b = world.insideBuilding(px, pz, 0);
-      ui.setLocation(r ? r.seg.n : (b && b.n) || 'Coburg', mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : 'zu Fuß');
+      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : 'zu Fuß';
+      // im Landkreis: Ort zur Straße, beim Ankommen ein Ortsschild
+      const place = world.region && !world.inCoreRect(px, pz) ? world.region.placeAt(px, pz) : null;
+      const town = place ? place.n : 'Coburg';
+      if (town !== lastTown) { if (lastTown !== null && place) ui.toast(town, 2.2); lastTown = town; }
+      ui.setLocation(r ? r.seg.n : (b && b.n) || town, place ? town + ' · ' + how : how);
     }
     ui.setMoney(save.money);
     ui.setWanted(police.stars, police.stars > 0 && !police.seen);

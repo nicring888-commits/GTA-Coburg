@@ -8,6 +8,18 @@ const RACES = [
   { id: 'b4', name: 'Schnellweg-Rennen', wp: [[-628, -1150], [-560, -300], [-470, 600], [-446, 1180]], prize: [1100, 450, 180] },
   { id: 'veste', name: 'Veste-Bergrennen', wp: [[330, -240], [813, -330], [1110, -560]], prize: [1300, 550, 200] },
   { id: 'altstadt', name: 'Altstadt-Runde', wp: [[-128, 333], [-180, 120], [-120, -230], [183, -147], [250, 250], [-110, 345]], prize: [1500, 600, 250] },
+  // Landkreis (nur mit data/region.js): Wegpunkte als [Breite, Länge]
+  { id: 'callenberg', name: 'Callenberg-Bergsprint', geo: [[50.2648, 10.9440], [50.2782, 10.9213]], prize: [1400, 550, 200] },
+  { id: 'rosenau', name: 'Rosenau-Rallye', geo: [[50.2850, 10.9969], [50.2960, 11.0432], [50.2979, 11.0231]], prize: [2000, 800, 300] },
+  { id: 'neustadt', name: 'Neustadt-Express', geo: [[50.2960, 11.0432], [50.3003, 11.0581], [50.3273, 11.1238]], prize: [2600, 1000, 400] },
+  { id: 'rodachtal', name: 'Rodachtal-Rennen', geo: [[50.3008, 10.9079], [50.3204, 10.9083], [50.3411, 10.7785]], prize: [3600, 1400, 500] },
+  { id: 'sesslach', name: 'Seßlach-Classic', geo: [[50.2497, 10.8716], [50.2330, 10.8658], [50.1876, 10.8430]], prize: [2600, 1000, 400] },
+  { id: 'itzgrund', name: 'Itzgrund-Sprint', geo: [[50.2002, 10.9610], [50.1819, 10.9288], [50.1625, 10.9365], [50.1242, 10.8791]], prize: [3400, 1300, 500] },
+  { id: 'sonnefeld', name: 'Sonnefelder Runde', geo: [[50.2209, 11.0665], [50.2378, 11.1494], [50.2033, 11.1419], [50.2190, 11.0700]], prize: [4200, 1600, 600] },
+  { id: 'lautertal', name: 'Lautertal-Tour', geo: [[50.2850, 10.9620], [50.3362, 10.9698], [50.3563, 11.0231]], prize: [3000, 1200, 450] },
+  { id: 'hohenstein', name: 'Hohenstein-Hügelrennen', geo: [[50.2380, 10.9549], [50.2175, 10.9339], [50.2003, 10.9541]], prize: [2000, 800, 300] },
+  { id: 'grosserpreis', name: 'Großer Preis des Landkreises', geo: [[50.2627, 10.9579], [50.2850, 10.9969], [50.2960, 11.0432], [50.3273, 11.1238],
+    [50.2772, 11.1585], [50.2378, 11.1494], [50.2209, 11.0665], [50.2321, 11.0262], [50.2215, 10.9895], [50.2470, 10.9640]], prize: [9000, 3500, 1200] },
 ];
 const RIVALS = [
   { name: 'Kevin', color: '#f2c500', speed: 41, corner: 0.95 },
@@ -33,18 +45,29 @@ class Races {
   }
 
   build(def) {
-    const locs = def.wp.map(([x, z]) => this.nav.locate(x, z, 200));
-    if (locs.some(l => !l)) return null;
+    // Landkreis-Strecken stehen als [Breite, Länge] drin
+    let wp = def.wp;
+    if (def.geo) {
+      if (!this.world.region) return null;
+      const O = this.world.data.meta.origin, mLat = 110540, mLon = 111320 * Math.cos(O.lat * Math.PI / 180);
+      wp = def.geo.map(([lat, lon]) => [(lon - O.lon) * mLon, -(lat - O.lat) * mLat]);
+    }
+    const locs = wp.map(([x, z]) => this.nav.locate(x, z, 200));
+    if (locs.some(l => !l)) { console.warn('Rennen ohne Straße am Wegpunkt:', def.name); return null; }
     let raw = [];
     for (let i = 0; i + 1 < locs.length; i++) {
-      const seg = this.nav.route(this.nav.costsFrom(locs[i + 1]), locs[i].x, locs[i].z);
-      if (seg.length < 4) return null;
+      // Suche begrenzen (Fahrzeit): reicht für Umwege, bleibt im großen Netz schnell
+      const d = Math.hypot(locs[i + 1].x - locs[i].x, locs[i + 1].z - locs[i].z);
+      const seg = this.nav.route(this.nav.costsFrom(locs[i + 1], d / 6 + 90), locs[i].x, locs[i].z);
+      if (seg.length < 4) { console.warn('Rennen ohne Weg:', def.name, i); return null; }
       raw = raw.concat(raw.length ? seg.slice(2) : seg);
     }
     const path = resamplePath(raw, 4);
     const n = path.length / 2;
     const cps = [];
-    for (let i = 36; i < n - 15; i += 36) cps.push(i);
+    // Checkpoints alle ≈ 144 m, auf langen Landstraßen-Strecken weiter auseinander
+    const every = Math.max(36, Math.round(n / 45));
+    for (let i = every; i < n - 15; i += every) cps.push(i);
     cps.push(n - 1);
     const hx = path[6] - path[0], hz = path[7] - path[1];
     return { ...def, path, n, cps, length: (n - 1) * 4, x: path[0], z: path[1], heading: Math.atan2(hx, hz) };
@@ -53,6 +76,7 @@ class Races {
   addStartMarker(r) {
     const b = makeBeacon('#3aa0ff', 6, 26);
     b.position.set(r.x, this.world.heightAt(r.x, r.z) - 0.5, r.z);
+    if (this.world.region) this.world.region.anchor(b, r.x, r.z, -0.5);
     this.scene.add(b);
     r.beacon = b;
     this.makeLabel(r);
@@ -63,6 +87,7 @@ class Races {
     const best = this.save.best[r.id];
     const lab = makeLabel('Rennen: ' + r.name, '#3aa0ff', `${(r.length / 1000).toFixed(1)} km · ${best ? 'Bestzeit ' + fmtTime(best) : '1. Platz: € ' + r.prize[0]}`);
     lab.position.set(r.x, this.world.heightAt(r.x, r.z) + 9, r.z);
+    if (this.world.region) this.world.region.anchor(lab, r.x, r.z, 9);
     this.ui.addLabel(lab, this.scene);
     r.label = lab;
   }

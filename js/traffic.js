@@ -21,6 +21,10 @@ class Traffic {
     this.out = new Map();
     const add = (node, ei, dir) => { if (!this.out.has(node)) this.out.set(node, []); this.out.get(node).push([ei, dir]); };
     this.edges.forEach((e, i) => { add(e.a, i, 1); if (!e.o) add(e.b, i, -1); });
+    // Suchraster der Kanten, damit im großen Landkreis-Netz schnell Kanten in Spielernähe gefunden werden
+    this.grid = new U.Grid(150);
+    this.edges.forEach((e, i) => { const b = U.polyBBox(e.p); this.grid.insert(i, b.minX, b.minZ, b.maxX, b.maxZ); });
+    this._near = [];
   }
 
   // Punkt und Richtung bei Abstand s entlang der Kante (dir 1: a->b, -1: b->a)
@@ -39,14 +43,18 @@ class Traffic {
   }
 
   spawn(px, pz) {
+    const near = this.grid.query(px, pz, TRAFFIC.spawnMax, this._near);
+    if (!near.length) return null;
+    const q = {};
     for (let tries = 0; tries < 30; tries++) {
-      const ei = Math.floor(Math.random() * this.edges.length);
+      const ei = near[Math.floor(Math.random() * near.length)];
       const e = this.edges[ei];
-      const mi = Math.floor(e.p.length / 4) * 2;
-      const d = Math.hypot(e.p[mi] - px, e.p[mi + 1] - pz);
-      if (d < TRAFFIC.spawnMin || d > TRAFFIC.spawnMax) continue;
       const dir = e.o ? 1 : (Math.random() < 0.5 ? 1 : -1);
       const s = Math.random() * e.len;
+      this.sample(e, s, dir, q);
+      const d = Math.hypot(q.x - px, q.z - pz);
+      if (d < TRAFFIC.spawnMin || d > TRAFFIC.spawnMax) continue;
+      if (this.world.region && !this.world.region.walkable(q.x, q.z)) continue;
       if (this.cars.some(c => c.ai.edge === ei && Math.abs(c.ai.s - s) < 12)) continue;
       const r = Math.random();
       const kind = r < this.policeShare ? 'police' : r < this.policeShare + 0.1 ? 'taxi' : r < this.policeShare + 0.18 ? 'sport' : 'car';
