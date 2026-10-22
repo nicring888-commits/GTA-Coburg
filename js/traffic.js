@@ -121,7 +121,7 @@ class Traffic {
         if (ahead > 0 && ahead < 18 && side < 2.4) blocked = Math.min(blocked, ahead);
       };
       for (const o of obstacles) check(o.x, o.z);
-      for (const o of this.cars) if (o !== car) check(o.x, o.z);
+      for (const o of this.cars) if (o !== car && Math.abs(o.y - car.y) < 3) check(o.x, o.z);   // nicht unter/auf Brücken
 
       // Vor Kurven am Kantenende bremsen
       let target = e.s;

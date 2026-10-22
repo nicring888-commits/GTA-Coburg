@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.2.1 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 22.10.2026
+**Version:** 2.3.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 22.10.2026
 
 ---
 
@@ -209,6 +209,19 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- ✅ v2.3.0 (22.10.2026): **Robustere Autos, Leitplanken, Brücken über Straßen.**
+  - Autos halten viel mehr aus: Rempler bis ≈ 25 km/h kosten nichts, ein Frontalaufprall mit 100 km/h etwa ein
+    Fünftel (vorher fast zwei Drittel). Explosionen beschädigen Autos in der Nähe weiterhin stark
+  - Große Straßen im Umland (Autobahn, B 4, B 303, B 89, B 289 …): durchgezogene Randlinien; Leitplanken mit Pfosten
+    an beiden Seiten (Bundesstraßen der Klasse `primary` nur außerhalb der Orte), an Kreuzungen und Einmündungen offen;
+    zweibahnige Abschnitte haben damit eine Leitplanke im Mittelstreifen, breite Straßen mit Gegenverkehr eine
+    Mittelleitplanke, schmalere eine doppelte durchgezogene Mittellinie, Richtungsfahrbahnen eine Spurtrennung
+  - Leitplanken und Brückenkanten halten nur Autos auf und nur auf ihrer Höhe (`Region.collide` mit Höhe `y`): Wer
+    unter einer Brücke durchfährt, prallt nicht an deren Geländer ab
+  - Brücken über Straßen (78 im Landkreis) liegen jetzt 6,2 m über der Straße darunter. Die anschließenden Straßen
+    steigen als Rampen mit höchstens 7 % an (Stützmauern, ab 1,1 m Höhe mit Brüstung); Widerlager an den Brückenenden.
+    Markierungen liegen auch auf Brücken und Rampen. Der Verkehr bremst nicht mehr für Autos auf einer anderen Ebene
+  - Nur im Umland: die Innenstadt (`world.js`) hat weiter ihre flachen Brücken und keine Leitplanken
 - ✅ v2.2.1 (22.10.2026): **Sechs neue Automodelle, kein Blitzen mehr.**
   - Neue Modelle mit eigener Karosserie und eigenen Fahrwerten: Kleinwagen (€ 1.100), Kombi (€ 2.900), Kleinbus
     (€ 3.400), Pick-up mit Ladefläche (€ 4.200), Geländewagen mit Dachreling (€ 5.600), offenes Cabrio (€ 6.900).
