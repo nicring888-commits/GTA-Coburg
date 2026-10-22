@@ -2,7 +2,7 @@
 // biegen an Kreuzungen zufällig ab. Sie halten vor dem Spieler und vor anderen Autos.
 'use strict';
 
-const TRAFFIC = { count: 34, spawnMin: 90, spawnMax: 380, despawn: 470, lane: 1.7 };
+const TRAFFIC = { count: 64, spawnMin: 70, spawnMax: 380, despawn: 470, lane: 1.7 };
 
 class Traffic {
   constructor(world, scene) {
@@ -105,7 +105,7 @@ class Traffic {
       if (Math.hypot(c.x - px, c.z - pz) > TRAFFIC.despawn) { c.dispose(this.scene); this.cars.splice(i, 1); }
     }
     let spawned = 0;
-    while (this.cars.length < TRAFFIC.count && spawned++ < 3) if (!this.spawn(px, pz)) break;
+    while (this.cars.length < TRAFFIC.count && spawned++ < 4) if (!this.spawn(px, pz)) break;
 
     for (const car of this.cars) {
       const ai = car.ai, e = this.edges[ai.edge];
