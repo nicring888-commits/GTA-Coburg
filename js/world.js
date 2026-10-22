@@ -932,13 +932,13 @@ class World {
   }
 
   // Gestrichelte Linie (Länge dash, Lücke gap, halbe Breite hw) entlang der Polylinie
-  dashes(pts, dash, gap, hw, y, chunks, col) {
+  dashes(pts, dash, gap, hw, y, chunks, col, hf) {
     let acc = 0, on = true, startX = pts[0], startZ = pts[1];
     const emit = (ax, az, bx, bz) => {
       const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz);
       if (l < 0.05) return;
       const nx = -dz / l * hw, nz = dx / l * hw;
-      const p = (x, z) => [x, this.heightAt(x, z) + y, z];
+      const p = (x, z) => [x, (hf ? hf(x, z) : this.heightAt(x, z)) + y, z];
       const b = chunks.get(ax, az);
       const a1 = p(ax + nx, az + nz), a2 = p(ax - nx, az - nz), b1 = p(bx + nx, bz + nz), b2 = p(bx - nx, bz - nz);
       b.tri(a1, a2, b2, col, null, null, null, 0, 1, 0);
@@ -1692,7 +1692,8 @@ class World {
   }
 
   // Schiebt einen Kreis aus Gebäuden und Bäumen heraus. Gibt {x, z, nx, nz, hit} zurück.
-  collideCircle(x, z, r, out) {
+  // y: Höhe eines Autos (dann halten auch Leitplanken und Brückenkanten auf dieser Höhe auf)
+  collideCircle(x, z, r, out, y) {
     out = out || {};
     out.hit = false; out.nx = 0; out.nz = 0;
     const E = this.edges;
@@ -1732,7 +1733,7 @@ class World {
       }
       if (this.region) {
         out.x = x; out.z = z;
-        if (this.region.collide(out, r)) { x = out.x; z = out.z; moved = true; }
+        if (this.region.collide(out, r, y)) { x = out.x; z = out.z; moved = true; }
       }
       if (!moved) break;
     }
