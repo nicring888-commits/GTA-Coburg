@@ -405,7 +405,7 @@
     addMoney(-cost);
     let color = null;
     if (car.kind !== 'police' && car.kind !== 'taxi') {
-      const pal = car.kind === 'sport' ? SPORT_COLORS : CAR_COLORS;
+      const pal = kindPalette(car.kind);
       do color = pal[Math.floor(Math.random() * pal.length)]; while (pal.length > 1 && color === car.color);
       car.color = color;
     }

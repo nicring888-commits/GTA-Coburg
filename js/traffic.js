@@ -2,6 +2,8 @@
 // biegen an Kreuzungen zufällig ab. Sie halten vor dem Spieler und vor anderen Autos.
 'use strict';
 
+// Zivile Modelle im Verkehr (Mehrfachnennung = häufiger)
+const TRAFFIC_CIVIL = ['car', 'car', 'car', 'car', 'kleinwagen', 'kleinwagen', 'kombi', 'kombi', 'suv', 'van', 'pickup', 'cabrio'];
 const TRAFFIC = { count: 34, spawnMin: 90, spawnMax: 380, despawn: 470, lane: 1.7 };
 
 class Traffic {
@@ -57,7 +59,8 @@ class Traffic {
       if (this.world.region && !this.world.region.walkable(q.x, q.z)) continue;
       if (this.cars.some(c => c.ai.edge === ei && Math.abs(c.ai.s - s) < 12)) continue;
       const r = Math.random();
-      const kind = r < this.policeShare ? 'police' : r < this.policeShare + 0.1 ? 'taxi' : r < this.policeShare + 0.18 ? 'sport' : 'car';
+      const kind = r < this.policeShare ? 'police' : r < this.policeShare + 0.1 ? 'taxi' : r < this.policeShare + 0.18 ? 'sport'
+        : TRAFFIC_CIVIL[Math.floor(Math.random() * TRAFFIC_CIVIL.length)];
       const car = new Vehicle(this.scene, null, kind);
       car.ai = { edge: ei, dir, s, speed: e.s * 0.6, target: e.s, bumped: 0, next: null };
       this.cars.push(car);

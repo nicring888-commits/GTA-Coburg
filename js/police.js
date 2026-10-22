@@ -20,7 +20,7 @@ class Police {
     this.unseen = 0;
     this.seen = false;
     this.bust = 0;            // Fortschritt der Festnahme 0..1
-    this.spawnT = 0; this.blockT = 12; this.routeT = 0; this.speedT = 0;
+    this.spawnT = 0; this.blockT = 12; this.routeT = 0;
     this.costs = null;
     this.time = 0;
     this.sirenDist = Infinity;
@@ -154,15 +154,6 @@ class Police {
     if (!this.lastSeen) this.lastSeen = { x: T.x, z: T.z };
     const stars = this.stars;
     const wanted = stars > 0;
-
-    // Raser: Streife sieht den Spieler mit über 90 km/h vorbeifahren
-    this.speedT -= dt;
-    if (!wanted && T.inCar && T.speed > 25 && this.speedT <= 0) {
-      this.speedT = 0.5;
-      for (const c of this.traffic.cars) if (c.kind === 'police' && Math.hypot(c.x - T.x, c.z - T.z) < 45 && this.sees(c.x, c.z, T.x, T.z)) {
-        this.crime(0, 'Geblitzt! Die Streife hat dich gesehen', 1); break;
-      }
-    }
 
     // Wegekosten zum Spieler, gemeinsam für alle Verfolger
     this.routeT -= dt;
