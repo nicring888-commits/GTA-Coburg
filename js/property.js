@@ -43,8 +43,8 @@ function carSVG(kind, color) {
   if (S.roof) parts += poly(S.roof, color, ' stroke="#0005"');
   for (const [z0, y0, z1, y1] of S.pillars) parts += `<line x1="${X(z0)}" y1="${Y(y0)}" x2="${X(z1)}" y2="${Y(y1)}" stroke="${color}" stroke-width="3"/>`;
   for (const [bz, y0, y1] of carPosts(S)) parts += box(bz - 0.06, y0, bz + 0.06, y1, color);
-  // Anbauteile von der Seite (Dachreling, Bordwände, Sitzlehnen)
-  for (const [w, h, d, x, y, z] of S.extra || []) if (x >= 0) parts += box(z - d / 2, y - h / 2, z + d / 2, y + h / 2, '#222');
+  // flache Anbauteile von der Seite (Dachreling, Bordwände; Sitzlehnen des Cabrios nicht)
+  for (const [w, h, d, x, y, z] of S.extra || []) if (x >= 0 && h < 0.3) parts += box(z - d / 2, y - h / 2, z + d / 2, y + h / 2, '#222');
   if (kind === 'sport') parts += box(-2.18, 1.03, -1.78, 1.09, color, ' stroke="#0005"') + box(-2.0, 0.86, -1.94, 1.03, '#222');
   if (kind === 'taxi') parts += '<rect x="' + X(-0.78) + '" y="' + (Y(S.roofY) - 8) + '" width="26" height="8" rx="2" fill="#f6d23a" stroke="#0006"/><text x="' + X(-0.45) + '" y="' + (Y(S.roofY) - 1.5) + '" font-size="6" font-weight="800" text-anchor="middle" fill="#111">TAXI</text>';
   const [hz, hy] = S.head, [tz, ty] = S.tail;
