@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.1.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 2.2.1 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 22.10.2026
 
 ---
 
@@ -52,7 +52,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Was | Wie es funktioniert |
 |---|---|
 | Start | Vorplatz des Bahnhofs (zwischen Bahnhofsgebäude und Lossaustraße), rotes Auto am Straßenrand, Startgeld € 500 |
-| Autos | Pkw (158 km/h), Sportwagen (216 km/h, schnell beschleunigend), Taxi (elfenbein mit Dachschild), Streifenwagen (silber-blau, Blaulicht, „POLIZEI“). Jedes Auto im Verkehr lässt sich mit `E` klauen. Autos nehmen Schaden: erst Rauch, unter 25 % weniger Leistung, bei 0 % brennt das Auto und explodiert nach 4,5 s (Druckwelle beschädigt Autos und verletzt Fußgänger). Wracks qualmen und bleiben eine Weile liegen |
+| Autos | Kleinwagen (144 km/h), Pkw (158 km/h), Kombi (166 km/h), Kleinbus (144 km/h, sehr robust), Pick-up (162 km/h), Geländewagen (169 km/h, fast so robust wie ein Streifenwagen), Cabrio (194 km/h, offen), Sportwagen (216 km/h, schnell beschleunigend), Taxi (elfenbein mit Dachschild), Streifenwagen (silber-blau, Blaulicht, „POLIZEI“). Jedes Auto im Verkehr lässt sich mit `E` klauen. Autos nehmen Schaden: erst Rauch, unter 25 % weniger Leistung, bei 0 % brennt das Auto und explodiert nach 4,5 s (Druckwelle beschädigt Autos und verletzt Fußgänger). Wracks qualmen und bleiben eine Weile liegen |
 | Fahndung (★ 1–5) | Autodiebstahl, wenn ein Polizist oder ein Zeuge (30 %) es sieht · Unfall vor den Augen der Polizei · Polizeiauto rammen · Streifenwagen klauen (mind. 2 ★) · Polizist anfahren (mind. 2 ★) · Streifenwagen zerstören. Je länger die Polizei dich sieht, desto mehr Sterne |
 | Polizei | 2/3/4/5/7 Streifenwagen je Sternzahl; zuerst werden Streifen aus dem Verkehr alarmiert, sonst kommen neue außer Sicht hinzu. Sie fahren mit der normalen Fahrphysik über das Straßennetz (kürzester Weg), rammen aus der Nähe, halten neben einem langsamen Spieler an. Tempo wächst mit den Sternen (1 ★ ≈ 135 km/h, 5 ★ ≈ 175 km/h). Ab 3 ★ Straßensperren vor dem Spieler. Martinshorn (Tatü-tata), Blaulicht, blinkende Punkte auf der Minikarte |
 | Festnahme | Steht man still, steigt ein Polizist aus und rennt hinterher (etwas langsamer als der rennende Spieler). Erwischt er dich, füllt sich der Balken „Festnahme“ → **VERHAFTET**, Strafe € 100 + 100 je Stern, Neustart am Bahnhof |
@@ -72,7 +72,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Wohnungen (seit v1.2.0) | Sieben kaufbare Wohnungen mit eigener Haustür an echten Fassaden (violette Säule, Schild mit Typ, Größe, Preis): Apartment Lossaustraße € 2.500 und Altbauwohnung Judengasse € 4.500 (klein), Stadtwohnung Mohrenstraße € 9.500, Loft am Steinweg € 12.000, Wohnung Ketschengasse € 14.000 (modern), Penthouse am Glockenberg € 38.000, Villa Leopoldstraße € 55.000 (Luxus). `F` an der Tür öffnet das Menü mit Grundriss, Ausstattung und Preis: **Besichtigen** (kostenlos), **Kaufen** (nur mit genug Geld), **Betreten**, **Garage**. Gekaufte Wohnungen leuchten gold |
 | Innenräume | Drei Typen, beim Betreten Überblendung in einen eigenen Raum, beim Verlassen (`E` an der Wohnungstür) steht man wieder vor derselben Haustür. **Klein** (9 × 7 m, Altbau mit Dielen und Tapete: Bett, Kochnische, Tisch, Sofa, Fernseher, Bücherregal, Küchenradio). **Modern** (13 × 10 m, Fensterfront, Kücheninsel mit Hockern, Essplatz, Sofalandschaft, Großbild-TV, Hi-Fi, Schlafbereich hinter Glaswand). **Luxus** (19 × 14 m, Marmor, Panoramafenster, Whirlpool mit Wellen und Blasen, Bar mit beleuchtetem Flaschenregal, Flügel, Kamin mit Flammen, Kino-TV, Kronleuchter, Schlafpodest). Blick aus dem Fenster auf Altstadtdächer und Veste, nachts mit Lichtern |
 | Interaktionen drinnen | `E`: Schlafen (Leben voll, Tag/Nacht wechselt, Spiel gespeichert), Fernseher (Coburg TV mit Laufband, Fußball, Stadtansicht), Licht an/aus, Radio/Musik (kleine Akkordschleife), Snack/Espresso/Drink (+30 Leben), Whirlpool (Leben voll), Klavier spielen, Kamin. `F`: Kaufen bzw. Infos. Bei Besichtigung gehen Schlafen und Essen erst nach dem Kauf. Mit Fahndung kommt man nicht hinein |
-| Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Pkw € 1.800, Taxi € 2.400, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
+| Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Kleinwagen € 1.100, Pkw € 1.800, Taxi € 2.400, Kombi € 2.900, Kleinbus € 3.400, Pick-up € 4.200, Geländewagen € 5.600, Cabrio € 6.900, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
 | Garage (`G`) | Eigene Autos (bis 8): Zustand, Farbe und Ort werden gespeichert. **Rausfahren/Herholen** stellt das Auto an den nächsten Straßenrand (immer nur eins draußen, das andere fährt zurück), **Einparken**, zerstörte Autos **reparieren** (20 % des Kaufpreises). Lackiererei ändert die gespeicherte Farbe, Verkauf beim Händler entfernt das Auto aus der Garage. Eigenes Auto: gelber Punkt auf Minikarte und Stadtplan, Einsteigen ohne Fahndung |
 | Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
 
@@ -209,9 +209,12 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- ✅ v2.2.1 (22.10.2026): **Mehr Verkehr, kein Blitzen mehr.**
+- ✅ v2.2.1 (22.10.2026): **Sechs neue Automodelle, kein Blitzen mehr.**
+  - Neue Modelle mit eigener Karosserie und eigenen Fahrwerten: Kleinwagen (€ 1.100), Kombi (€ 2.900), Kleinbus
+    (€ 3.400), Pick-up mit Ladefläche (€ 4.200), Geländewagen mit Dachreling (€ 5.600), offenes Cabrio (€ 6.900).
+    Alle im Autohaus kaufbar und in der Garage, außerdem fahren sie im Verkehr mit (und lassen sich klauen)
+  - Die Seitenansichten im Autohaus und in der Garage werden jetzt aus dem Seitenprofil der 3D-Modelle gezeichnet
   - Zu schnelles Fahren an einer Streife vorbei löst keine Fahndung mehr aus
-  - Fast doppelt so viele Autos im Verkehr (64 statt 34), sie tauchen etwas näher am Spieler auf (ab 70 m statt 90 m)
 - 🚧 v2.2.0 (21.10.2026, Zwischenstand): **Grafik realistischer.**
   - Filmische Tonwertkurve (ACES), Schattenkarte 4096 px (wenn die Grafikkarte es kann), Sichtweite bis ≈ 2,9 km
   - Neues Modul `js/atmosphere.js`: Himmelskuppel mit Sonne, Wolken, Sternen; fließender Tag-Nacht-Wechsel; Wetter
@@ -257,7 +260,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - ✅ v0.1.0 (20.10.2026): spielbare erste Version.
   - Echte Coburger Innenstadt mit Gelände, Gebäuden, Straßen, Flüssen (Itz), Gleisen, Parks, Wald und Bäumen
   - Laufen (rennen, springen) und Autofahren (Driften, Steigungen), Ein-/Aussteigen, KI-Autos übernehmen
-  - KI-Verkehr mit 64 Autos rund um den Spieler (bis v2.2.0: 34)
+  - KI-Verkehr mit 34 Autos rund um den Spieler
   - Minikarte, Stadtplan mit Schnellreise, Straßenname im HUD, Tacho, schwebende Ortsschilder
   - Tag/Nacht mit leuchtenden Fenstern, Sternenhimmel und Scheinwerfern; Motor- und Hupenton
 - ✅ Getestet im Browser: Laden ohne Fehler, ≈ 60 Bilder/s, Fahren durch Herrngasse/Theatergasse/Goethestraße,

@@ -18,8 +18,14 @@ const CAR_SHOPS = [
 ];
 // Neuwagen: dieselben Modelle und Fahrwerte wie im Verkehr
 const SHOP_MODELS = [
+  { kind: 'kleinwagen', title: 'Kleinwagen', tag: 'Wendig, sparsam, passt in jede Altstadtlücke', price: 1100, colors: CAR_COLORS },
   { kind: 'car', title: 'Pkw', tag: 'Solide Limousine für jeden Tag', price: 1800, colors: CAR_COLORS },
   { kind: 'taxi', title: 'Taxi', tag: 'Robust, mit Dachschild', price: 2400, colors: ['#efe6c4'] },
+  { kind: 'kombi', title: 'Kombi', tag: 'Viel Platz und flott auf der Landstraße', price: 2900, colors: CAR_COLORS },
+  { kind: 'van', title: 'Kleinbus', tag: 'Hoch, schwer und kaum kaputtzukriegen', price: 3400, colors: CAR_COLORS },
+  { kind: 'pickup', title: 'Pick-up', tag: 'Mit offener Ladefläche, rammt gut', price: 4200, colors: CAR_COLORS },
+  { kind: 'suv', title: 'Geländewagen', tag: 'Hoch, fast so robust wie ein Streifenwagen, mit Dachreling', price: 5600, colors: CAR_COLORS },
+  { kind: 'cabrio', title: 'Cabrio', tag: 'Offen, 194 km/h, für die Sonne über der Veste', price: 6900, colors: SPORT_COLORS },
   { kind: 'sport', title: 'Sportwagen', tag: 'Spoiler, 216 km/h, zieht wie verrückt', price: 9500, colors: SPORT_COLORS },
 ];
 const GARAGE_SLOTS = 8;
@@ -27,20 +33,24 @@ const PROP_COLOR = { flat: '#b57cff', home: '#e9b949', shop: '#2ed3c6' };
 
 const euro = n => '€ ' + (Math.abs(n - Math.round(n)) > 0.004 ? n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(n).toLocaleString('de-DE'));
 
-// Seitenansicht eines Autos als SVG (für Autohaus und Garage)
+// Seitenansicht eines Autos als SVG (für Autohaus und Garage), gezeichnet aus dem Seitenprofil des 3D-Modells
 function carSVG(kind, color) {
-  const body = kind === 'sport'
-    ? 'M8 57 L12 45 Q16 39 30 38 L62 36 L86 25 Q93 22 104 22 L128 22 Q137 22 143 27 L160 36 L184 39 Q195 41 195 49 L195 57 Z'
-    : 'M8 57 L12 42 Q16 35 30 34 L56 32 L76 17 Q83 12 94 12 L134 12 Q142 12 148 18 L162 32 L184 35 Q195 37 195 47 L195 57 Z';
-  const win = kind === 'sport'
-    ? '<path d="M90 28 Q95 26 104 26 L114 26 L114 36 L70 36 Z M120 26 L128 26 Q134 26 139 30 L148 36 L120 36 Z" fill="#1e2730"/>'
-    : '<path d="M84 18 Q89 16 96 16 L112 16 L112 31 L64 31 Z M118 16 L132 16 Q139 16 143 21 L152 31 L118 31 Z" fill="#1e2730"/>';
-  const extra = kind === 'sport' ? '<rect x="172" y="30" width="22" height="4" rx="1" fill="' + color + '" stroke="#0005"/><rect x="182" y="33" width="3" height="6" fill="#222"/>'
-    : kind === 'taxi' ? '<rect x="104" y="4" width="26" height="8" rx="2" fill="#f6d23a" stroke="#0006"/><text x="117" y="10.5" font-size="6" font-weight="800" text-anchor="middle" fill="#111">TAXI</text>' : '';
-  const wheel = x => `<circle cx="${x}" cy="57" r="12" fill="#151515"/><circle cx="${x}" cy="57" r="6" fill="#b8bcc0"/>`;
-  return `<svg viewBox="0 0 204 76" class="car-svg"><ellipse cx="102" cy="69" rx="92" ry="5" fill="#0006"/>
-    <path d="${body}" fill="${color}" stroke="#0007" stroke-width="1.5"/>${win}${extra}
-    <rect x="186" y="42" width="8" height="4" fill="#fff6dd"/><rect x="8" y="44" width="6" height="4" fill="#c0392b"/>${wheel(50)}${wheel(156)}</svg>`;
+  const S = CAR_SHAPES[carShapeKey(kind)];
+  const X = z => (102 + z * 40).toFixed(1), Y = y => (69 - y * 34).toFixed(1);
+  const poly = (pts, fill, extra = '') => `<path d="M${pts.map(([z, y]) => X(z) + ' ' + Y(y)).join(' L')} Z" fill="${fill}"${extra}/>`;
+  const box = (z0, y0, z1, y1, fill, extra = '') => `<rect x="${X(Math.min(z0, z1))}" y="${Y(Math.max(y0, y1))}" width="${(Math.abs(z1 - z0) * 40).toFixed(1)}" height="${(Math.abs(y1 - y0) * 34).toFixed(1)}" fill="${fill}"${extra}/>`;
+  let parts = poly(S.body, color, ' stroke="#0007" stroke-width="1.5"') + poly(S.cabin, '#1e2730');
+  if (S.roof) parts += poly(S.roof, color, ' stroke="#0005"');
+  for (const [z0, y0, z1, y1] of S.pillars) parts += `<line x1="${X(z0)}" y1="${Y(y0)}" x2="${X(z1)}" y2="${Y(y1)}" stroke="${color}" stroke-width="3"/>`;
+  for (const [bz, y0, y1] of carPosts(S)) parts += box(bz - 0.06, y0, bz + 0.06, y1, color);
+  // Anbauteile von der Seite (Dachreling, Bordwände, Sitzlehnen)
+  for (const [w, h, d, x, y, z] of S.extra || []) if (x >= 0) parts += box(z - d / 2, y - h / 2, z + d / 2, y + h / 2, '#222');
+  if (kind === 'sport') parts += box(-2.18, 1.03, -1.78, 1.09, color, ' stroke="#0005"') + box(-2.0, 0.86, -1.94, 1.03, '#222');
+  if (kind === 'taxi') parts += '<rect x="' + X(-0.78) + '" y="' + (Y(S.roofY) - 8) + '" width="26" height="8" rx="2" fill="#f6d23a" stroke="#0006"/><text x="' + X(-0.45) + '" y="' + (Y(S.roofY) - 1.5) + '" font-size="6" font-weight="800" text-anchor="middle" fill="#111">TAXI</text>';
+  const [hz, hy] = S.head, [tz, ty] = S.tail;
+  parts += box(hz - 0.2, hy - 0.06, hz + 0.05, hy + 0.06, '#fff6dd') + box(tz - 0.02, ty - 0.06, tz + 0.15, ty + 0.06, '#c0392b');
+  const wheel = z => `<circle cx="${X(z)}" cy="${Y(CAR.wheelR)}" r="${(CAR.wheelR * 34).toFixed(1)}" fill="#151515"/><circle cx="${X(z)}" cy="${Y(CAR.wheelR)}" r="6" fill="#b8bcc0"/>`;
+  return `<svg viewBox="0 0 204 76" class="car-svg"><ellipse cx="102" cy="69" rx="92" ry="5" fill="#0006"/>${parts}${wheel(WHEEL_Z)}${wheel(-WHEEL_Z)}</svg>`;
 }
 
 class Property {
