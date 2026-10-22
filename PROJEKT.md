@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.3.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 22.10.2026
+**Version:** 2.4.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 22.10.2026
 
 ---
 
@@ -209,6 +209,13 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- ✅ v2.4.0 (22.10.2026): **Neue Fahrphysik zum Driften.**
+  - Das Auto hat jetzt eine eigene Gierrate mit Trägheit und eine Haftgrenze der Reifen (`Vehicle.update`):
+    Normales Fahren haftet, zu schnell in die Kurve schiebt das Heck leicht. Vollgas in der Kurve hält einen Drift von
+    ≈ 30°, die Handbremse (`Leertaste`) lässt das Heck kommen, Gegenlenken fängt das Auto ab, ohne Gas ziehen die
+    Reifen es von selbst gerade. Rutschen kostet Tempo. KI-Autos (Polizei, Rennfahrer) fahren wie bisher
+  - Bremsspuren auf der Fahrbahn (Ringpuffer mit 900 Stücken, `FX.skid`), Reifenqualm und Reifenquietschen beim
+    Rutschen, Handbremsen und harten Bremsen; nach einem Drift über 1,4 s zeigt eine Meldung Strecke und Dauer
 - ✅ v2.3.0 (22.10.2026): **Robustere Autos, Leitplanken, Brücken über Straßen.**
   - Autos halten viel mehr aus: Rempler bis ≈ 25 km/h kosten nichts, ein Frontalaufprall mit 100 km/h etwa ein
     Fünftel (vorher fast zwei Drittel). Explosionen beschädigen Autos in der Nähe weiterhin stark

@@ -223,6 +223,28 @@
   };
   $('help-close').onclick = () => { $('help').classList.add('hidden'); };
 
+  // ---------- Reifen: Bremsspuren, Qualm, Quietschen, Drift-Anzeige ----------
+  let driftT = 0, driftM = 0;
+  function tireMarks(c, input, dt) {
+    const sp = Math.hypot(c.vx, c.vz), slip = Math.abs(c.slip || 0);
+    const braking = input.throttle < 0 && c.speed > 14;
+    const level = c.wrecked ? 0 : U.clamp(Math.max((slip - 0.14) * 2.5, input.handbrake && sp > 4 ? 0.7 : 0, braking ? 0.45 : 0), 0, 1) * Math.min(1, sp / 8);
+    audio.squeal(level * 0.6);
+    const fx0 = Math.sin(c.heading), fz0 = Math.cos(c.heading), rx = -fz0, rz = fx0;
+    for (const w of [0, 1]) {
+      if (level < 0.25) { fx.skid(w, null); continue; }
+      const sd = w ? 1 : -1, x = c.x + rx * WHEEL_X * sd - fx0 * WHEEL_Z, z = c.z + rz * WHEEL_X * sd - fz0 * WHEEL_Z;
+      fx.skid(w, x, c.y + 0.13, z);   // knapp über Fahrbahn und Markierungen
+      if (Math.random() < level * dt * 14) fx.smoke(x, c.y + 0.3, z, 0.05);
+    }
+    // Drift: Zeit und Strecke mitzählen, bei langen Drifts kurz anzeigen
+    if (slip > 0.3 && sp > 8 && !input.handbrake) { driftT += dt; driftM += sp * dt; }
+    else if (slip < 0.15) {
+      if (driftT > 1.4) ui.toast(`Drift! ${Math.round(driftM)} m · ${driftT.toFixed(1).replace('.', ',')} s`, 1.6);
+      driftT = 0; driftM = 0;
+    }
+  }
+
   // ---------- Ton ----------
   const audio = {
     ctx: null,
@@ -258,6 +280,13 @@
         const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.8;
         this.crowdGain = c.createGain(); this.crowdGain.gain.value = 0;
         src.connect(bp); bp.connect(this.crowdGain); this.crowdGain.connect(this.master); src.start();
+        // Reifenquietschen: Rauschen durch einen schmalen Bandpass
+        const sq = c.createBuffer(1, c.sampleRate, c.sampleRate), sd = sq.getChannelData(0);
+        for (let i = 0; i < sd.length; i++) sd[i] = Math.random() * 2 - 1;
+        const ss = c.createBufferSource(); ss.buffer = sq; ss.loop = true;
+        this.squealBp = c.createBiquadFilter(); this.squealBp.type = 'bandpass'; this.squealBp.frequency.value = 1700; this.squealBp.Q.value = 9;
+        this.squealGain = c.createGain(); this.squealGain.gain.value = 0;
+        ss.connect(this.squealBp); this.squealBp.connect(this.squealGain); this.squealGain.connect(this.master); ss.start();
       } catch (e) { this.ctx = null; }
     },
     engine(on, speed, throttle) {
@@ -270,6 +299,13 @@
       this.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
       this.filter.frequency.setTargetAtTime(350 + Math.abs(throttle) * 900 + rpm * 400, t, 0.08);
       this.engGain.gain.setTargetAtTime(on ? 0.11 + Math.abs(throttle) * 0.12 : 0, t, 0.1);
+      if (!on) this.squeal(0);
+    },
+    squeal(v) {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      this.squealGain.gain.setTargetAtTime(v * 0.5, t, 0.06);
+      this.squealBp.frequency.setTargetAtTime(1500 + v * 500, t, 0.1);
     },
     horn(on) { if (this.ctx) this.hornGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, 0.02); },
     siren(vol) {
@@ -796,6 +832,7 @@
       car.sync();
       if (car.lastImpact > 3) audio.thump(car.lastImpact);
       audio.engine(true, car.speed, input.throttle);
+      tireMarks(car, input, dt);
       audio.horn(!!keys.KeyH);
       if (pressed.KeyH) peds.panic(car.x + Math.sin(car.heading) * 7, car.z + Math.cos(car.heading) * 7, 8, 0.5); // Hupe: aus dem Weg!
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
@@ -934,7 +971,7 @@
 
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
-    get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
+    get police() { return police; }, get fx() { return fx; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
