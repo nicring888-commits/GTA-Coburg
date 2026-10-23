@@ -124,7 +124,7 @@ class Pedestrians {
     if (buddy) { p.speed = buddy.speed; p.dir = buddy.dir; p.t = Math.max(0, buddy.t - 0.3); }
     this.pickLat(p); p.lat = p.latT;
     const q = this.pos(p, {});
-    p.x = q.x; p.z = q.z; p.y = this.world.heightAt(q.x, q.z); p.heading = Math.atan2(q.dx, q.dz);
+    p.x = q.x; p.z = q.z; p.y = this.world.groundAt(q.x, q.z); p.heading = Math.atan2(q.dx, q.dz);
     this.list.push(p);
     return p;
   }
@@ -159,7 +159,7 @@ class Pedestrians {
 
   // Café-Gast, Bankbesucher oder Kunde am Stand (fest an einem Ort; state 'sit' oder 'stand')
   addSitter(x, z, heading, state = 'sit') {
-    const p = this.look({ x, z, y: this.world.heightAt(x, z), heading, state, phase: this.rnd() * 6, moving: 0 });
+    const p = this.look({ x, z, y: this.world.groundAt(x, z), heading, state, phase: this.rnd() * 6, moving: 0 });
     p.scale = 0.92 + this.rnd() * 0.12;
     this.sitters.push(p);
   }
@@ -271,7 +271,7 @@ class Pedestrians {
         if (ml > 0.02) p.heading += U.wrapAngle(Math.atan2(q.dx, q.dz) - p.heading) * Math.min(1, dt * 6);
         p.phase += dt * p.speed * 2.6; p.moving = p.speed;
       }
-      p.y = this.world.heightAt(p.x, p.z);
+      p.y = this.world.groundAt(p.x, p.z, p.y);
     }
 
     // Autos: Ausweichen, Umfahren, Wegschieben

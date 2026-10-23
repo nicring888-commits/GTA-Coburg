@@ -19,9 +19,10 @@ const REGION = {
 };
 // Brücken über Straßen: Fahrbahn so hoch über der unteren Straße (m), Rampen höchstens so steil
 const BRIDGE = { lift: 6.2, slope: 0.07, step: 4 };
-// große Straßen (Bundesstraßen, Autobahn): Randlinien, Mittelstreifen, Leitplanken
+// große Straßen (Bundesstraßen, Autobahn): Randlinien, Mittelstreifen, Leitplanken. Eine Mittelleitplanke gibt es nur
+// zwischen getrennten Richtungsfahrbahnen (in OSM zwei Einbahn-Linien, jede mit ihrer eigenen Leitplanke am Rand);
+// Straßen mit Gegenverkehr bekommen eine doppelte durchgezogene Linie, auch wenn sie breit sind.
 const BIG_ROADS = /^(motorway|motorway_link|trunk|trunk_link|primary)$/;
-const BIG_MEDIAN_W = 10;   // zweibahnige Straßen ab dieser Breite bekommen eine Mittelleitplanke
 // Schnittpunkt der Strecken a-b und c-d als Anteil t auf a-b (sonst null)
 function segHit(ax, az, bx, bz, cx, cz, dx, dz) {
   const rx = bx - ax, rz = bz - az, sx = dx - cx, sz = dz - cz, den = rx * sz - rz * sx;
@@ -143,11 +144,12 @@ class Region {
   }
 
   // Straße (oder flache Brücke) in der Nähe? Hohe Brücken zählen nicht: unter ihnen bleibt das Wasser.
-  roadNear(x, z, margin) {
+  // carve: fürs Ausheben der Gewässer; dann zählen auch niedrige Brücken nicht (unter ihnen fließt das Wasser durch)
+  roadNear(x, z, margin, carve) {
     const list = this.netGrid.query(x, z, 14, this._rq || (this._rq = []));
     for (const code of list) {
       const e = this.graph.edges[Math.floor(code / 4096)], k = (code % 4096) * 2;
-      if (e.deck) continue;
+      if (e.deck && (!e.deck.low || carve)) continue;
       const c = U.closestOnSeg(x, z, e.p[k], e.p[k + 1], e.p[k + 2], e.p[k + 3]);
       if (Math.hypot(c[0] - x, c[1] - z) < e.w / 2 + margin) return true;
     }
@@ -243,10 +245,18 @@ class Region {
     }
     for (const [ei, B] of decks) {
       const e = E[ei], p = B.p, n = p.length / 2;
-      // nur echte Hochbrücken und Rampen: irgendwo mindestens 1,5 m (Rampen 0,5 m) über dem Gelände
-      let gap = 0;
-      for (let j = 0; j < B.prof.length; j++) gap = Math.max(gap, B.prof[j] - ground(B, j));
-      if (gap < (B.ramp ? 0.5 : 1.5)) continue;
+      // Hochbrücken und Rampen: irgendwo mindestens 1,5 m (Rampen 0,5 m) über dem Gelände. Flachere Brücken (über
+      // Bäche, Flüsse, Gräben) werden niedrige Brücken: leicht gewölbt, darunter wird das Gewässer ausgehoben
+      let gap = 0, low = Infinity;
+      for (let j = 0; j < B.prof.length; j++) { const g = ground(B, j); gap = Math.max(gap, B.prof[j] - g); low = Math.min(low, B.prof[j] - g); }
+      if (gap < (B.ramp ? 0.5 : 1.5)) {
+        if (B.ramp || B.len < LOW_BRIDGE.minLen) continue;
+        // über einer Kuppe würde die gerade Platte im Boden stecken: dann bleibt die Straße auf dem Gelände
+        if (low < -0.3) continue;
+        const hA = B.prof[0], hB = B.prof[B.prof.length - 1];
+        for (let j = 0; j < B.prof.length; j++) B.prof[j] = lowBridgeH(hA, hB, B.len, Math.min(B.len, j * step));
+        B.low = true;
+      }
       e.deck = B;
       this.bridges.push(B);
       for (let i = 0; i < n - 1; i++) this.bridgeGrid.insert({ B, i }, Math.min(p[i * 2], p[i * 2 + 2]) - e.w, Math.min(p[i * 2 + 1], p[i * 2 + 3]) - e.w,
@@ -276,10 +286,11 @@ class Region {
     return best;
   }
   groundAt(x, z, y) {
-    const h = this.world.heightAt(x, z);
-    if (!this.bridges.length) return h;
-    const d = this.deckAt(x, z);
+    let h = this.world.heightAt(x, z);
+    const d = this.bridges.length ? this.deckAt(x, z) : null;
     if (d !== null && d > h + 0.2 && (y === undefined || y > d - 2.5)) return d;
+    // neben Gewässern liegt die Fahrbahn auf dem Gelände ohne Bett (wie sie gezeichnet ist)
+    if (!this.inCore(x, z)) { const h0 = this.heightAt0(x, z); if (h0 > h + 0.01 && this.roadNear(x, z, 0.3)) h = h0; }
     return h;
   }
 
@@ -356,7 +367,7 @@ class Region {
     t.hg = Float32Array.from(g);
     const x0 = this.tileX(t.ti) - this.fx, z0 = this.tileZ(t.tj) - this.fz;
     t.waterAll.carveGrid(t.hg, S * S, i => [x0 + (i % S) * this.fx, z0 + Math.floor(i / S) * this.fz],
-      (x, z) => this.inCore(x, z) || this.roadNear(x, z, WATER.roadGap));
+      (x, z) => this.inCore(x, z) || this.roadNear(x, z, WATER.roadGap, true));
   }
   // Gewässer einer Kachel (Flächen und Mittellinien), zwischengespeichert
   waterOf(ti, tj) {
@@ -696,7 +707,9 @@ class Region {
       const B = e.deck;
       const sAt = [];
       if (B) { let acc = B.cum[run.k0]; sAt.push(acc); for (let i = 1; i < n; i++) { acc += Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]); sAt.push(acc); } }
-      const hAt = (x, z, i) => B ? this.deckH(B, sAt[i]) : W.heightAt(x, z);
+      // Fahrbahn: auf Brücken die Platte, sonst das Gelände ohne ausgehobene Gewässer (kein Wasser auf der Straße)
+      const roadAt = (x, z) => this.heightAt0(x, z);
+      const hAt = (x, z, i) => B ? this.deckH(B, sAt[i]) : roadAt(x, z);
       const L = [], R = [];
       for (let i = 0; i < n; i++) {
         const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
@@ -713,7 +726,11 @@ class Region {
         L.push([x + nx, hAt(x + nx, z + nz, i) + y, z + nz]);
         R.push([x - nx, hAt(x - nx, z - nz, i) + y, z - nz]);
       }
-      if (B) this.bridgeStructure(t, B, pts, sAt, L, R);
+      if (B && B.low) {
+        const water = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0 ? this.heightAt0(x, z) - WATER.surface : -Infinity;
+        lowBridgeParts(t.bridgeParts || (t.bridgeParts = new Chunks()), pts, L, R, (x, z) => W.heightAt(x, z), water, false);
+      } else if (B) this.bridgeStructure(t, B, pts, sAt, L, R);
+      else W.bankSkirt(roads, L, R);
       for (let i = 0; i < n - 1; i++) {
         const b = roads.get(pts[i * 2], pts[i * 2 + 1]);
         b.tri(L[i], R[i], R[i + 1], col, null, null, null, 0, 1, 0);
@@ -726,15 +743,15 @@ class Region {
       if (!B && run.k1 === e.p.length / 2 - 1) ends.push(n - 1);
       for (const ei of ends) {
         const x = pts[ei * 2], z = pts[ei * 2 + 1], b = roads.get(x, z);
-        const c = [x, W.heightAt(x, z) + y, z];
+        const c = [x, roadAt(x, z) + y, z];
         for (let s = 0; s < 10; s++) {
           const a1 = s / 10 * Math.PI * 2, a2 = (s + 1) / 10 * Math.PI * 2;
           const p1x = x + Math.cos(a1) * half, p1z = z + Math.sin(a1) * half, p2x = x + Math.cos(a2) * half, p2z = z + Math.sin(a2) * half;
-          b.tri(c, [p1x, W.heightAt(p1x, p1z) + y, p1z], [p2x, W.heightAt(p2x, p2z) + y, p2z], col, null, null, null, 0, 1, 0);
+          b.tri(c, [p1x, roadAt(p1x, p1z) + y, p1z], [p2x, roadAt(p2x, p2z) + y, p2z], col, null, null, null, 0, 1, 0);
         }
       }
       // Fahrbahnmarkierung (auf Brücken und Rampen auf der Fahrbahnhöhe)
-      const hf = B ? (x, z) => { const d = this.deckAt(x, z); return d !== null ? d : W.heightAt(x, z); } : undefined;
+      const hf = B ? (x, z) => { const d = this.deckAt(x, z); return d !== null ? d : roadAt(x, z); } : roadAt;
       const big = BIG_ROADS.test(e.h);
       if (big) {
         // Randlinien, Mittelstreifen (zweibahnig: Leitplanke, sonst doppelte durchgezogene Linie), Spurtrennung
@@ -744,7 +761,7 @@ class Region {
           W.dashes(side, 1e9, 1, 0.065, y + 0.02, marks, white, hf);
         }
         if (e.o) { if (e.w >= 7) W.dashes(pts, 6, 12, 0.07, y + 0.02, marks, white, hf); }
-        else if (e.w < BIG_MEDIAN_W) for (const o of [-0.14, 0.14]) W.dashes(this.offsetLine(pts, o), 1e9, 1, 0.06, y + 0.02, marks, white, hf);
+        else for (const o of [-0.14, 0.14]) W.dashes(this.offsetLine(pts, o), 1e9, 1, 0.06, y + 0.02, marks, white, hf);
       } else if (e.w >= 5.5 && !e.o && !/residential|living_street/.test(e.h)) W.dashes(pts, 3, 6, 0.07, y + 0.02, marks, white, hf);
       // Leitplanken an großen Straßen und auf Brücken/Rampen: erst nach den Häusern (Ortsdurchfahrten erkennen)
       if (big || B) (t.railJobs || (t.railJobs = [])).push({ e, run, pts, sAt, B, big });
@@ -766,9 +783,10 @@ class Region {
     return out;
   }
 
-  // Leitplanken (verzinkt, Holm 0,45–0,78 m mit Pfosten) neben großen Straßen außerhalb der Orte, als Mittelstreifen
-  // breiter zweibahniger Straßen und als unsichtbare Kante auf Brücken und Rampen. Sie halten nur Autos auf und nur
-  // auf ihrer Höhe (Straßen darunter oder darüber bleiben frei). An Kreuzungen und Einmündungen bleiben sie offen.
+  // Leitplanken (verzinkt, Holm 0,45–0,78 m mit Pfosten) neben großen Straßen außerhalb der Orte (zwischen getrennten
+  // Richtungsfahrbahnen stehen so die beiden inneren) und als unsichtbare Kante auf Brücken und Rampen. Sie halten nur
+  // Autos auf und nur auf ihrer Höhe (Straßen darunter oder darüber bleiben frei). An Kreuzungen und Einmündungen und
+  // wo eine andere Fahrbahn daneben liegt bleiben sie offen. Hindernis sind sie nur dort, wo man sie auch sieht.
   buildRails(t) {
     const jobs = t.railJobs;
     t.railJobs = null;
@@ -793,15 +811,14 @@ class Region {
       const sE = [s0];
       for (let i = 1; i < n; i++) sE.push(sE[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]));
       const openA = this.nodeDeg(e.a) >= 3, openB = this.nodeDeg(e.b) >= 3;
-      const lines = [];
-      if (big || B) lines.push(half + 0.45, -(half + 0.45));
-      if (big && !e.o && e.w >= BIG_MEDIAN_W) lines.push(0);
-      for (const off of lines) {
+      // auf niedrigen Brücken an der Innenseite der Brüstung, sonst neben der Fahrbahn
+      const side = B && B.low ? half - 0.3 : half + 0.45;
+      for (const off of [side, -side]) {
         const P = [], ok = [];
         const line = this.offsetLine(pts, off);
         for (let i = 0; i < n; i++) {
           const x = line[i * 2], z = line[i * 2 + 1];
-          const h = (B ? this.deckH(B, sAt[i]) : W.heightAt(x, z)) + REGION.roadY;
+          const h = (B ? this.deckH(B, sAt[i]) : this.heightAt0(x, z)) + REGION.roadY;
           P.push([x, h, z]);
           let free = !(openA && sE[i] < 16) && !(openB && sE[i] > len - 16);
           if (free) {
@@ -819,11 +836,15 @@ class Region {
         for (let i = 0; i < n - 1; i++) {
           if (!ok[i] || !ok[i + 1]) continue;
           const a = P[i], c = P[i + 1];
-          t.rails.push(a[0], a[2], c[0], c[2], (a[1] + c[1]) / 2);
-          t.railGrid.insert(t.rails.length / 5 - 1, Math.min(a[0], c[0]), Math.min(a[2], c[2]), Math.max(a[0], c[0]), Math.max(a[2], c[2]));
-          // sichtbar nur neben großen Straßen außerhalb der Orte; auf Brücken steht schon die Brüstung
+          // sichtbar nur neben großen Straßen außerhalb der Orte (Autobahnen auch dort); auf Brücken steht schon die Brüstung
           const bare = B && (B.ramp ? Math.min(a[1] - W.heightAt(a[0], a[2]), c[1] - W.heightAt(c[0], c[2])) > 1.1 : true);
-          if (bare || (!B && !big) || (e.h === 'primary' && off !== 0 && town(a[0], a[2]))) continue;
+          const show = !bare && big && (/^motorway/.test(e.h) || !town(a[0], a[2]));
+          // Hindernis nur, wo sie steht, und als Kante der Brüstung auf Brücken und hohen Rampen
+          if (show || bare) {
+            t.rails.push(a[0], a[2], c[0], c[2], (a[1] + c[1]) / 2);
+            t.railGrid.insert(t.rails.length / 5 - 1, Math.min(a[0], c[0]), Math.min(a[2], c[2]), Math.max(a[0], c[0]), Math.max(a[2], c[2]));
+          }
+          if (!show) continue;
           const b = parts.get(a[0], a[2]);
           const dx = c[0] - a[0], dz = c[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
           const up = (q, d) => [q[0], q[1] + d, q[2]];
@@ -904,15 +925,17 @@ class Region {
     const ws = new WaterSet(own.areas, own.lines);
     const inside = (x, z) => x >= t.x0 && x < t.x1 && z >= t.z0 && z < t.z1 && !this.inCore(x, z);
     const surf = new Chunks();
-    ws.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside);
+    ws.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
     surf.meshes(waterMaterial(), { receive: true }).forEach(m => t.group.add(m));
     ws.edges((ax, az, bx, bz) => {
       t.edges.push(ax, az, bx, bz);
       t.edgeGrid.insert(t.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
     }, (x, z) => this.roadNear(x, z, WATER.roadGap), { x0: t.x0, z0: t.z0, x1: t.x1, z1: t.z1 }, (x, z) => !this.inCore(x, z));
     t.rivers = new U.Grid(20);
-    ws.riverPieces(q => t.rivers.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw),
-      (x, z) => this.roadNear(x, z, WATER.roadGap), (x, z) => !this.inCore(x, z));
+    ws.riverPieces(q => {
+      q.y = this.heightAt0((q.ax + q.bx) / 2, (q.az + q.bz) / 2) - WATER.surface;
+      t.rivers.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw);
+    }, (x, z) => this.roadNear(x, z, WATER.roadGap), (x, z) => !this.inCore(x, z));
   }
 
   // ---------------- Orte: Laternen, Ladenschilder, Lokale, Fußgänger ----------------
@@ -958,7 +981,8 @@ class Region {
           if (!near(x0, z0, 25)) { side = -side; continue; }
           const off = e.w / 2 + 0.7, x = x0 - dz * off * side, z = z0 + dx * off * side;
           side = -side;
-          if (this.insideBuilding(x, z, 0.4, t) || W.collideCircle(x, z, 0.3, {}).hit) continue;
+          // nicht im Haus, nicht an einem Hindernis und nicht auf einer anderen Fahrbahn (Kreuzungen, Einmündungen)
+          if (this.insideBuilding(x, z, 0.4, t) || W.collideCircle(x, z, 0.3, {}).hit || this.nearRoad(x, z, 0.4)) continue;
           lamps.push({ x, z, y: W.heightAt(x, z), ry: Math.atan2(dz * -side, -dx * -side) });
         }
         segStart += len;
@@ -1198,7 +1222,11 @@ class Region {
       !(this.land && this.land.onTrack(x, z, t, m * 0.6));
     const onEdge = (x, z) => Math.abs(x - t.x0) < 0.6 || Math.abs(x - t.x1) < 0.6 || Math.abs(z - t.z0) < 0.6 || Math.abs(z - t.z1) < 0.6;
     const rT = U.rng(t.key * 31 + 7);
-    for (let i = 0; i < d.trees.length; i += 2) if (!wet(d.trees[i], d.trees[i + 1])) pts.push([d.trees[i], d.trees[i + 1], 0, 0.8 + rT() * 0.6]);
+    // echte Einzelbäume (OSM): liegt einer durch geschätzte Straßenbreiten auf der Fahrbahn, an den Rand rücken
+    for (let i = 0; i < d.trees.length; i += 2) {
+      const q = this.world.offCarriageway(d.trees[i], d.trees[i + 1], 1.0), s = 0.8 + rT() * 0.6;
+      if (q && !wet(q[0], q[1]) && !this.inCore(q[0], q[1])) pts.push([q[0], q[1], 0, s]);
+    }
     let budget = 9000;
     for (const a of d.areas) {
       const dens = REGION_TREE_DENSITY[a.k];
@@ -1365,11 +1393,15 @@ class Region {
     }
     return null;
   }
-  nearRoad(x, z, margin, only) {
-    const tiles = only ? [only] : this.tilesNear(x, z, 30);
-    for (const t of tiles) for (const s of t.roadGrid.query(x, z, 10, this.world._tmp)) {
-      const c = U.closestOnSeg(x, z, s.ax, s.az, s.bx, s.bz);
-      if (Math.hypot(c[0] - x, c[1] - z) < s.w / 2 + margin) return s;
+  // Straßenabschnitt, dessen Fahrbahn (plus margin) (x, z) überdeckt. Sucht im ganzen Straßennetz, nicht nur in einer
+  // gebauten Kachel: lange Abschnitte aus der Nachbarkachel zählen mit (sonst stünden dort Bäume auf der Fahrbahn).
+  // Das frühere vierte Argument (nur diese Kachel) wird ignoriert.
+  nearRoad(x, z, margin) {
+    const E = this.graph.edges;
+    for (const code of this.netGrid.query(x, z, 10 + margin, this._nq || (this._nq = []))) {
+      const e = E[Math.floor(code / 4096)], k = (code % 4096) * 2, p = e.p;
+      const c = U.closestOnSeg(x, z, p[k], p[k + 1], p[k + 2], p[k + 3]);
+      if (Math.hypot(c[0] - x, c[1] - z) < e.w / 2 + margin) return { ax: p[k], az: p[k + 1], bx: p[k + 2], bz: p[k + 3], n: e.n, k: 'road', h: e.h, w: e.w };
     }
     return null;
   }
@@ -1414,7 +1446,7 @@ class Region {
       }
       if (t.rivers) {
         out.x = x; out.z = z;
-        if (pushFromRivers(t.rivers, out, r, this.world._tmp)) { x = out.x; z = out.z; moved = true; }
+        if (pushFromRivers(t.rivers, out, r, this.world._tmp, y)) { x = out.x; z = out.z; moved = true; }
       }
       if (!t.treeGrid) continue;
       const TR = t.trees, tl = t.treeGrid.query(x, z, r + 1, this.world._tmp);

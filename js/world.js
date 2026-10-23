@@ -403,13 +403,15 @@ class World {
   // Fluss- und Seebetten der Innenstadt ausheben; hgrid0 behält das ursprüngliche Gelände (Häuser, Wasseroberfläche)
   carveCoreWater() {
     this.hgrid0 = Float32Array.from(this.hgrid);
+    this.lowBridges = new Map();
     if (typeof WaterSet === 'undefined') return;
     const d = this.data;
     this.water = new WaterSet(d.areas.filter(a => a.k === 'water'), d.waterways.map(w => ({ w: w.w, p: w.p })));
-    // an Straßen und Wegen nicht graben (Brücken liegen flach auf dem Gelände)
+    this.initLowBridges();
+    // an Straßen und Wegen nicht graben; unter Brücken über Wasser schon (dort fließt der Fluss unter der Platte durch)
     const roads = new U.Grid(25);
     for (const r of d.roads) {
-      if (r.k === 'plazaArea' || !r.p) continue;
+      if (r.k === 'plazaArea' || !r.p || this.lowBridges.has(r)) continue;
       for (let i = 0; i + 3 < r.p.length; i += 2) {
         const ax = r.p[i], az = r.p[i + 1], bx = r.p[i + 2], bz = r.p[i + 3];
         roads.insert({ ax, az, bx, bz, w: r.w }, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
@@ -424,20 +426,78 @@ class World {
     this.water.carveGrid(this.hgrid, this.hgrid.length, i => [this.tminX + (i % cols) * this.tstepX, this.tminZ + Math.floor(i / cols) * this.tstepZ], skip);
   }
 
+  // Brücken (OSM bridge=yes) über Wasser: Fahrbahn als gewölbte Gerade zwischen den Enden auf dem Gelände ohne Bett
+  initLowBridges() {
+    this.lowBridges = new Map();
+    this.deckGrid = new U.Grid(25);
+    for (const r of this.data.roads) {
+      if (!r.b || !r.p || r.p.length < 4 || r.k === 'plazaArea') continue;
+      const p = r.p, n = p.length / 2, cum = [0];
+      for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1]));
+      const len = cum[n - 1];
+      if (len < LOW_BRIDGE.minLen) continue;
+      let wet = false;
+      for (let i = 0; i < n - 1 && !wet; i++) {
+        const k = Math.max(1, Math.ceil((cum[i + 1] - cum[i]) / 2));
+        for (let j = 0; j <= k && !wet; j++) wet = this.water.carveAt(p[i * 2] + (p[i * 2 + 2] - p[i * 2]) * j / k, p[i * 2 + 1] + (p[i * 2 + 3] - p[i * 2 + 1]) * j / k) > 0;
+      }
+      if (!wet) continue;
+      const B = { r, p, cum, len, w: r.w, hA: this.heightAt0(p[0], p[1]), hB: this.heightAt0(p[n * 2 - 2], p[n * 2 - 1]), foot: r.k !== 'road' };
+      // über einer Kuppe würde die gerade Platte im Boden stecken: dann bleibt der Weg auf dem Gelände
+      let buried = false;
+      for (let i = 0; i < n && !buried; i++) buried = lowBridgeH(B.hA, B.hB, len, cum[i]) < this.heightAt0(p[i * 2], p[i * 2 + 1]) - 0.3;
+      if (buried) continue;
+      this.lowBridges.set(r, B);
+      for (let i = 0; i < n - 1; i++) this.deckGrid.insert({ B, i }, Math.min(p[i * 2], p[i * 2 + 2]) - r.w, Math.min(p[i * 2 + 1], p[i * 2 + 3]) - r.w,
+        Math.max(p[i * 2], p[i * 2 + 2]) + r.w, Math.max(p[i * 2 + 1], p[i * 2 + 3]) + r.w);
+    }
+  }
+  // Fahrbahnhöhe der Brücke B über dem Punkt (x, z) (Lot auf die Mittellinie)
+  lowDeckH(B, x, z) {
+    const p = B.p;
+    let best = Infinity, s = 0;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      const c = U.closestOnSeg(x, z, p[i], p[i + 1], p[i + 2], p[i + 3]), d = Math.hypot(c[0] - x, c[1] - z);
+      if (d < best) { best = d; s = B.cum[i / 2] + (B.cum[i / 2 + 1] - B.cum[i / 2]) * c[2]; }
+    }
+    return lowBridgeH(B.hA, B.hB, B.len, s);
+  }
+  // Fahrbahnhöhe an (x, z), falls dort eine Brücke der Innenstadt ist (sonst null)
+  lowDeckAt(x, z) {
+    if (!this.deckGrid) return null;
+    let best = null;
+    for (const { B, i } of this.deckGrid.query(x, z, 0, this._dq || (this._dq = []))) {
+      const p = B.p, c = U.closestOnSeg(x, z, p[i * 2], p[i * 2 + 1], p[i * 2 + 2], p[i * 2 + 3]);
+      if (Math.hypot(c[0] - x, c[1] - z) > B.w / 2 + 0.3) continue;
+      const h = lowBridgeH(B.hA, B.hB, B.len, B.cum[i] + (B.cum[i + 1] - B.cum[i]) * c[2]);
+      if (best === null || h > best) best = h;
+    }
+    return best;
+  }
+  // Höhe der Fahrbahn: auf dem Gelände ohne ausgehobene Gewässer, damit kein Ufer und kein Wasser in die Straße schneidet
+  roadHeightAt(x, z) {
+    return this.heightAt0(x, z);
+  }
+
+  // flache Kollisionskante (Wände, Ufer, Brüstungen)
+  addEdge(ax, az, bx, bz) {
+    this.edges.push(ax, az, bx, bz);
+    this.edgeGrid.insert(this.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
+  }
+
   // Wasseroberflächen und Ufer als Hindernis (nach den Straßen, weil die Ufer an Straßen offen bleiben)
   buildWater() {
     if (!this.water || this.water.empty) return;
     const surf = new Chunks();
     const inside = this.region ? (x, z) => this.inCoreRect(x, z) : null;
-    this.water.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside);
+    this.water.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
     surf.meshes(waterMaterial(), { receive: true }).forEach(m => this.group.add(m));
-    this.water.edges((ax, az, bx, bz) => {
-      this.edges.push(ax, az, bx, bz);
-      this.edgeGrid.insert(this.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
-    }, (x, z) => !!this.nearRoad(x, z, WATER.roadGap), null, inside);
+    this.water.edges((ax, az, bx, bz) => this.addEdge(ax, az, bx, bz), (x, z) => !!this.nearRoad(x, z, WATER.roadGap), null, inside);
     this.riverGrid = new U.Grid(20);
-    this.water.riverPieces(q => this.riverGrid.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw),
-      (x, z) => !!this.nearRoad(x, z, WATER.roadGap), inside);
+    this.water.riverPieces(q => {
+      q.y = this.heightAt0((q.ax + q.bx) / 2, (q.az + q.bz) / 2) - WATER.surface;
+      this.riverGrid.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw);
+    }, (x, z) => !!this.nearRoad(x, z, WATER.roadGap), inside);
   }
 
   // Gelände ohne ausgehobene Gewässer (Häuser stehen darauf, Wasseroberfläche liegt knapp darunter)
@@ -455,7 +515,15 @@ class World {
 
   // Boden für Figuren und Autos: auf Brücken die Fahrbahn, sonst das Gelände. y: jetzige Höhe (Infinity = oberste Fläche)
   groundAt(x, z, y) {
-    return this.region ? this.region.groundAt(x, z, y) : this.heightAt(x, z);
+    if (this.region && !this.inCoreRect(x, z)) return this.region.groundAt(x, z, y);
+    let h = this.region ? this.region.groundAt(x, z, y) : this.heightAt(x, z);
+    if (!this.hgrid0) return h;
+    const d = this.lowDeckAt(x, z);
+    if (d !== null && d > h + 0.05 && (y === undefined || y > d - 2.5)) return d;
+    // neben Gewässern liegt die Fahrbahn auf dem Gelände ohne Bett (wie sie gezeichnet ist)
+    const h0 = this.heightAt0(x, z);
+    if (h0 > h + 0.01 && this.nearRoad(x, z, 0.3)) h = h0;
+    return h;
   }
 
   // Umland aus data/region.js; ersetzt das Straßennetz der Innenstadt durch das des ganzen Landkreises
@@ -916,6 +984,7 @@ class World {
     const rnd = U.rng(11);
     const white = new THREE.Color('#e9e6dc');
     this.curbs = new Chunks();
+    this.bridgeParts = new Chunks();
     // erst alle Abschnitte ins Suchraster (Bordsteine brauchen die Kreuzungen), dann die Bänder bauen
     const sampled = new Map();
     for (const r of this.data.roads) {
@@ -933,13 +1002,27 @@ class World {
       const style = ROAD_STYLE[r.k];
       const pts = sampled.get(r);
       const col = U.color(style.color, 0.08, rnd);
-      const hidden = this.ortho && PHOTO_HIDE.has(r.k);
+      // Wege zeigt das Luftbild; über Wasser braucht aber auch ein Fußweg seine Brückenplatte
+      const hidden = this.ortho && PHOTO_HIDE.has(r.k) && !this.lowBridges.has(r);
       if (hidden && r.k !== 'plaza') continue;
       // mit Umland nur die Stücke innerhalb des Innenstadt-Geländes (außen zeichnet js/region.js)
       const pieces = this.region ? this.clipToCore(pts) : [pts];
       for (const pts of pieces) this.roadRibbon(r, pts, style, col, hidden, chunks, marks, white);
     }
     this.finishRoads(chunks, marks);
+  }
+
+  // Böschung unter den Fahrbahnkanten L/R ([x, y, z]), wo das Gelände tiefer liegt als die Fahrbahn (an Gewässern,
+  // deren Bett ausgehoben ist); sonst sähe man unter der Straßenkante hindurch
+  bankSkirt(chunks, L, R) {
+    const bank = this._bankCol || (this._bankCol = new THREE.Color('#5d5a4c'));
+    for (const E of [L, R]) for (let i = 0; i + 1 < E.length; i++) {
+      const a = E[i], c = E[i + 1], ga = this.heightAt(a[0], a[2]) - 0.05, gc = this.heightAt(c[0], c[2]) - 0.05;
+      if (a[1] - ga < 0.3 && c[1] - gc < 0.3) continue;
+      const sx = E === L ? 1 : -1, ox = -(c[2] - a[2]) * sx, oz = (c[0] - a[0]) * sx, b = chunks.get(a[0], a[2]);
+      b.tri(a, c, [c[0], gc, c[2]], bank, null, null, null, ox, 0, oz);
+      b.tri(a, [c[0], gc, c[2]], [a[0], ga, a[2]], bank, null, null, null, ox, 0, oz);
+    }
   }
 
   // Polylinie in die Stücke zerlegen, deren Abschnitte im Innenstadt-Gelände liegen
@@ -957,6 +1040,9 @@ class World {
   roadRibbon(r, pts, style, col, hidden, chunks, marks, white) {
       const n = pts.length / 2;
       const half = r.w / 2;
+      // Höhe der Fahrbahn: auf Brücken über Wasser die Brückenplatte, sonst das Gelände ohne ausgehobenes Bett
+      const B = this.lowBridges.get(r);
+      const hAt = B ? (x, z) => this.lowDeckH(B, x, z) : (x, z) => this.roadHeightAt(x, z);
       const L = [], R = [];
       for (let i = 0; i < n; i++) {
         const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
@@ -972,9 +1058,15 @@ class World {
         const miter = Math.min(1 / Math.max(0.35, tx * d2x + tz * d2z), 2.5);
         const nx = -tz * half * miter, nz = tx * half * miter;
         const x = pts[i * 2], z = pts[i * 2 + 1];
-        L.push([x + nx, this.heightAt(x + nx, z + nz) + style.y, z + nz]);
-        R.push([x - nx, this.heightAt(x - nx, z - nz) + style.y, z - nz]);
+        L.push([x + nx, hAt(x + nx, z + nz) + style.y, z + nz]);
+        R.push([x - nx, hAt(x - nx, z - nz) + style.y, z - nz]);
       }
+      if (B) {
+        const water = (x, z) => this.water.carveAt(x, z) > 0 ? this.heightAt0(x, z) - WATER.surface : -Infinity;
+        lowBridgeParts(this.bridgeParts, pts, L, R, (x, z) => this.heightAt(x, z), water, B.foot);
+        // Brüstung bzw. Geländer als Hindernis: niemand fällt von der Brücke ins Wasser
+        for (const E of [L, R]) for (let i = 0; i < n - 1; i++) this.addEdge(E[i][0], E[i][2], E[i + 1][0], E[i + 1][2]);
+      } else if (!hidden && (r.k === 'road' || r.k === 'plaza')) this.bankSkirt(chunks[r.k], L, R);
       // Fußgängerzone: Pflasterstruktur in Weltkoordinaten (auch über dem Luftbild)
       const pave = r.k === 'plaza' ? this.pave : null;
       const puv = p => [p[0] / PAVE_TILE, p[2] / PAVE_TILE];
@@ -996,12 +1088,12 @@ class World {
           const x = pts[e * 2], z = pts[e * 2 + 1];
           const b = hidden ? null : chunks[r.k].get(x, z);
           const pb = pave ? pave.get(x, z) : null;
-          const c = [x, this.heightAt(x, z) + style.y, z];
+          const c = [x, hAt(x, z) + style.y, z];
           for (let s = 0; s < 10; s++) {
             const a1 = s / 10 * Math.PI * 2, a2 = (s + 1) / 10 * Math.PI * 2;
             const p1x = x + Math.cos(a1) * half, p1z = z + Math.sin(a1) * half;
             const p2x = x + Math.cos(a2) * half, p2z = z + Math.sin(a2) * half;
-            const p1 = [p1x, this.heightAt(p1x, p1z) + style.y, p1z], p2 = [p2x, this.heightAt(p2x, p2z) + style.y, p2z];
+            const p1 = [p1x, hAt(p1x, p1z) + style.y, p1z], p2 = [p2x, hAt(p2x, p2z) + style.y, p2z];
             if (b) b.tri(c, p1, p2, col, null, null, null, 0, 1, 0);
             if (pb) pb.tri(c, p1, p2, white, puv(c), puv(p1), puv(p2), 0, 1, 0);
           }
@@ -1009,21 +1101,21 @@ class World {
       }
       // Bordsteine und Randlinien (nicht an Wohnwegen, Feldwegen, Autobahnen)
       if (r.k === 'road' && r.w >= 5 && !/service|living_street|track|motorway/.test(r.h || '')) {
-        for (const E of [L, R]) this.curb(r, pts, E, half, style.y);
+        if (!B) for (const E of [L, R]) this.curb(r, pts, E, half, style.y);
         if (r.w >= 7.5 && /primary|secondary|trunk|tertiary/.test(r.h || '')) {
           for (const E of [L, R]) {
             const k = (half - 0.45) / half, side = [];
             for (let i = 0; i < n; i++) side.push(pts[i * 2] + (E[i][0] - pts[i * 2]) * k, pts[i * 2 + 1] + (E[i][2] - pts[i * 2 + 1]) * k);
-            this.dashes(side, 1e9, 1, 0.065, style.y + 0.02, marks, white);
+            this.dashes(side, 1e9, 1, 0.065, style.y + 0.02, marks, white, hAt);
           }
         }
       }
       // Mittellinie
       if (r.k === 'road' && r.w >= 6 && !r.o && r.h !== 'service' && r.h !== 'living_street') {
-        this.dashes(pts, 3, 6, 0.07, style.y + 0.02, marks, white);
+        this.dashes(pts, 3, 6, 0.07, style.y + 0.02, marks, white, hAt);
       }
       // Treppenstufen andeuten
-      if (r.k === 'steps') this.dashes(pts, 0.12, 0.3, half, style.y + 0.015, marks, new THREE.Color('#6f6a62'));
+      if (r.k === 'steps') this.dashes(pts, 0.12, 0.3, half, style.y + 0.015, marks, new THREE.Color('#6f6a62'), hAt);
   }
 
   // Bordstein (0,12 m hoch, 0,22 m breit) entlang einer Straßenkante E (Punkte [x, y, z]); an Kreuzungen und
@@ -1063,6 +1155,8 @@ class World {
     marks.meshes(mat(5), { receive: true }).forEach(m => this.group.add(m));
     this.curbs.meshes(this.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true })), { receive: true }).forEach(m => this.group.add(m));
     this.curbs = null;
+    this.bridgeParts.meshes(new THREE.MeshLambertMaterial({ vertexColors: true }), { cast: true, receive: true }).forEach(m => this.group.add(m));
+    this.bridgeParts = null;
 
     // Pflaster: Plätze als Fläche, dann die Struktur multiplikativ über Luftbild bzw. Bodenfarbe legen
     for (const r of this.data.roads) if (r.k === 'plazaArea') this.paveArea(r);
@@ -2002,7 +2096,11 @@ class World {
     const pts = [];
     const d = this.data;
     const wet = (x, z) => this.water && this.water.carveAt(x, z) > 0; // keine Bäume im Wasser
-    for (let i = 0; i < d.trees.length; i += 2) if (!wet(d.trees[i], d.trees[i + 1])) pts.push([d.trees[i], d.trees[i + 1], 0]);
+    // echte Einzelbäume (OSM): liegt einer durch geschätzte Straßenbreiten auf der Fahrbahn, an den Rand rücken
+    for (let i = 0; i < d.trees.length; i += 2) {
+      const q = this.offCarriageway(d.trees[i], d.trees[i + 1], 1.0);
+      if (q && !wet(q[0], q[1])) pts.push([q[0], q[1], 0]);
+    }
     const keep = (x, z) => (!this.region || this.inCoreRect(x, z)) && !wet(x, z); // außerhalb pflanzt das Umland
     const DENSITY = { forest: 1 / 70, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600, meadow: 1 / 2500, residential: 1 / 1800 };
     let budget = 16000;
@@ -2136,6 +2234,29 @@ class World {
     return this.region ? this.region.insideBuilding(x, z, margin) : null;
   }
 
+  // Punkt (Baum, Laterne) von Fahrbahnen weg an den Fahrbahnrand rücken (Abstand m zur Kante). Gibt [x, z] zurück,
+  // oder null, wenn dort kein Platz ist (z. B. zwischen zwei Fahrbahnen)
+  offCarriageway(x, z, m) {
+    for (let it = 0; it < 4; it++) {
+      let hit = null, hd = 0, hc = null;
+      for (const s of this.roadGrid.query(x, z, 12, this._tmp)) {
+        if (s.k !== 'road') continue;
+        const c = U.closestOnSeg(x, z, s.ax, s.az, s.bx, s.bz), d = Math.hypot(c[0] - x, c[1] - z);
+        if (d < s.w / 2 + m - 0.01 && (!hit || d < hd)) { hit = s; hd = d; hc = c; }
+      }
+      if (!hit && this.region && !this.inCoreRect(x, z)) {
+        const s = this.region.nearRoad(x, z, m);
+        if (s) { hit = s; hc = U.closestOnSeg(x, z, s.ax, s.az, s.bx, s.bz); hd = Math.hypot(hc[0] - x, hc[1] - z); }
+      }
+      if (!hit) return [x, z];
+      let nx = x - hc[0], nz = z - hc[1];
+      if (hd < 1e-3) { const l = Math.hypot(hit.bx - hit.ax, hit.bz - hit.az) || 1; nx = -(hit.bz - hit.az) / l; nz = (hit.bx - hit.ax) / l; }
+      else { nx /= hd; nz /= hd; }
+      x = hc[0] + nx * (hit.w / 2 + m); z = hc[1] + nz * (hit.w / 2 + m);
+    }
+    return null;
+  }
+
   nearRoad(x, z, margin) {
     const list = this.roadGrid.query(x, z, 10, this._tmp);
     for (const s of list) {
@@ -2196,7 +2317,7 @@ class World {
       }
       if (this.riverGrid) {
         out.x = x; out.z = z;
-        if (pushFromRivers(this.riverGrid, out, r, this._tmp)) { x = out.x; z = out.z; moved = true; }
+        if (pushFromRivers(this.riverGrid, out, r, this._tmp, y)) { x = out.x; z = out.z; moved = true; }
       }
       if (this.region) {
         out.x = x; out.z = z;

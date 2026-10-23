@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.6.0 „Grand Theft Coburg – Häuser“ · **Letzte Aktualisierung:** 23.10.2026
+**Version:** 2.6.1 „Grand Theft Coburg – Brücken“ · **Letzte Aktualisierung:** 23.10.2026
 
 ---
 
@@ -214,6 +214,25 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v2.6.1 (23.10.2026): **Brücken über Wasser, nichts mehr auf der Fahrbahn** (vor dem Multiplayer-Einbau).
+  - Ursache Wasser auf der Straße (Viktoriastraße/Alexandrinenbrücke der Lossaustraße): Fahrbahnen lagen auf dem
+    ausgehobenen Flussbett-Gelände (12,5-m-Raster) und sanken unter den Wasserspiegel. Jetzt liegen Fahrbahnen auf dem
+    Gelände ohne Bett (`World.roadHeightAt`, im Umland `heightAt0`), mit Böschung (`bankSkirt`) wo das Ufer tiefer liegt
+  - Brücken (OSM `bridge`) über Wasser werden echte niedrige Brücken (`initLowBridges` in world.js, `B.low` in
+    region.js): leicht gewölbte Platte zwischen den Enden, darunter wird das Bett ausgehoben, Sandsteinbrüstung bzw.
+    Stahlgeländer bei Fußgängerbrücken, Widerlager (`lowBridgeParts` in water.js); Autos, Figuren und Fußgänger laufen
+    auf der Platte (`groundAt`), Brüstung ist Hindernis. Innenstadt 23, Umland 240 Brücken
+  - Wasserspiegel von Flüssen und Wasserflächen höchstens auf Uferhöhe (kein schwebendes Wasserband mehr)
+  - Ursache Objekte auf der Fahrbahn (B 289 u. a.): Mittelleitplanke auf allen Straßen mit Gegenverkehr ab 10 m
+    (70 Abschnitte) → entfällt, doppelte durchgezogene Linie; unsichtbare Leitplanken-Kollision in Orten → nur noch wo
+    sichtbar; Bäume prüften nur Straßen der eigenen Kachel → `Region.nearRoad` sucht im ganzen Netz; OSM-Einzelbäume,
+    Laternen, Bänke, Kübel und Café-Tische (außer in Spielstraßen) werden von Fahrbahnen weggerückt bzw. weggelassen
+  - Getestet: Alexandrinenbrücke, Mohrenstraße, Fußgängersteg, Rosenauer Straße (Itz), B 303, B 289; Fahrt mit
+    90 km/h über die Brücke; Prüfskript über 10 Gebiete: 0 Leitplanken/Bäume auf Fahrbahnen, Innenstadt 0 Hindernisse;
+    keine Fehler. Kachelaufbau ≈ 26 statt 24 ms (Wasserspiegel)
+- ⚠️ Grenzen v2.6.1: Wenig Durchfahrtshöhe unter niedrigen Brücken (das EU-DEM legt Flüsse fast auf Straßenhöhe);
+  Brücken ohne Pfeiler; Einfahrten zu Wegen außerhalb des Straßennetzes (Tankstellen) sind nicht in Leitplanken offen.
 
 - ✅ v2.6.0 (23.10.2026): **Fenster passen in die Fassade, Landhäuser im Stil oberfränkischer Dörfer.**
   - Ursache der abgeschnittenen Fenster: Das Fensterraster lief starr ab dem tiefsten Geländepunkt des Hauses in

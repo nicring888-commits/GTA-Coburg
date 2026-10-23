@@ -115,20 +115,39 @@ class WaterSet {
   }
 
   // Wasseroberfläche (Höhe = ursprüngliches Gelände minus WATER.surface) in bucket; inside(x, z): Abschnitt zeichnen?
-  buildSurface(bucket, h0, inside) {
+  // hc(x, z): Gelände mit ausgehobenem Bett. Das Wasser liegt dann höchstens so hoch wie das Ufer an seinem Rand
+  // (das grobe Höhengitter senkt die Ufer oft tiefer ab), sonst schwebte es als Platte bzw. Band über der Böschung.
+  buildSurface(bucket, h0, inside, hc) {
     const col = new THREE.Color('#ffffff');
     const y = (x, z) => h0(x, z) - WATER.surface;
-    const emit = (a, b, c, depth) => {
+    // Wasserspiegel einer Fläche: höchstens Ufer am nächsten Randpunkt, mindestens 20 cm über dem Bett
+    const polyLevel = (P, x, z) => {
+      const v = y(x, z);
+      if (!hc) return v;
+      // Randstücke der Fläche im Suchraster (einmal je Fläche), Suche mit wachsendem Radius
+      if (!P.rim) {
+        P.rim = new U.Grid(16);
+        for (const ring of [P.p].concat(P.ho || [])) for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2)
+          P.rim.insert([ring[j], ring[j + 1], ring[i], ring[i + 1]], Math.min(ring[j], ring[i]), Math.min(ring[j + 1], ring[i + 1]), Math.max(ring[j], ring[i]), Math.max(ring[j + 1], ring[i + 1]));
+      }
+      let bd = Infinity, bx = x, bz = z;
+      for (let r = 8; r < 5000 && !(bd <= r); r *= 4) for (const s of P.rim.query(x, z, r, this._rimQ || (this._rimQ = []))) {
+        const c = U.closestOnSeg(x, z, s[0], s[1], s[2], s[3]), d = Math.hypot(c[0] - x, c[1] - z);
+        if (d < bd) { bd = d; bx = c[0]; bz = c[1]; }
+      }
+      return Math.min(v, Math.max(hc(bx, bz) - 0.08, hc(x, z) + 0.2));
+    };
+    const emit = (a, b, c, depth, poly) => {
       const ab = Math.hypot(a[0] - b[0], a[1] - b[1]), bc = Math.hypot(b[0] - c[0], b[1] - c[1]), ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
       if (Math.max(ab, bc, ca) > 7 && depth < 12) {
-        if (ab >= bc && ab >= ca) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; emit(a, m, c, depth + 1); emit(m, b, c, depth + 1); }
-        else if (bc >= ca) { const m = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2]; emit(a, b, m, depth + 1); emit(a, m, c, depth + 1); }
-        else { const m = [(c[0] + a[0]) / 2, (c[1] + a[1]) / 2]; emit(a, b, m, depth + 1); emit(m, b, c, depth + 1); }
+        if (ab >= bc && ab >= ca) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; emit(a, m, c, depth + 1, poly); emit(m, b, c, depth + 1, poly); }
+        else if (bc >= ca) { const m = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2]; emit(a, b, m, depth + 1, poly); emit(a, m, c, depth + 1, poly); }
+        else { const m = [(c[0] + a[0]) / 2, (c[1] + a[1]) / 2]; emit(a, b, m, depth + 1, poly); emit(m, b, c, depth + 1, poly); }
         return;
       }
       const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[1] + b[1] + c[1]) / 3;
       if (inside && !inside(cx, cz)) return;
-      const P = q => [q[0], y(q[0], q[1]), q[1]];
+      const P = q => [q[0], polyLevel(poly, q[0], q[1]), q[1]];
       bucket.get(cx, cz).tri(P(a), P(b), P(c), col, [a[0] / 9, a[1] / 9], [b[0] / 9, b[1] / 9], [c[0] / 9, c[1] / 9], 0, 1, 0);
     };
     const toV = p => { const o = []; for (let i = 0; i < p.length; i += 2) o.push(new THREE.Vector2(p[i], p[i + 1])); return o; };
@@ -139,7 +158,7 @@ class WaterSet {
       const all = contour.concat(...holes);
       for (const f of faces) {
         const a = all[f[0]], b = all[f[1]], c = all[f[2]];
-        if (a && b && c) emit([a.x, a.y], [b.x, b.y], [c.x, c.y], 0);
+        if (a && b && c) emit([a.x, a.y], [b.x, b.y], [c.x, c.y], 0, P);
       }
     }
     // Fließgewässer als Band; wo schon eine Flussfläche liegt, nicht doppelt
@@ -157,7 +176,13 @@ class WaterSet {
         for (let s = 0; s < steps; s++) {
           const t0 = s / steps, t1 = (s + 1) / steps;
           const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
-          const y0 = y(x0, z0), y1 = y(x1, z1);
+          const lvl = (x, z) => {
+            const v = y(x, z);
+            if (!hc) return v;
+            const bank = Math.min(hc(x + nx, z + nz), hc(x - nx, z - nz), hc(x + nx * 0.6, z + nz * 0.6), hc(x - nx * 0.6, z - nz * 0.6)) - 0.08;
+            return Math.min(v, Math.max(bank, hc(x, z) + 0.2));
+          };
+          const y0 = lvl(x0, z0), y1 = lvl(x1, z1);
           // etwas über die Enden hinaus, damit Knicke keine Lücken haben
           const ex = (bx - ax) / len * 0.6, ez = (bz - az) / len * 0.6;
           const A = [x0 + nx - ex, y0, z0 + nz - ez], B = [x0 - nx - ex, y0, z0 - nz - ez], C = [x1 - nx + ex, y1, z1 - nz + ez], D = [x1 + nx + ex, y1, z1 + nz + ez];
@@ -219,11 +244,85 @@ class WaterSet {
   }
 }
 
+// ---------------- Niedrige Brücken (über Flüsse, Bäche, Gräben) ----------------
+// Die Fahrbahn einer Brücke liegt als leicht gewölbte Gerade zwischen den Brückenenden (dort auf dem Gelände ohne
+// ausgehobenes Bett). Unter ihr wird das Bett weiter ausgehoben, deshalb fließt das Wasser sichtbar darunter durch.
+const LOW_BRIDGE = { hump: 0.022, maxHump: 0.6, minLen: 6 };
+// Wölbung in der Mitte (m): höchstens ≈ 7 % Steigung an den Enden
+function lowBridgeHump(len) { return Math.min(LOW_BRIDGE.maxHump, len * LOW_BRIDGE.hump); }
+function lowBridgeH(hA, hB, len, s) {
+  const t = len > 0 ? U.clamp(s / len, 0, 1) : 0;
+  return hA + (hB - hA) * t + lowBridgeHump(len) * Math.sin(Math.PI * t);
+}
+
+// Bauwerk einer niedrigen Brücke: Platte (Unterkante über dem Wasserspiegel), Brüstung aus Sandstein bzw. Geländer
+// bei Fußgängerbrücken, Widerlager an beiden Enden. parts: Chunks; pts: Mittellinie [x, z, …]; L/R: Fahrbahnkanten
+// [x, y, z]; ground(x, z): Gelände darunter; water(x, z): Wasserspiegel (oder -Infinity); foot: Fußgängerbrücke
+function lowBridgeParts(parts, pts, L, R, ground, water, foot) {
+  const n = pts.length / 2;
+  if (n < 2) return;
+  const slab = new THREE.Color('#a8a397'), stone = new THREE.Color('#b8a585'), cap = new THREE.Color('#c9b998'), steel = new THREE.Color('#4f5a52');
+  const thick = foot ? 0.4 : 0.85;
+  const quad = (b, a, c, d, e, col, nx, ny, nz) => { b.tri(a, c, d, col, null, null, null, nx, ny, nz); b.tri(a, d, e, col, null, null, null, nx, ny, nz); };
+  // Unterkante: so dick wie die Platte, aber mindestens 25 cm über dem Wasser und mindestens 25 cm stark
+  const under = q => [q[0], Math.min(q[1] - 0.25, Math.max(q[1] - thick, water(q[0], q[2]) + 0.25)), q[2]];
+  const lerp3 = (a, c, t) => [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t];
+  const up = (q, h) => [q[0], q[1] + h, q[2]];
+  for (let i = 0; i < n - 1; i++) {
+    const b = parts.get(pts[i * 2], pts[i * 2 + 1]);
+    const dx = pts[i * 2 + 2] - pts[i * 2], dz = pts[i * 2 + 3] - pts[i * 2 + 1], l = Math.hypot(dx, dz) || 1;
+    const ox = -dz / l, oz = dx / l; // links
+    // Platte: Seitenflächen und Unterseite
+    quad(b, L[i], L[i + 1], under(L[i + 1]), under(L[i]), slab, ox, 0, oz);
+    quad(b, R[i], under(R[i]), under(R[i + 1]), R[i + 1], slab, -ox, 0, -oz);
+    quad(b, under(L[i]), under(L[i + 1]), under(R[i + 1]), under(R[i]), slab, 0, -1, 0);
+    for (const [P, Q, s] of [[L, R, 1], [R, L, -1]]) {
+      const a = P[i], c = P[i + 1];
+      if (foot) {
+        // Geländer: Handlauf und Knieleiste, Pfosten alle ≈ 2 m
+        for (const [h0, h1] of [[1.0, 1.08], [0.48, 0.53]]) {
+          quad(b, up(a, h0), up(c, h0), up(c, h1), up(a, h1), steel, ox * s, 0, oz * s);
+          quad(b, up(a, h0), up(a, h1), up(c, h1), up(c, h0), steel, -ox * s, 0, -oz * s);
+        }
+        const k = Math.max(1, Math.round(l / 2));
+        for (let j = 0; j <= k; j++) {
+          if (j === k && i < n - 2) continue;
+          const q = lerp3(a, c, j / k), w = 0.03;
+          for (const [px, pz] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+            const tx = -pz, tz = px, A = [q[0] + px * w + tx * w, q[1], q[2] + pz * w + tz * w], B = [q[0] + px * w - tx * w, q[1], q[2] + pz * w - tz * w];
+            quad(b, A, B, up(B, 1.08), up(A, 1.08), steel, px, 0, pz);
+          }
+        }
+        continue;
+      }
+      // Brüstung aus Sandstein: 0,3 m stark, 1,0 m hoch, mit Abdeckplatte; außen bündig mit der Platte
+      const ia = lerp3(a, Q[i], 0.3 / Math.max(0.6, Math.hypot(a[0] - Q[i][0], a[2] - Q[i][2]))),
+        ic = lerp3(c, Q[i + 1], 0.3 / Math.max(0.6, Math.hypot(c[0] - Q[i + 1][0], c[2] - Q[i + 1][2])));
+      quad(b, a, c, up(c, 1.0), up(a, 1.0), stone, ox * s, 0, oz * s);
+      quad(b, ia, up(ia, 0.92), up(ic, 0.92), ic, stone, -ox * s, 0, -oz * s);
+      const ca = [a[0] + ox * s * 0.05, a[1], a[2] + oz * s * 0.05], cc = [c[0] + ox * s * 0.05, c[1], c[2] + oz * s * 0.05];
+      const ka = lerp3(ia, a, -0.15), kc = lerp3(ic, c, -0.15);
+      quad(b, up(ca, 0.92), up(cc, 0.92), up(cc, 1.06), up(ca, 1.06), cap, ox * s, 0, oz * s);
+      quad(b, up(ka, 0.92), up(ka, 1.06), up(kc, 1.06), up(kc, 0.92), cap, -ox * s, 0, -oz * s);
+      quad(b, up(ca, 1.06), up(cc, 1.06), up(kc, 1.06), up(ka, 1.06), cap, 0, 1, 0);
+    }
+  }
+  // Widerlager: Wand unter den Brückenenden bis ins Gelände (verdeckt den Spalt zur Uferböschung)
+  for (const i of [0, n - 1]) {
+    const g = q => [q[0], Math.min(under(q)[1], ground(q[0], q[2]) - 0.6), q[2]];
+    const j = i ? i - 1 : 1, dx = pts[i * 2] - pts[j * 2], dz = pts[i * 2 + 1] - pts[j * 2 + 1];
+    const b = parts.get(pts[i * 2], pts[i * 2 + 1]);
+    quad(b, under(L[i]), g(L[i]), g(R[i]), under(R[i]), foot ? slab : stone, -dx, 0, -dz);
+  }
+}
+
 // Kreis (x, z, r) aus Flussstücken im Raster herausschieben; out wie bei World.collideCircle. Gibt true zurück, wenn verschoben.
-function pushFromRivers(grid, out, r, tmp) {
+// y: Höhe eines Autos; wer deutlich über dem Wasserspiegel (q.y) fährt, ist auf einer Brücke und wird nicht geschoben.
+function pushFromRivers(grid, out, r, tmp, y) {
   let moved = false;
   const list = grid.query(out.x, out.z, r + 2, tmp);
   for (const q of list) {
+    if (y !== undefined && q.y !== undefined && y > q.y + 2.5) continue;
     const c = U.closestOnSeg(out.x, out.z, q.ax, q.az, q.bx, q.bz);
     const dx = out.x - c[0], dz = out.z - c[1], d = Math.hypot(dx, dz), need = q.hw + r;
     if (d >= need) continue;
