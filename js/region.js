@@ -392,7 +392,7 @@ class Region {
     if (!this._detail) this._detail = this.world.makeDetailTexture();
     t.terrainMat = new THREE.MeshLambertMaterial({ map: this.placeholder(), color: ORTHO_TINT });
     this.world.addDetail(t.terrainMat, this._detail);
-    t.roofMat = new THREE.MeshLambertMaterial({ map: this.placeholder(), vertexColors: true });
+    t.roofMat = this.world.roofShader(new THREE.MeshLambertMaterial({ map: this.placeholder(), vertexColors: true }));
     t.mats = [t.terrainMat, t.roofMat];
     const flag = this.ortho && this.ortho.tiles[t.ti + ',' + t.tj];
     t.photo = !!flag;
@@ -660,7 +660,7 @@ class Region {
       const glowTex = (() => {
         const cv = document.createElement('canvas'); cv.width = cv.height = 64;
         const c = cv.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
-        g.addColorStop(0, 'rgba(255,214,140,0.55)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+        g.addColorStop(0, 'rgba(255,196,120,0.62)'); g.addColorStop(0.45, 'rgba(255,160,80,0.26)'); g.addColorStop(1, 'rgba(255,150,70,0)');
         c.fillStyle = g; c.fillRect(0, 0, 64, 64);
         return new THREE.CanvasTexture(cv);
       })();
@@ -826,9 +826,9 @@ class Region {
   treeAssets() {
     if (!this._trees) {
       // gleiche Formen wie in der Innenstadt (js/world.js), aber gröber, weil hier viel mehr Bäume stehen
-      const A = treeAssets(0);
+      const A = treeAssets(0, this.world.renderer);
       this.world.leafShader(A.leafMat);
-      this._trees = { trunk: A.trunk, leaf: A.crowns[1], pine: A.pine, trunkMat: A.trunkMat, leafMat: A.leafMat };
+      this._trees = { trunk: A.trunk, leaf: A.crowns[1], leafFar: A.crownsFar[1], pine: A.pine, trunkMat: A.trunkMat, leafMat: A.leafMat };
     }
     return this._trees;
   }
@@ -860,12 +860,16 @@ class Region {
     const A = this.treeAssets(), rnd = U.rng(t.key);
     const leaves = pts.filter(p => !p[2]), pines = pts.filter(p => p[2]);
     const trunks = new THREE.InstancedMesh(A.trunk, A.trunkMat, pts.length);
-    const lm = leaves.length ? new THREE.InstancedMesh(A.leaf, A.leafMat, leaves.length) : null;
+    // Laubbäume in Gruppen von 250 m, damit nur die nahen Gruppen die detaillierten Kronen zeichnen (LOD)
+    const groups = new Map();
+    for (const p of leaves) { const k = Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+    const lms = new Map();
+    for (const [k, list] of groups) lms.set(k, { m: new THREE.InstancedMesh(A.leaf, A.leafMat, list.length), n: 0, list });
     const pm = pines.length ? new THREE.InstancedMesh(A.pine, A.leafMat, pines.length) : null;
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     const greens = ['#5f8d3e', '#4f7d35', '#6a9a45', '#577f3a', '#7a9e4a', '#46703a'];
     t.trees = []; t.treeGrid = new U.Grid(16);
-    let li = 0, pi = 0;
+    let pi = 0;
     pts.forEach((p, i) => {
       const s = 0.75 + rnd() * 0.7;
       q.setFromAxisAngle(up, rnd() * 6.28);
@@ -873,17 +877,19 @@ class Region {
       m4.compose(ps, q, sc);
       trunks.setMatrixAt(i, m4);
       const col = new THREE.Color(p[2] ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
-      if (p[2]) { pm.setMatrixAt(pi, m4); pm.setColorAt(pi++, col); } else { lm.setMatrixAt(li, m4); lm.setColorAt(li++, col); }
+      if (p[2]) { pm.setMatrixAt(pi, m4); pm.setColorAt(pi++, col); }
+      else { const g = lms.get(Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col); }
       t.trees.push(p[0], p[1], 0.35 * s);
       t.treeGrid.insert(t.trees.length / 3 - 1, p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1);
     });
-    t.treeMeshes = [trunks, lm, pm].filter(Boolean);
+    t.treeMeshes = [trunks, pm, ...[...lms.values()].map(g => g.m)].filter(Boolean);
     for (const m of t.treeMeshes) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); t.group.add(m); }
+    for (const g of lms.values()) this.world.addTreeLod(g.m, A.leaf, A.leafFar, g.list);
   }
   dropTrees(t) {
     if (!this.treesOn.has(t.key)) return;
     this.treesOn.delete(t.key);
-    for (const m of t.treeMeshes || []) { t.group.remove(m); m.dispose(); }
+    for (const m of t.treeMeshes || []) { t.group.remove(m); this.world.removeTreeLod(m); m.dispose(); }
     t.treeMeshes = null; t.trees = null; t.treeGrid = null;
   }
 

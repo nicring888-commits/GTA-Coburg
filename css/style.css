@@ -101,6 +101,8 @@ button { font: inherit; cursor: pointer; }
 #status { position: absolute; top: 14px; right: 16px; width: 190px; text-align: right; }
 #money { font: 400 34px/1.05 Impact, "Arial Black", sans-serif; color: #7ee36f; letter-spacing: 1px;
   text-shadow: 0 2px 0 #0b2a0b, 0 0 6px rgba(0,0,0,0.8); font-variant-numeric: tabular-nums; }
+#clock { font: 400 17px/1 Impact, "Arial Black", sans-serif; color: #f2efe6; letter-spacing: 1px; margin-bottom: 2px;
+  text-shadow: 0 1px 0 #000, 0 0 5px rgba(0,0,0,0.8); font-variant-numeric: tabular-nums; opacity: 0.92; }
 #stars { font-size: 26px; line-height: 1.1; letter-spacing: 1px; margin: 2px 0 6px; }
 #stars span { color: rgba(255,255,255,0.22); text-shadow: 0 1px 2px #000; }
 #stars span.on { color: #ffcf33; text-shadow: 0 0 8px rgba(255,190,0,0.7), 0 1px 2px #000; }

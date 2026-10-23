@@ -26,7 +26,7 @@ three.js wird über das CDN jsDelivr geladen, dafür braucht es eine Internetver
 | `E` | einsteigen, Auto klauen, aussteigen |
 | `F` | Rennen starten/abbrechen, Auto beim Händler verkaufen, Wohnung oder Autohaus öffnen |
 | `G` | Garage: eigene Autos herholen |
-| `M` | Stadtplan · `N` Tag/Nacht · `F1` Hilfe |
+| `M` | Stadtplan · `N` Zeitraffer Tag/Nacht · `K` Wetter · `O` Grafikqualität · `F1` Hilfe |
 
 Blaue Säulen = Rennen, grüne = Lackiererei (Reparatur, Fahndung weg), orange = Autohändler, türkis = Autohaus
 (Neuwagen kaufen), violette Haustüren = Wohnungen zum Besichtigen und Kaufen. Wohnungen, eigene Autos und Geld

@@ -20,6 +20,7 @@ U.hashStr = function (s) {
 };
 U.clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 U.lerp = (a, b, t) => a + (b - a) * t;
+U.smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 U.damp = (a, b, lambda, dt) => a + (b - a) * (1 - Math.exp(-lambda * dt));
 U.wrapAngle = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
@@ -92,4 +93,67 @@ U.color = function (hex, vary, rnd) {
     c.r *= f; c.g *= f; c.b *= f;
   }
   return c;
+};
+
+// ---------- Figuren: abgerundete Körperteile ----------
+// Quader mit runden Kanten (Radius r) aus einem unterteilten Würfel; taper(t) skaliert x/z über die Höhe
+// (t = 0 unten … 1 oben). Normalen werden aus der Rundung berechnet, damit keine Kanten zu sehen sind.
+U.roundBox = function (w, h, d, r, seg = 4, taper) {
+  const g = new THREE.BoxGeometry(w, h, d, seg, seg, seg);
+  const pos = g.attributes.position, nor = g.attributes.normal;
+  const ix = w / 2 - r, iy = h / 2 - r, iz = d / 2 - r;
+  const v = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    c.set(U.clamp(v.x, -ix, ix), U.clamp(v.y, -iy, iy), U.clamp(v.z, -iz, iz));
+    n.subVectors(v, c);
+    if (n.lengthSq() > 1e-10) { n.normalize(); v.copy(c).addScaledVector(n, r); nor.setXYZ(i, n.x, n.y, n.z); }
+    if (taper) { const s = taper(v.y / h + 0.5); v.x *= s; v.z *= s; }
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  return g.toNonIndexed();
+};
+// Teile zusammenfassen: [geometrie, x, y, z, farbe (Graustufe, optional)]
+U.mergeParts = function (list) {
+  const P = [], N = [], C = [];
+  for (const [g0, x, y, z, col = 1] of list) {
+    const g = g0.index ? g0.toNonIndexed() : g0;
+    const p = g.attributes.position, n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      P.push(p.getX(i) + x, p.getY(i) + y, p.getZ(i) + z); N.push(n.getX(i), n.getY(i), n.getZ(i)); C.push(col, col, col);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  return g;
+};
+// Körperteile mit denselben Maßen und Drehpunkten wie die früheren Quader (Spieler, Polizisten, Passanten).
+// Beine mit Schuh (dunkle Eckenfarbe), Kopf mit Hals und Nase, Haar als Kappe mit Hinterkopf.
+U.figParts = function () {
+  if (U._fig) return U._fig;
+  const leg = U.mergeParts([
+    [U.roundBox(0.19, 0.84, 0.22, 0.085, 4, t => U.lerp(0.72, 1.0, t)), 0, 0.01, 0],
+    [U.roundBox(0.18, 0.11, 0.3, 0.05, 3), 0, -0.4, 0.045, 0.22],
+  ]);
+  const arm = U.mergeParts([
+    [U.roundBox(0.14, 0.52, 0.16, 0.065, 4, t => U.lerp(0.78, 1.0, t)), 0, 0.04, 0],
+    [U.roundBox(0.1, 0.13, 0.11, 0.045, 3), 0, -0.27, 0.01, 0.82],
+  ]);
+  const torso = U.mergeParts([[U.roundBox(0.48, 0.62, 0.27, 0.1, 5, t => t < 0.75 ? U.lerp(0.84, 1.0, t / 0.75) : U.lerp(1.0, 0.9, (t - 0.75) / 0.25)), 0, 0, 0]]);
+  const head = U.mergeParts([
+    [U.roundBox(0.27, 0.32, 0.29, 0.12, 4), 0, 0.01, 0],
+    [new THREE.CylinderGeometry(0.06, 0.07, 0.16, 8), 0, -0.2, -0.01],
+    [U.roundBox(0.05, 0.08, 0.06, 0.02, 2), 0, -0.01, 0.15],
+    [U.roundBox(0.05, 0.035, 0.03, 0.012, 2), 0.065, 0.035, 0.137, 0.12],
+    [U.roundBox(0.05, 0.035, 0.03, 0.012, 2), -0.065, 0.035, 0.137, 0.12],
+    [U.roundBox(0.09, 0.018, 0.02, 0.008, 2), 0, -0.075, 0.14, 0.45],
+  ]);
+  const hair = U.mergeParts([
+    [U.roundBox(0.3, 0.1, 0.32, 0.05, 3), 0, -0.03, -0.01],
+    [U.roundBox(0.3, 0.2, 0.09, 0.04, 3), 0, -0.13, -0.12],
+  ]);
+  U._fig = { leg, arm, torso, head, hair };
+  return U._fig;
 };

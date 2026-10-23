@@ -47,7 +47,8 @@
       <div><h3>Allgemein</h3>
         <p><kbd>E</kbd> einsteigen, Auto klauen, aussteigen</p>
         <p><kbd>F</kbd> Rennen · Wohnung · Autohaus · verkaufen</p>
-        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht · <kbd>F1</kbd> Hilfe</p>
+        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>F1</kbd> Hilfe</p>
+        <p><kbd>N</kbd> Zeitraffer Tag/Nacht · <kbd>K</kbd> Wetter · <kbd>O</kbd> Grafikqualität</p>
       </div>
     </div>
     <button id="start-btn">Los geht's</button>
@@ -60,6 +61,7 @@
   <div id="location"><div id="loc-street">Markt</div><div id="loc-mode">zu Fuß</div></div>
   <div id="help-hint"><kbd>F1</kbd> Hilfe · <kbd>M</kbd> Stadtplan</div>
   <div id="status">
+    <div id="clock">12:00</div>
     <div id="money">€ 0</div>
     <div id="stars"></div>
     <div class="bar-row"><span class="ico">♥</span><div class="hbar"><div id="hp-bar"></div></div></div>
@@ -117,7 +119,8 @@
         <p><kbd>E</kbd> ein-/aussteigen, Auto klauen</p>
         <p><kbd>F</kbd> Rennen starten/abbrechen, Auto verkaufen</p>
         <p><kbd>F</kbd> an Haustür oder Autohaus: ansehen, kaufen</p>
-        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht</p>
+        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Zeitraffer Tag/Nacht</p>
+        <p><kbd>K</kbd> Wetter wechseln · <kbd>O</kbd> Grafik: Ultra, Hoch, Mittel, Niedrig</p>
         <p>In der Wohnung: <kbd>E</kbd> benutzen · <kbd>F</kbd> kaufen/Infos</p>
       </div>
     </div>
@@ -147,6 +150,7 @@
 <script src="data/region/ortho.js"></script>
 <script src="data/region/ortho-hd.js"></script>
 <script src="js/util.js"></script>
+<script src="js/post.js"></script>
 <script src="js/atmosphere.js"></script>
 <script src="js/water.js"></script>
 <script src="js/world.js"></script>

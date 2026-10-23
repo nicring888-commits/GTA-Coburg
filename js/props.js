@@ -554,13 +554,14 @@ class CityProps {
     })();
     const striped = new THREE.MeshLambertMaterial({ color: '#ffffff', map: stripe });
     const white = lam('#ffffff');
-    this.lampMat = new THREE.MeshLambertMaterial({ color: '#fff4d6', emissive: '#ffd890', emissiveIntensity: 0.05 });
+    this.lampMat = new THREE.MeshLambertMaterial({ color: '#fff4d6', emissive: '#ffc070', emissiveIntensity: 0.05 });
     this.signMat = lam('#ffffff');
     this.signNightMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
     const glowTex = (() => {
       const cv = document.createElement('canvas'); cv.width = cv.height = 64;
       const c = cv.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
-      g.addColorStop(0, 'rgba(255,214,140,0.55)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+      // Natriumdampf-Licht: warmes Orange, zur Mitte heller
+      g.addColorStop(0, 'rgba(255,196,120,0.62)'); g.addColorStop(0.45, 'rgba(255,160,80,0.26)'); g.addColorStop(1, 'rgba(255,150,70,0)');
       c.fillStyle = g; c.fillRect(0, 0, 64, 64);
       return new THREE.CanvasTexture(cv);
     })();
@@ -649,7 +650,7 @@ class CityProps {
 
   setNight(n) {
     this.night = n;
-    this.lampMat.emissiveIntensity = n ? 2.2 : 0.05;
+    this.lampMat.emissiveIntensity = n ? 5 : 0.05;  // hell genug für den Bloom der Nachbearbeitung
     if (this.glowMesh) this.glowMesh.visible = n;
     if (this.signMesh) this.signMesh.material = n ? this.signNightMat : this.signMat;
     for (const m of this.signMats || []) m.emissiveIntensity = n ? 0.85 : 0;

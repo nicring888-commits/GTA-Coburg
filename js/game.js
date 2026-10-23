@@ -9,13 +9,11 @@
 
   // ---------- Renderer und Szene ----------
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-  renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  // Filmische Tonwertkurve: helle Flächen laufen weich aus statt hart abzuschneiden, Farben bleiben natürlich
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  // Nachbearbeitung (js/post.js): HDR mit MSAA, Umgebungsverdeckung, Luftperspektive, Bloom, filmische Tonwertkurve
+  // und Farbkorrektur; setzt Auflösung und Tonwertkurve je Qualitätsstufe (Taste O)
+  const post = new PostFX(renderer);
   $('app').appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -30,15 +28,27 @@
   const SUN_DIR = new THREE.Vector3(0.15, 1.3, 0.95).normalize();
   sun.castShadow = true;
   // große Schattenkarte, wenn die Grafikkarte sie kann (schärfere Schatten bei gleicher Reichweite)
-  const SHADOW_PX = renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048;
-  sun.shadow.mapSize.set(SHADOW_PX, SHADOW_PX);
-  const SC = SHADOW_PX > 2048 ? 135 : 110;
-  Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 1, far: 700 });
+  const MAX_SHADOW = renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048;
+  let SC = 110;
   sun.shadow.bias = -0.0005;
-  sun.shadow.normalBias = SHADOW_PX > 2048 ? 0.4 : 0.6;
+  const setShadow = q => {
+    const px = Math.min(q.shadow, MAX_SHADOW);
+    if (sun.shadow.mapSize.x !== px) {
+      sun.shadow.mapSize.set(px, px);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    }
+    SC = px > 2048 ? 135 : 110;
+    Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 1, far: 700 });
+    sun.shadow.camera.updateProjectionMatrix();
+    sun.shadow.normalBias = px > 2048 ? 0.4 : 0.6;
+  };
+  post.onChange = setShadow;
+  setShadow(post.q);
   scene.add(sun, sun.target);
-  // Himmel, Wolken, Wetter und Spiegelungen (js/atmosphere.js) steuern ab jetzt Sonne, Himmelslicht und Nebel
+  // Himmel, Wolken, Tageszeit, Wetter und Spiegelungen (js/atmosphere.js) steuern ab jetzt Sonne, Himmelslicht und
+  // Nebel; SUN_DIR wird dabei mit dem Sonnenstand gedreht
   const atmo = new Atmosphere({ scene, renderer, sun, hemi, sunDir: SUN_DIR });
+  atmo.post = post;
 
   // Scheinwerfer für das gefahrene Auto (nachts)
   const headlight = new THREE.SpotLight('#fff1d0', 0, 70, 0.55, 0.5, 1.2);
@@ -438,10 +448,18 @@
     ui.toast(name ? 'Willkommen: ' + name : 'Schnellreise', 2);
   }
 
+  // Taste N: Zeitraffer bis 22 bzw. 9 Uhr (drinnen sofort)
   function toggleNight() {
-    night = !night;
+    const toNight = !night;
+    atmo.setNight(toNight, !!property.inside);
+    if (property.inside) { atmo.update(0, null, true); syncNight(); }
+    ui.toast(toNight ? 'Zeitraffer bis 22 Uhr' : 'Zeitraffer bis 9 Uhr', 1.4);
+  }
+  // Lichter, Fenster und Stadtleben folgen der Uhr der Atmosphäre
+  function syncNight() {
+    if (atmo.isNight === night) return;
+    night = atmo.isNight;
     applySky();
-    ui.toast(night ? 'Nacht' : 'Tag', 1.2);
   }
   function cycleWeather() {
     atmo.auto = false; // von Hand gewählt: bleibt, bis man wieder wechselt
@@ -611,6 +629,7 @@
     if (pressed.F1) $('help').classList.toggle('hidden');
     if (pressed.KeyN) toggleNight();
     if (pressed.KeyK) cycleWeather();
+    if (pressed.KeyO) ui.toast('Grafik: ' + post.cycle(), 1.6);
     if (pressed.KeyM || pressed.KeyG) ui.toast(property.inside.home.venue ? 'Erst nach draußen gehen' : 'Erst die Wohnung verlassen', 1.5);
     const io = property.inside, mv = walkInput();
     mv.run = false; // drinnen wird nicht gerannt
@@ -713,6 +732,7 @@
   function loop(now) {
     requestAnimationFrame(loop);
     const dt = Math.min(0.05, (now - last) / 1000);
+    if (started) post.adapt(now - last);
     last = now;
     if (started && ui.mapOpen && (pressed.KeyM || pressed.Escape)) ui.closeMap();
     else if (started && property.menuOpen) { if (pressed.Escape || pressed.KeyF || pressed.KeyG) property.closeMenu(); }
@@ -741,6 +761,7 @@
     if (pressed.F1) $('help').classList.toggle('hidden');
     if (pressed.KeyN) toggleNight();
     if (pressed.KeyK) cycleWeather();
+    if (pressed.KeyO) ui.toast('Grafik: ' + post.cycle(), 1.6);
     if (pressed.KeyC && mode === 'drive') camMode = 1 - camMode;
     const freeze = !!(races.active && races.active.t < 0);
     if (pressed.KeyE && !freeze) {
@@ -866,6 +887,7 @@
     hudTimer -= dt;
     if (hudTimer <= 0) {
       hudTimer = 0.25;
+      $('clock').textContent = atmo.timeText + ' · ' + atmo.weatherName;
       const r = world.nearestRoad(px, pz, 35, s => !!s.n);
       const b = world.insideBuilding(px, pz, 0);
       const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : 'zu Fuß';
@@ -919,15 +941,17 @@
       headlight.position.set(car.x + fx * 2.2, car.y + 0.8, car.z + fz * 2.2);
       headlight.target.position.set(car.x + fx * 20, car.y - 1, car.z + fz * 20);
     } else headlight.intensity = 0;
-    if (!property.inside) atmo.update(dt, camera);
+    if (!property.inside) { atmo.update(dt, camera); syncNight(); }
     peds.draw(camera.position.x, camera.position.z);
+    world.updateTreeLod(camera.position.x, camera.position.z);
     waterTick(dt);
     ui.updateLabels(camera);
-    renderer.render(scene, camera);
+    post.render(scene, camera);
   }
 
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight);
+    post.scale = 1;
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
   });
@@ -935,7 +959,7 @@
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };

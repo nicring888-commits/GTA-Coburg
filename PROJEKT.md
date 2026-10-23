@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.1.0 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 21.10.2026
+**Version:** 2.2.0 „Grand Theft Coburg – Grafik“ · **Letzte Aktualisierung:** 23.10.2026
 
 ---
 
@@ -45,7 +45,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 |---|---|---|
 | Bewegen | `W A S D` (relativ zur Kamera) | `W`/`S` Gas, Bremse, rückwärts · `A`/`D` lenken |
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
-| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Tag/Nacht · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
+| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
 
@@ -107,7 +107,9 @@ und müssen dort bleiben.
 | Datei | Aufgabe |
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
-| `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen |
+| `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.2.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
+| `js/post.js` | Nachbearbeitung (seit v2.2.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
+| `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
@@ -115,7 +117,7 @@ und müssen dort bleiben.
 | `js/traffic.js` | KI-Verkehr auf dem Straßennetz: fährt rechts, beachtet Einbahnstraßen, bremst vor Kurven, Hindernissen und dem Spieler |
 | `js/player.js` | Spielfigur mit Lauf-Animation, Springen, Kollision mit Häusern, Bäumen und Autos; mit anderem Aussehen auch Polizisten |
 | `js/ui.js` | Minikarte (dreht mit, Markierungen für Polizei, Checkpoints, Rennstarts, Läden, ferne am Rand), großer Stadtplan (Zoom, Verschieben, Klick = Reise), Ortsschilder, Geld, Sterne, Lebens- und Schadensbalken, große Meldungen |
-| `js/game.js` | Szene, Licht und Schatten (folgt dem Spieler), Tag/Nacht, Eingabe, Kamera (weicht Hauswänden aus), Ton (WebAudio: Motor, Hupe, Aufprall, Martinshorn, Explosion, Signaltöne), Spielstand (Geld, Leben), Spawn am Bahnhof, Straftaten, Verhaftet/Erledigt, Feuer und Explosionen, Lackiererei und Händler, Hauptschleife |
+| `js/game.js` | Szene, Licht und Schatten (folgt dem Spieler, Größe je Qualitätsstufe), Tag/Nacht folgt der Uhr (`syncNight`), Eingabe, Kamera (weicht Hauswänden aus), Ton (WebAudio: Motor, Hupe, Aufprall, Martinshorn, Explosion, Signaltöne), Spielstand (Geld, Leben), Spawn am Bahnhof, Straftaten, Verhaftet/Erledigt, Feuer und Explosionen, Lackiererei und Händler, Hauptschleife |
 | `js/driver.js` | `RoadNav`: Straßennetz als Graph (beide Richtungen, ohne Durchfahrten durch Gebäude), Dijkstra nach Fahrzeit, Wegsuche, Zufallspunkte. `AutoDriver`: KI-Fahrer mit echter Fahrphysik (Vorausschau-Lenkung, Kurvenbremsung, Ausweichen, Freifahren) |
 | `js/police.js` | Fahndung, Streifenwagen (Verfolgen, Rammen, Anhalten), Polizisten zu Fuß, Festnahme, Straßensperren, Entkommen |
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
@@ -191,6 +193,7 @@ sie nicht zum Gelände (`meta.base`), baut das Spiel alle Häuser wie bisher aus
 Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races.list` / `game.races.start(r, game.car)`,
 `game.addMoney(1000)`, `game.explode(auto)`, `game.busted()`, `game.wasted('Grund')` und
 `game.property` (z. B. `game.property.enter(game.property.homes[0], true)`, `.exit()`, `.openGarage()`, `.openShop(game.property.shops[0])`) und
+`game.atmo.clock = 19.5` (Uhrzeit), `game.atmo.setWeather('rain', true)`, `game.post.cycle()`, `game.post.debugAO = true` und
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
@@ -209,19 +212,44 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🚧 v2.2.0 (21.10.2026, Zwischenstand): **Grafik realistischer.**
-  - Filmische Tonwertkurve (ACES), Schattenkarte 4096 px (wenn die Grafikkarte es kann), Sichtweite bis ≈ 2,9 km
-  - Neues Modul `js/atmosphere.js`: Himmelskuppel mit Sonne, Wolken, Sternen; fließender Tag-Nacht-Wechsel; Wetter
-    (klar, wolkig, bedeckt, Regen, Nebel) wechselt alle paar Minuten von selbst, Taste `K` schaltet von Hand; Regen,
-    nasse Straßen mit Pfützen; Umgebungsbild für Spiegelungen in Lack, Glas und Wasser
-  - Fassaden: Fenster mit Gewände, Sims, Sprossen, Laibungsschatten, spiegelndem Glas und Vorhängen; Sockel,
-    Geschossgesimse, Verwitterung, Kontaktschatten; Schaufenster im Erdgeschoss der Altstadt (`facadeShader`)
-  - Straßen: Asphaltstruktur, Bordsteine, Randlinien auf Hauptstraßen (`roadShader`, `curb`); Wasser spiegelt
-  - Autos: gerundete Karosserie mit Radkästen, Glaskabine mit Säulen, Felgen, Kennzeichen „CO“, Klarlack, Bodenschatten
-  - Bäume: unregelmäßige, weich schattierte Kronen mit Laubstruktur (drei Formen), Nadelbäume aus drei Kegeln
-  - Leichte Vignette, Sichtfeld wird bei hohem Tempo etwas weiter
-  - Getestet im Browser: Markt, Spitalgasse, Bahnhof, Luftbild Altstadt, Auto aus der Nähe; keine Fehler.
-    Noch offen: Regen, Nebel und Nacht im Bild prüfen, Bildrate messen, `K` in Hilfe und Startbildschirm eintragen
+- ✅ v2.2.0 (23.10.2026): **Grafik realistischer, Stil GTA IV.** Begonnen am 21.10. (Zwischenstand), fertig am 23.10.
+  - **Nachbearbeitung** (`js/post.js`): HDR-Bild mit 4× MSAA, Umgebungsverdeckung (SSAO: Kontaktschatten unter Bänken,
+    an Hauskanten, unter Autos), Luftperspektive mit Höhennebel und warmer Streuung zur Sonne (ersetzt den linearen
+    Nebel), Bloom (Sonne, Laternen, Scheinwerfer, beleuchtete Fenster), ACES-Tonwertkurve, Farbkorrektur wie GTA IV
+    (leicht entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung gegen Farbstufen
+  - **Qualitätsstufen** mit Taste `O` (Ultra, Hoch = Standard, Mittel, Niedrig ohne Nachbearbeitung; im Browser
+    gespeichert, Schlüssel `gta-coburg-quality`) und **dynamische Auflösung**, die bei Ruckeln bis auf 60 % heruntergeht
+  - **Tageszeit**: Uhr mit wanderndem Sonnenstand (1 Spielstunde = 1 Minute), Morgen- und Abendrot mit warmem, flachem
+    Licht und langen Schatten, Dämmerung; Nacht mit Mondlicht und orangem Stadtschein am Horizont. `N` ist jetzt ein
+    Zeitraffer bis 22 bzw. 9 Uhr, Lichter und Stadtleben folgen der Uhr. Uhrzeit und Wetter oben rechts im HUD
+  - Ausgangsbasis vom 21.10.: Himmelskuppel mit Wolken, Wetter (`K`), Regen, nasse Straßen mit Pfützen, Umgebungsbild
+    für Spiegelungen, Fassaden mit Gewänden und Gesimsen, Straßen mit Asphaltstruktur und Bordsteinen, gerundete Autos
+  - **Fassaden**: Normal Map aus einem Höhenfeld (Gewände 2 cm vor, Fensterbank 4 cm, Putzstruktur), **Fenstertiefe**
+    per Parallaxe (Glas 22 cm hinter der Wand, je nach Blickwinkel sieht man die Laibung), je Haus andere Achsbreite
+    (2,9/3,2/3,6 m) und Geschosshöhe (2,9/3,1/3,45 m), nachts Widerschein der Laternen unten an den Wänden
+  - **Dächer**: Ziegelreihen im Shader über dem Luftbild (Pfannen mit Wellen, Schatten unter jeder Reihe,
+    Farbschwankung je Ziegel, Relief über die Normale), kräftigere Ziegelfarbe, Moosflecken; steile Flächen nehmen die
+    unscharfe Mittelfarbe statt des verschmierten Fotos; Flachdächer mit Kieskörnung. Gilt in Stadt und Landkreis
+  - **Bäume**: Kronen aus 26–46 Blattbüschel-Karten (Laubtextur aus der Leinwand, mit Zweigen) um einen dichten Kern,
+    runde Schattierung, weiche Kanten (Alpha-to-Coverage), wiegen sich im Wind; Stamm mit Ästen; Nadelbäume mit
+    Nadeltextur und zerzausten Zweigspitzen. **Detailstufen**: Blattkarten nur bis ≈ 230 m (Gruppen von 250 m),
+    weiter weg eine grobe Laubhülle
+  - **Figuren**: Spieler, Polizisten und alle Passanten aus abgerundeten, sich verjüngenden Teilen statt Quadern, mit
+    Schuhen, Händen, Hals, Nase, Augen und Mund
+  - **Nacht**: Laternen als Natriumdampflicht (orange, Lichthof durch Bloom), hellere Nacht (Mondlicht, Belichtung),
+    Schaufenster gedämpft
+  - **Wetter**: Nebel dichter, der Himmel verschwindet im Dunst; Regen feiner und dichter
+  - Boden: Das Detailrauschen erkennt Wiese (Grashalme, trockene Stellen) und Pflaster/Asphalt (Körnung) an der Fotofarbe
+  - Getestet im Browser: Bahnhof, Markt (Tag, 19:20 Abendrot, 22:30 Nacht, Regen, Nebel), Spitalgasse, Fassade aus
+    der Nähe (Laibung sichtbar), Dächer von oben, Bäume, Spieler aus der Nähe, Villa (Innenraum), Zeitraffer `N`,
+    alle vier Qualitätsstufen mit `O`, Rödental; keine Fehler in der Konsole. Bildrate: bei ≈ 1930 × 1310 Pixeln
+    (Stufe Hoch mit MSAA, SSAO und Bloom) weiter 60 Bilder/s, auch in Rödental; dort ≈ 3,2 Mio. Dreiecke und ≈ 800
+    Zeichenaufrufe pro Bild (ohne Baum-LOD waren es ≈ 7 Mio.)
+- ⚠️ Grenzen v2.2.0: Der Boden im Landkreis bleibt unscharf, weil dort nur Luftbilder mit 1,9 m pro Pixel vorliegen
+  (bayerischer Dienst gesperrt). Fassaden haben weiter ein gemeinsames Fenstermuster (variiert in Maß, Farbe, Rahmen,
+  Gesimsen, Vorhängen), keine Balkone, Gauben oder Dachüberstände. Gesichter sind einfach (Augen, Nase, Mund aus
+  Formen). Die Uhr steht in Innenräumen still. Gemessen nur auf diesem Rechner; auf schwachen Grafikkarten Stufe
+  Mittel oder Niedrig wählen (die dynamische Auflösung hilft automatisch).
 
 - ✅ v2.1.0 (21.10.2026): **Wasser, Talbrücken, Leben in den Orten, schärfere Luftbilder.**
   - Echtes Wasser in Stadt und Landkreis: ausgehobenes Bett, Wasseroberfläche mit Wellen, Ufer als Hindernis
@@ -444,7 +472,11 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [ ] Spielziele: Taxi- oder Lieferaufträge zwischen Sehenswürdigkeiten, Sammelobjekte, Zeitrennen
 - [ ] Straßenlaternen und Ampeln (aus OSM `highway=street_lamp`, `traffic_signals`)
 - [ ] Touch-Steuerung für Smartphone und Tablet
-- [ ] Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)
+- [x] ~~Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)~~ Erledigt in v2.2.0 (Uhr, Abendrot, Wetter)
+- [ ] Grafik weiter: zweites Fenstermuster (Rundbogen-, Sprossen- und Ladenfenster) je Haus, Balkone, Gauben und
+  Dachüberstände als Geometrie, Kanaldeckel auf der Fahrbahn, Scheinwerferkegel der KI-Autos nachts,
+  Wolkenschatten auf dem Boden
+- [ ] Ferne Wälder als Baumkulisse (Hülle über den Waldflächen) bis an den Sichtrand
 - [x] ~~Kartenausschnitt erweitern~~ Erledigt in v2.0.0 (ganzer Landkreis, kachelweise)
 - [ ] **Scharfe Luftbilder fertig laden:** `node tools/fetch-region-ortho-hd.js` erneut starten, sobald
   geodaten.bayern.de wieder antwortet (lädt nur die fehlenden 367 Ortskacheln, eine Anfrage alle 1,5 s)

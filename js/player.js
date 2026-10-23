@@ -7,26 +7,27 @@ const WALK = { speed: 4.2, run: 8.5, jump: 5.6, gravity: 18, radius: 0.38 };
 class Player {
   constructor(scene, look = {}) {
     const g = new THREE.Group();
-    const mat = c => new THREE.MeshLambertMaterial({ color: c });
+    const mat = c => new THREE.MeshLambertMaterial({ color: c, vertexColors: true });
     const skin = mat(look.skin || '#e0b08e'), shirt = mat(look.shirt || '#2f6db5'), pants = mat(look.pants || '#2c2f38'),
-      shoe = mat('#1d1d1d'), hair = mat(look.hair || '#4a3020');
-    const box = (w, h, d, m, x, y, z, parent) => {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      hair = mat(look.hair || '#4a3020');
+    const F = U.figParts();
+    const part = (geo, m, x, y, z, parent) => {
+      const b = new THREE.Mesh(geo, m);
       b.position.set(x, y, z); b.castShadow = true; (parent || g).add(b); return b;
     };
-    // Gliedmaßen hängen an Gelenken, damit sie schwingen können
+    // Gliedmaßen hängen an Gelenken, damit sie schwingen können (abgerundete Teile aus U.figParts)
     const joint = (x, y, z) => { const j = new THREE.Group(); j.position.set(x, y, z); g.add(j); return j; };
     this.legL = joint(0.13, 0.92, 0); this.legR = joint(-0.13, 0.92, 0);
-    box(0.2, 0.86, 0.24, pants, 0, -0.43, 0, this.legL); box(0.2, 0.86, 0.24, pants, 0, -0.43, 0, this.legR);
-    box(0.22, 0.1, 0.32, shoe, 0, -0.88, 0.05, this.legL); box(0.22, 0.1, 0.32, shoe, 0, -0.88, 0.05, this.legR);
-    box(0.5, 0.62, 0.28, shirt, 0, 1.23, 0);
+    part(F.leg, pants, 0, -0.43, 0, this.legL); part(F.leg, pants, 0, -0.43, 0, this.legR);
+    part(F.torso, shirt, 0, 1.23, 0);
     this.armL = joint(0.33, 1.5, 0); this.armR = joint(-0.33, 1.5, 0);
-    box(0.15, 0.6, 0.17, shirt, 0, -0.27, 0, this.armL); box(0.15, 0.6, 0.17, shirt, 0, -0.27, 0, this.armR);
-    box(0.13, 0.14, 0.14, skin, 0, -0.62, 0, this.armL); box(0.13, 0.14, 0.14, skin, 0, -0.62, 0, this.armR);
-    box(0.32, 0.34, 0.32, skin, 0, 1.73, 0);
-    box(0.34, 0.1, 0.34, hair, 0, 1.92, -0.01);
-    box(0.34, 0.2, 0.08, hair, 0, 1.8, -0.15);
-    if (look.cap) { box(0.38, 0.12, 0.38, mat(look.cap), 0, 1.95, 0); box(0.36, 0.04, 0.16, mat('#111'), 0, 1.9, 0.22); }
+    part(F.arm, shirt, 0, -0.27, 0, this.armL); part(F.arm, shirt, 0, -0.27, 0, this.armR);
+    part(F.head, skin, 0, 1.73, 0);
+    part(F.hair, hair, 0, 1.92, 0);
+    if (look.cap) {
+      part(U.mergeParts([[U.roundBox(0.34, 0.13, 0.35, 0.06, 3), 0, 0, 0]]), mat(look.cap), 0, 1.95, 0);
+      part(U.mergeParts([[U.roundBox(0.32, 0.03, 0.15, 0.012, 2), 0, 0, 0]]), mat('#111'), 0, 1.9, 0.22);
+    }
     this.group = g;
     this.mats = { shirt, pants };
     this.health = 100;
