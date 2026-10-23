@@ -76,10 +76,15 @@ function segCross(a, b, c, d) {
 const PLAIN_TYPES = new Set(['garage', 'garages', 'carport', 'shed', 'service', 'roof', 'hut', 'greenhouse', 'kiosk']);
 const TILE_ROOFS = ['#a5452f', '#963b2a', '#b5553a', '#7e3a2c', '#5e4a44', '#8a4b36'];
 
+// Wandprofil (für die Fensterverteilung im Fassadenshader), je Ecke 10 Werte:
+// [u links, u First, u rechts, Stil, Oberkante links, Oberkante am First, Oberkante rechts, Boden, Unterkante, Tür]
+// u in Metern im System der Wand-UV (u · 12,8), Höhen in Weltmetern. Stil: 0 Stadt (Achsenraster), 1 Landhaus,
+// 2 Landhaus mit Haustür (Tür: Feld-Nummer), 3 ohne Fenster.
+const PROF_NONE = new Array(10).fill(0);
 class Bucket {
-  constructor() { this.pos = []; this.col = []; this.uv = []; this.nor = []; }
-  // Dreieck, das zur Referenzrichtung (rx, ry, rz) zeigt
-  tri(a, b, c, col, uva, uvb, uvc, rx, ry, rz) {
+  constructor() { this.pos = []; this.col = []; this.uv = []; this.nor = []; this.prof = null; }
+  // Dreieck, das zur Referenzrichtung (rx, ry, rz) zeigt; pr: Wandprofil (optional)
+  tri(a, b, c, col, uva, uvb, uvc, rx, ry, rz, pr) {
     let ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
     let vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
     let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
@@ -93,6 +98,11 @@ class Bucket {
     this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
     for (let i = 0; i < 3; i++) { this.col.push(col.r, col.g, col.b); this.nor.push(nx, ny, nz); }
     if (uva) this.uv.push(uva[0], uva[1], uvb[0], uvb[1], uvc[0], uvc[1]);
+    if (pr || this.prof) {
+      if (!this.prof) this.prof = new Array((this.pos.length / 3 - 3) * 10).fill(0);
+      const q = pr || PROF_NONE;
+      for (let i = 0; i < 3; i++) this.prof.push(q[0] * 10, q[1] * 10, q[2] * 10, q[3], q[4] * 10, q[5] * 10, q[6] * 10, q[7] * 10, q[8] * 10, q[9]);
+    }
   }
   geometry() {
     if (!this.pos.length) return null;
@@ -101,9 +111,55 @@ class Bucket {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     if (this.uv.length) g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    if (this.prof) {
+      const n = this.pos.length / 3, A = new Int16Array(n * 4), B = new Int16Array(n * 4), C = new Int16Array(n * 2), P = this.prof;
+      const cl = v => Math.max(-32767, Math.min(32767, Math.round(v)));
+      for (let i = 0; i < n; i++) {
+        for (let k = 0; k < 4; k++) { A[i * 4 + k] = cl(P[i * 10 + k]); B[i * 4 + k] = cl(P[i * 10 + 4 + k]); }
+        C[i * 2] = cl(P[i * 10 + 8]); C[i * 2 + 1] = cl(P[i * 10 + 9]);
+      }
+      g.setAttribute('aProfA', new THREE.Int16BufferAttribute(A, 4));
+      g.setAttribute('aProfB', new THREE.Int16BufferAttribute(B, 4));
+      g.setAttribute('aProfC', new THREE.Int16BufferAttribute(C, 2));
+    }
     g.computeBoundingSphere();
     return g;
   }
+}
+
+// Profil einer rechteckigen Wand (Traufwand): von along bis along + len, Oberkante top, Boden base
+function rectProfile(along, len, top, base, style = 0, door = 0) {
+  return [along, along + len / 2, along + len, style, top, top, top, base, base - 2, door];
+}
+// Profil einer beliebigen ebenen Wand aus ihrem Umriss in (u, y): Oberkante als Linienzug links – höchster Punkt –
+// rechts, so abgesenkt, dass er nirgends über der echten Oberkante liegt; Unterkante als höchster Punkt der Unterseite
+function polyProfile(P, base, style = 0) {
+  let uMin = Infinity, uMax = -Infinity;
+  for (const p of P) { if (p[0] < uMin) uMin = p[0]; if (p[0] > uMax) uMax = p[0]; }
+  if (uMax - uMin < 0.3) return [uMin, uMin, uMin, 3, 0, 0, 0, base, base, 0];
+  const N = 24, us = [], tops = [], bots = [];
+  for (let k = 0; k <= N; k++) {
+    const u = uMin + (uMax - uMin) * (0.01 + 0.98 * k / N);
+    let top = -Infinity, bot = Infinity;
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length];
+      if ((a[0] - u) * (b[0] - u) > 0 || a[0] === b[0]) continue;
+      const y = a[1] + (b[1] - a[1]) * (u - a[0]) / (b[0] - a[0]);
+      if (y > top) top = y; if (y < bot) bot = y;
+    }
+    if (top === -Infinity) continue;
+    us.push(u); tops.push(top); bots.push(bot);
+  }
+  if (!us.length) return [uMin, uMin, uMin, 3, 0, 0, 0, base, base, 0];
+  let kp = 0;
+  for (let k = 1; k < tops.length; k++) if (tops[k] > tops[kp] + 0.05) kp = k;
+  const uP = us[kp];
+  let hL = tops[0], hP = tops[kp], hR = tops[tops.length - 1];
+  const prof = u => u <= uP ? hL + (hP - hL) * (u - uMin) / Math.max(uP - uMin, 1e-3) : hP + (hR - hP) * (u - uP) / Math.max(uMax - uP, 1e-3);
+  let over = 0;
+  for (let k = 0; k < us.length; k++) over = Math.max(over, prof(us[k]) - tops[k]);
+  hL -= over; hP -= over; hR -= over;
+  return [uMin, uP, uMax, style, hL, hP, hR, base, Math.max(...bots), 0];
 }
 
 class Chunks {
@@ -1219,7 +1275,10 @@ class World {
 
   // Shader-Ergänzung für Hauswände (Innenstadt und Umland): Gewände in eigener Farbe, Glas mit Spiegelung von Himmel
   // und Gegenüber, Vorhänge, Sockel, Geschossgesimse, Verwitterung, Kontaktschatten am Boden und Schaufenster in der
-  // Altstadt. Die Wand-UV ist (Länge / 12,8 m, Höhe über Grund / 12,4 m), also 4 Achsen × 4 Geschosse je Kachel.
+  // Altstadt. Die Wand-UV ist (Länge / 12,8 m, Höhe über Grund / 12,4 m). Mit Wandprofil (aProfA/B/C, siehe Bucket)
+  // werden Achsen auf die Wandbreite und Geschosse bis zur Traufe eingepasst, und es erscheinen nur Fenster, die ganz
+  // in die Wand passen (nicht unter Dach- oder Giebelkante, nicht im Boden, nicht über die Hausecke). Stil 1/2:
+  // Landhaus mit eigenen Fenstern, Faschen, Läden, Haustür, Sandsteinsockel, Eckquadern und Fachwerk.
   facadeShader(mat, tex) {
     const A = ALTSTADT_BOX;
     const detail = this.makeDetailTexture();
@@ -1231,106 +1290,206 @@ class World {
       sh.uniforms.facadeDepth = { value: tex.depth };
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.shopBox = { value: new THREE.Vector4(A.minX, A.minZ, A.maxX, A.maxZ) };
-      const CR = this.coreRect;  // Fachwerk nur im Umland (außerhalb der Innenstadt)
-      sh.uniforms.coreBox = { value: CR ? new THREE.Vector4(CR.minX, CR.minZ, CR.maxX, CR.maxZ) : new THREE.Vector4(0, 0, 0, 0) };
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNor;')
-        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNor = normalize(mat3(modelMatrix) * objectNormal);');
+        .replace('#include <common>', `#include <common>
+          varying vec3 vWPos; varying vec3 vWNor;
+          attribute vec4 aProfA, aProfB; attribute vec2 aProfC;
+          flat varying vec4 vProfA, vProfB; flat varying vec2 vProfC;`)
+        .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+          vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vWNor = normalize(mat3(modelMatrix) * objectNormal);
+          vProfA = vec4(aProfA.xyz * 0.1, aProfA.w); vProfB = aProfB * 0.1; vProfC = vec2(aProfC.x * 0.1, aProfC.y);`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
           varying vec3 vWPos; varying vec3 vWNor;
+          flat varying vec4 vProfA, vProfB; flat varying vec2 vProfC;
           uniform sampler2D facadeMask, detailMap, facadeDepth;
-          uniform vec4 shopBox, coreBox;
+          uniform vec4 shopBox;
           uniform float uNight, uWet;
           uniform vec3 uSkyTop, uSkyHorizon, uSkyGround;
           float fh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-          float fGlass = 0.0, fShop = 0.0, fCurtain = 0.0, fGlassVar = 0.0, fFlat = 0.0;
-          vec2 fUv = vec2(0.0), fUvG = vec2(0.0);`)
+          float fGlass = 0.0, fShop = 0.0, fCurtain = 0.0, fGlassVar = 0.0, fFlat = 0.0, fLit = 0.0, fRural = 0.0;
+          vec2 fUv = vec2(0.0), fUvG = vec2(0.0);
+          // Oberkante der Wand an der Stelle u (Linienzug links – First – rechts aus dem Wandprofil)
+          float topAt(float u) {
+            if (u < vProfA.y) return mix(vProfB.x, vProfB.y, clamp((u - vProfA.x) / max(vProfA.y - vProfA.x, 1e-3), 0.0, 1.0));
+            return mix(vProfB.y, vProfB.z, clamp((u - vProfA.y) / max(vProfA.z - vProfA.y, 1e-3), 0.0, 1.0));
+          }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
           {
             vec3 qc = floor(vColor.rgb * 255.0 + 0.5);          // gerundet, sonst flackert der Wert je Pixel
             float bh = fh(qc.rg + qc.b * 0.37);               // Zufall je Haus
             float bh2 = fh(qc.gb * 1.31 + 7.7);
-            // Achsbreite (2,9 / 3,2 / 3,6 m) und Geschosshöhe (2,9 / 3,1 / 3,45 m) je Haus
             vec2 kk = vec2(bh2 < 0.3 ? 1.1 : bh2 < 0.72 ? 1.0 : 0.89, fract(bh2 * 13.7) < 0.35 ? 1.07 : fract(bh2 * 13.7) < 0.75 ? 1.0 : 0.9);
-            fUv = vMapUv * kk; fUvG = fUv;
-            vec4 fm = texture2D(facadeMask, fUv);
-            float h = vMapUv.y * 12.4;                        // Höhe über Grund (m)
-            vec2 bay = fUv * 4.0;                             // Achse, Geschoss
-            vec2 cell = floor(bay);
-            vec2 loc = fract(bay) * vec2(3.2, 3.1) / kk;      // Lage in der Achse (m)
+            bool hasProf = vProfA.z - vProfA.x > 0.25;
+            float style = hasProf ? vProfA.w : 0.0;
+            float uAl = vMapUv.x * 12.8;                        // Meter entlang der Wand (System der Wand-UV)
+            float W = hasProf ? vProfA.z - vProfA.x : 1e4;      // Wandbreite
+            float uLoc = hasProf ? uAl - vProfA.x : uAl;
+            float base = hasProf ? vProfB.w : vWPos.y - vMapUv.y * 12.4;
+            float h = vWPos.y - base;                          // Höhe über dem Boden an dieser Wand
+            float eave = hasProf ? min(vProfB.x, vProfB.z) : 1e4;
+            // Achsen und Geschosse an die Wand angepasst: ganze Achsen über die Wandbreite, ganze Geschosse bis zur Traufe
+            float bwB = 3.2 / kk.x, fHB = 3.1 / kk.y;
+            float bw = hasProf ? W / max(1.0, floor(W / bwB + 0.5)) : bwB;
+            float Hs = eave - base;
+            float fH = hasProf && Hs > 2.0 ? clamp(Hs / max(1.0, floor(Hs / fHB + 0.5)), 2.6, 4.2) : fHB;
+            vec2 gp = vec2(uLoc / bw, h / fH);                  // fortlaufend: Achse, Geschoss
+            fUv = gp * 0.25; fUvG = fUv;
+            vec2 cell = floor(gp);
+            vec2 loc = fract(gp) * vec2(bw, fH);              // Lage in der Achse (m)
             vec3 frameC = bh < 0.5 ? vec3(0.86, 0.84, 0.79) : bh < 0.78 ? vec3(0.56, 0.45, 0.33) : vec3(0.5, 0.5, 0.49);
-            float glass = fm.r, frame = fm.g, relief = fm.b, reveal = 0.0;
             vec3 wallBase = diffuseColor.rgb;
-            // Fenstertiefe (Parallaxe): durch die Öffnung sieht man das Glas 22 cm tiefer, am Rand die Laibung
-            if (texture2D(facadeDepth, fUv).r > 0.5) {
-              vec3 Vw = normalize(cameraPosition - vWPos), Nw = normalize(vWNor);
-              vec3 Tw = normalize(vec3(Nw.z, 0.0, -Nw.x) + 1e-5);
-              float su = dot(dFdx(vWPos), Tw) * dFdx(vMapUv.x) + dot(dFdy(vWPos), Tw) * dFdy(vMapUv.x);
-              Tw *= su < 0.0 ? -1.0 : 1.0;
-              vec3 vt = vec3(dot(Vw, Tw), Vw.y, max(dot(Vw, Nw), 0.12));
-              vec2 offM = -vt.xy / vt.z * 0.22;
-              fUvG = fUv + offM * kk / vec2(12.8, 12.4);
-              if (texture2D(facadeDepth, fUvG).r < 0.5) { reveal = 1.0; glass = 0.0; frame = 0.0; relief = 1.0; }
-              else { vec4 fm2 = texture2D(facadeMask, fUvG); glass = fm2.r; frame = fm2.g; relief = fm2.b; }
-            }
-            // Schaufenster im Erdgeschoss der Altstadt
-            bool shop = vWPos.x > shopBox.x && vWPos.x < shopBox.z && vWPos.z > shopBox.y && vWPos.z < shopBox.w && bh < 0.82 && h > -0.3 && h < 3.1;
-            if (shop) {
-              float door = step(0.72, fh(cell + bh * 13.0));
-              float lx = fract(bay.x);
-              float gx0 = door > 0.5 ? 0.33 : 0.08, gx1 = door > 0.5 ? 0.67 : 0.92, gy0 = door > 0.5 ? 0.02 : 0.5, gy1 = 2.55;
-              float ex = 0.025;
-              float inG = step(gx0, lx) * step(lx, gx1) * step(gy0, h) * step(h, gy1);
-              float inF = step(gx0 - ex, lx) * step(lx, gx1 + ex) * step(gy0 - 0.08, h) * step(h, gy1 + 0.08);
-              glass = inG; frame = inF - inG; relief = 1.0 - 0.35 * inG * smoothstep(gy1 - 0.3, gy1, h); reveal = 0.0;
-              fFlat = 1.0;
-              frameC = vec3(0.12, 0.12, 0.13);
-              // Ladenzone: Band über den Fenstern (Schildfläche) etwas dunkler
-              diffuseColor.rgb *= 1.0 - 0.18 * step(2.65, h);
-              fShop = inG;
-            } else if (h < 0.45 && h > -2.5) {
-              // Sockel aus Stein
-              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.39) * sampledDiffuseColor.rgb, 0.75);
-              glass = 0.0; frame = 0.0; relief = 1.0; reveal = 0.0; fFlat = 1.0;
-            }
-            // Laibung: Steinfarbe des Gewändes, im Schatten; oben (Sturz) dunkler
-            if (reveal > 0.5) diffuseColor.rgb = mix(wallBase, frameC * sampledDiffuseColor.rgb, 0.5) * (0.5 + 0.18 * smoothstep(2.2, 0.9, loc.y));
-            diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
-            // Geschossgesims (an etwa zwei Dritteln der Häuser)
-            float fH = 3.1 / kk.y, fl = fract(h / fH) * fH;
-            if (bh > 0.33 && h > 2.0 && !shop) {
-              float band = step(0.02, fl) * step(fl, 0.16);
-              diffuseColor.rgb = mix(diffuseColor.rgb, frameC * 1.05, band * 0.85);
-              relief *= 1.0 - 0.3 * step(0.16, fl) * (1.0 - smoothstep(0.16, 0.3, fl));
-            }
-            // Fachwerk an etwa einem Drittel der Häuser im Umland (Erdgeschoss und erstes Obergeschoss):
-            // Schwelle, Rähm, Brust- und Sturzriegel, Ständer neben den Fenstern, Streben unter den Fenstern
-            bool outside = coreBox.z > coreBox.x && (vWPos.x < coreBox.x || vWPos.x > coreBox.z || vWPos.z < coreBox.y || vWPos.z > coreBox.w);
-            if (outside && fract(bh2 * 7.31) < 0.34 && !shop && h > 0.45 && h < 2.0 * fH) {
-              float lx = fract(bay.x), fy = fl / fH, bw = 3.2 / kk.x;
-              float bx = 0.085 / bw, by = 0.085 / fH;          // halbe Balkenbreite als Anteil
-              float beam = max(step(fy, by * 2.0), step(1.0 - by * 1.6, fy));
-              beam = max(beam, step(abs(fy - 0.27), by));
-              beam = max(beam, step(abs(fy - 0.86), by));
-              beam = max(beam, max(step(min(lx, 1.0 - lx), bx), step(abs(lx - 0.28), bx)));
-              beam = max(beam, step(abs(lx - 0.72), bx));
-              // Streben: in den Feldern unter den Fenstern schräg (Feuerbock)
-              if (fy < 0.27) {
-                vec2 q = vec2((lx < 0.5 ? lx : 1.0 - lx) * bw, fy * fH);
-                float dl = abs(q.x * 0.27 * fH - q.y * 0.28 * bw) / length(vec2(0.27 * fH, 0.28 * bw));
-                if (q.x < 0.28 * bw) beam = max(beam, step(dl, 0.075));
+            float glass = 0.0, frame = 0.0, relief = 1.0, reveal = 0.0;
+            vec3 Vw = normalize(cameraPosition - vWPos), Nw = normalize(vWNor);
+            vec3 Tw = normalize(vec3(Nw.z, 0.0, -Nw.x) + 1e-5);
+            float su = dot(dFdx(vWPos), Tw) * dFdx(vMapUv.x) + dot(dFdy(vWPos), Tw) * dFdy(vMapUv.x);
+            Tw *= su < 0.0 ? -1.0 : 1.0;
+            vec3 vt = vec3(dot(Vw, Tw), Vw.y, max(dot(Vw, Nw), 0.12));
+            bool shop = false;
+            float wr = fh(cell + bh * 7.0);
+
+            if (style > 0.5 && style < 2.5) {
+              // ===== Landhaus (oberfränkisches Dorf): Fenster in Feldern, nicht streng gereiht, Haustür, Läden =====
+              fRural = 1.0; fFlat = 1.0;
+              float hEG = 2.8, hOG = 2.65;
+              float fl = h < hEG ? 0.0 : 1.0 + floor((h - hEG) / hOG);
+              float flBot = base + (fl < 0.5 ? 0.0 : hEG + (fl - 1.0) * hOG);
+              float nS = max(1.0, floor(W / 3.1)), sw = W / nS;
+              float s = floor(uLoc / sw);
+              float wseed = fh(floor(vec2(vProfA.x, vProfB.y) * 2.0 + 0.5) * 0.137 + bh);
+              float ws = fh(vec2(s * 1.7 + fl * 5.3, wseed * 19.0));
+              bool attic = flBot > eave - 0.4;
+              float ww = mix(0.82, 1.12, fract(bh * 5.3)), whh = mix(1.18, 1.42, fract(bh * 9.1));
+              if (fl > 0.5) whh *= 0.93;
+              if (attic) { ww *= 0.72; whh = 0.92; }
+              float sill = attic ? 0.65 : 0.88;
+              bool isDoor = style > 1.5 && fl < 0.5 && abs(s - vProfC.y) < 0.5;
+              float cx = (s + 0.5) * sw + (isDoor ? 0.0 : (fh(vec2(s, wseed * 7.0)) - 0.5) * min(0.5, sw * 0.16));
+              vec2 wsz = isDoor ? vec2(1.05, 2.15) : vec2(ww, whh);
+              float rl = cx - wsz.x * 0.5, rb = flBot + (isDoor ? 0.0 : sill);
+              float rt = rb + wsz.y;
+              float tp = min(topAt(vProfA.x + rl - 0.2), topAt(vProfA.x + rl + wsz.x + 0.2));
+              bool ok = (isDoor || ws > 0.16) && rl > 0.35 && rl + wsz.x < W - 0.35 && rt < tp - 0.3 && rb > vProfC.x + 0.2 && W > 1.6;
+              vec2 q = vec2(uLoc - rl, vWPos.y - rb);
+              vec3 fasche = fract(bh * 3.3) < 0.5 ? wallBase * 1.12 : vec3(0.62, 0.55, 0.45) * sampledDiffuseColor.rgb;
+              if (ok) {
+                bool inWin = q.x > 0.0 && q.x < wsz.x && q.y > 0.0 && q.y < wsz.y;
+                // Faschen (Putzband) um das Fenster, Sohlbank aus Sandstein darunter
+                float fb = 0.13;
+                if (!inWin && q.x > -fb && q.x < wsz.x + fb && q.y > -fb && q.y < wsz.y + fb) { diffuseColor.rgb = fasche; relief = 0.93; }
+                if (!isDoor && q.y < 0.0 && q.y > -0.08 && q.x > -0.18 && q.x < wsz.x + 0.18) { diffuseColor.rgb = vec3(0.6, 0.55, 0.46) * sampledDiffuseColor.rgb; relief = 0.85; }
+                // Fensterläden (an knapp der Hälfte der Häuser)
+                if (!isDoor && !attic && fract(bh * 2.3) < 0.45 && q.y > 0.0 && q.y < wsz.y && ((q.x < -fb && q.x > -fb - wsz.x * 0.5) || (q.x > wsz.x + fb && q.x < wsz.x + fb + wsz.x * 0.5))) {
+                  vec3 shC = fract(bh * 7.7) < 0.35 ? vec3(0.16, 0.26, 0.17) : fract(bh * 7.7) < 0.65 ? vec3(0.3, 0.19, 0.11) : vec3(0.3, 0.35, 0.4);
+                  float lp = q.y / 0.07, louv = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
+                  diffuseColor.rgb = shC * (0.85 + 0.25 * louv);
+                  relief = 0.8 + 0.2 * louv;
+                }
+                if (inWin && isDoor) {
+                  // Haustür: Holz in Hausfarbe, zwei Füllungen, oben ein kleines Fenster
+                  vec3 dC = fract(bh * 6.1) < 0.4 ? vec3(0.28, 0.16, 0.08) : fract(bh * 6.1) < 0.7 ? vec3(0.13, 0.22, 0.15) : vec3(0.42, 0.12, 0.08);
+                  diffuseColor.rgb = dC;
+                  float px = abs(q.x - wsz.x * 0.5);
+                  float panel = step(0.12, q.x) * step(q.x, wsz.x - 0.12) * step(0.2, q.y) * step(q.y, 1.5) * step(0.06, px);
+                  relief = 1.0 - 0.25 * panel * (1.0 - step(0.03, min(min(q.x - 0.12, wsz.x - 0.12 - q.x), min(q.y - 0.2, 1.5 - q.y))));
+                  if (q.y > 1.62 && q.y < 2.0 && q.x > 0.18 && q.x < wsz.x - 0.18) { glass = 1.0; }
+                  if (q.y < 0.04) relief = 0.7;
+                } else if (inWin) {
+                  // Fenster mit Tiefe: Glas 14 cm hinter der Wand, Laibung sichtbar
+                  vec2 q2 = q - vt.xy / vt.z * 0.14;
+                  if (q2.x < 0.0 || q2.x > wsz.x || q2.y < 0.0 || q2.y > wsz.y) { reveal = 1.0; }
+                  else {
+                    float fr = 0.06;
+                    float bord = step(min(min(q2.x, wsz.x - q2.x), min(q2.y, wsz.y - q2.y)), fr);
+                    float mull = step(abs(q2.x - wsz.x * 0.5), 0.03);
+                    float trans = step(abs(q2.y - wsz.y * 0.64), 0.03);
+                    frame = max(bord, max(mull, trans));
+                    frame = mix(frame, 0.32, smoothstep(0.02, 0.05, fwidth(q2.x)));   // aus der Ferne gemittelt
+                    glass = 1.0 - frame;
+                    frameC = fract(bh * 4.9) < 0.75 ? vec3(0.9, 0.9, 0.87) : vec3(0.32, 0.2, 0.12);
+                    fLit = glass * step(0.5, fh(vec2(s, fl) + bh * 3.0));
+                  }
+                }
               }
-              vec3 beamC = (fract(bh * 3.7) < 0.6 ? vec3(0.12, 0.07, 0.04) : vec3(0.28, 0.085, 0.055)) * sampledDiffuseColor.rgb;
-              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.83, 0.76) * sampledDiffuseColor.rgb, 0.55 * (1.0 - glass));
-              diffuseColor.rgb = mix(diffuseColor.rgb, beamC, max(beam * (1.0 - glass) * (1.0 - reveal), frame));
+              // Sandsteinsockel mit Fugen
+              float sock = mix(0.45, 0.85, fract(bh * 8.3));
+              if (h < sock && glass < 0.5 && !(isDoor && ok && q.x > 0.0 && q.x < wsz.x)) {
+                vec3 sC = fract(bh * 2.9) < 0.6 ? vec3(0.66, 0.58, 0.44) : vec3(0.55, 0.36, 0.28);
+                float joint = step(fract(h / 0.3), 0.06) + step(fract((uLoc + step(0.5, fract(h / 0.6)) * 0.3) / 0.6), 0.04);
+                diffuseColor.rgb = sC * sampledDiffuseColor.rgb * (1.0 - 0.35 * min(joint, 1.0));
+                frame = 0.0; reveal = 0.0;
+              }
+              // Eckquader aus Sandstein an manchen Häusern
+              if (fract(bh * 4.1) < 0.3 && h > sock && h < eave - base) {
+                float bi = floor(h / 0.34), wq = mod(bi, 2.0) < 0.5 ? 0.45 : 0.28;
+                if (uLoc < wq || uLoc > W - wq) diffuseColor.rgb = vec3(0.68, 0.6, 0.47) * sampledDiffuseColor.rgb * (1.0 - 0.3 * step(fract(h / 0.34), 0.05));
+              }
+              // Fachwerk im Obergeschoss und Giebel (gut ein Drittel der Häuser): Ständer an den Feldern und neben den
+              // Fenstern, Riegel an Schwelle, Brüstung, Sturz und Rähm, Streben in fensterlosen Feldern
+              if (fract(bh2 * 7.31) < 0.38 && fl > 0.5 && glass < 0.5 && reveal < 0.5) {
+                float ly = vWPos.y - flBot, xs = uLoc - s * sw, b2 = 0.09;
+                float beam = step(ly, 0.18) + step(hOG - 0.12, ly) + step(abs(ly - (sill - 0.05)), b2);
+                beam += step(abs(ly - (sill + whh + 0.06)), b2) + step(xs, b2) + step(sw - b2, xs);
+                if (ok) beam += step(abs(uLoc - (rl - 0.17)), b2) + step(abs(uLoc - (rl + wsz.x + 0.17)), b2);
+                else beam += step(abs(xs * (hOG / sw) - ly), b2 * 1.4) + step(abs((sw - xs) * (hOG / sw) - ly), b2 * 1.4);
+                vec3 beamC = (fract(bh * 3.7) < 0.6 ? vec3(0.12, 0.07, 0.04) : vec3(0.28, 0.085, 0.055)) * sampledDiffuseColor.rgb;
+                if (frame < 0.5) diffuseColor.rgb = mix(vec3(0.88, 0.85, 0.78) * sampledDiffuseColor.rgb, beamC, min(beam, 1.0));
+              }
+              if (reveal > 0.5) diffuseColor.rgb = fasche * 0.55;
+              diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
+            } else {
+              // ===== Stadt: Fensterachsen aus der Textur, nur vollständig passende Fenster =====
+              vec4 fm = texture2D(facadeMask, fUv);
+              glass = fm.r; frame = fm.g; relief = fm.b;
+              bool winOK = style < 2.5;
+              if (hasProf) {
+                float wl = (cell.x + 0.23) * bw, wrr = (cell.x + 0.77) * bw;
+                float wt = base + (cell.y + 0.914) * fH, wbt = base + (cell.y + 0.254) * fH;
+                float tp = min(topAt(vProfA.x + wl), topAt(vProfA.x + wrr));
+                if (W < 1.7 || wl < 0.15 || wrr > W - 0.15 || wt > tp - 0.25 || wbt < vProfC.x + 0.15) winOK = false;
+              }
+              if (!winOK) { glass = 0.0; frame = 0.0; relief = 1.0; fFlat = 1.0; }
+              // Fenstertiefe (Parallaxe): durch die Öffnung sieht man das Glas 22 cm tiefer, am Rand die Laibung
+              else if (texture2D(facadeDepth, fUv).r > 0.5) {
+                vec2 offM = -vt.xy / vt.z * 0.22;
+                fUvG = fUv + offM / vec2(bw * 4.0, fH * 4.0);
+                if (texture2D(facadeDepth, fUvG).r < 0.5) { reveal = 1.0; glass = 0.0; frame = 0.0; relief = 1.0; }
+                else { vec4 fm2 = texture2D(facadeMask, fUvG); glass = fm2.r; frame = fm2.g; relief = fm2.b; }
+              }
+              // Schaufenster im Erdgeschoss der Altstadt
+              shop = vWPos.x > shopBox.x && vWPos.x < shopBox.z && vWPos.z > shopBox.y && vWPos.z < shopBox.w && bh < 0.82 && h > -0.3 && h < 3.1 && W > 2.2;
+              if (shop) {
+                float door = step(0.72, fh(cell + bh * 13.0));
+                float lx = fract(gp.x);
+                float gx0 = door > 0.5 ? 0.33 : 0.08, gx1 = door > 0.5 ? 0.67 : 0.92, gy0 = door > 0.5 ? 0.02 : 0.5, gy1 = min(2.55, eave - base - 0.4);
+                float ex = 0.025;
+                float inG = step(gx0, lx) * step(lx, gx1) * step(gy0, h) * step(h, gy1);
+                float inF = step(gx0 - ex, lx) * step(lx, gx1 + ex) * step(gy0 - 0.08, h) * step(h, gy1 + 0.08);
+                glass = inG; frame = inF - inG; relief = 1.0 - 0.35 * inG * smoothstep(gy1 - 0.3, gy1, h); reveal = 0.0;
+                fFlat = 1.0;
+                frameC = vec3(0.12, 0.12, 0.13);
+                diffuseColor.rgb *= 1.0 - 0.18 * step(2.65, h);
+                fShop = inG;
+              } else if (h < 0.45 && h > -2.5) {
+                // Sockel aus Stein
+                diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.39) * sampledDiffuseColor.rgb, 0.75);
+                glass = 0.0; frame = 0.0; relief = 1.0; reveal = 0.0; fFlat = 1.0;
+              }
+              if (reveal > 0.5) diffuseColor.rgb = mix(wallBase, frameC * sampledDiffuseColor.rgb, 0.5) * (0.5 + 0.18 * smoothstep(2.2, 0.9, loc.y));
+              diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
+              // Geschossgesims (an etwa zwei Dritteln der Häuser), nur unterhalb der Traufe
+              float fl = fract(h / fH) * fH;
+              if (bh > 0.33 && h > 2.0 && !shop && vWPos.y < eave - 0.2) {
+                float band = step(0.02, fl) * step(fl, 0.16);
+                diffuseColor.rgb = mix(diffuseColor.rgb, frameC * 1.05, band * 0.85);
+                relief *= 1.0 - 0.3 * step(0.16, fl) * (1.0 - smoothstep(0.16, 0.3, fl));
+              }
             }
             // Glas: dunkel, je Fenster etwas anders; manche mit hellem Vorhang
-            float wr = fh(cell + bh * 7.0);
             vec3 glassC = mix(vec3(0.035, 0.045, 0.055), vec3(0.07, 0.075, 0.07), wr);
-            fCurtain = step(0.62, wr) * (1.0 - fShop);
+            fCurtain = step(0.62, wr) * (shop ? 0.0 : 1.0);
             glassC = mix(glassC, vec3(0.55, 0.5, 0.42), fCurtain * 0.55);
-            // Schaufenster: dunkler Laden, oben heller (Deckenlicht), je Laden etwas andere Tönung
             if (shop) glassC = mix(vec3(0.03, 0.03, 0.035), mix(vec3(0.2, 0.17, 0.13), vec3(0.14, 0.15, 0.17), wr), smoothstep(0.6, 2.5, h) * 0.8);
             diffuseColor.rgb = mix(diffuseColor.rgb, glassC, glass);
             fGlass = glass; fGlassVar = fh(cell * 1.7 + bh * 3.0);
@@ -1338,7 +1497,8 @@ class World {
             vec2 wp = vec2(vWPos.x + vWPos.z, vWPos.y);
             float big = texture2D(detailMap, wp * 0.045).r;
             float streak = texture2D(detailMap, vec2(wp.x * 0.55, wp.y * 0.02)).r;
-            diffuseColor.rgb *= mix(1.0, (0.9 + 0.2 * big) * (1.0 - 0.12 * smoothstep(0.45, 0.8, streak)), 1.0 - glass);
+            float grain = texture2D(detailMap, wp * 0.9).r;
+            diffuseColor.rgb *= mix(1.0, (0.9 + 0.2 * big) * (1.0 - 0.12 * smoothstep(0.45, 0.8, streak)) * (1.0 + (grain - 0.5) * 0.12 * fRural), 1.0 - glass);
             // Kontaktschatten am Boden und Relief (die Normal Map übernimmt die Kanten, daher schwächer)
             diffuseColor.rgb *= mix(1.0, relief, 0.6) * mix(0.62, 1.0, smoothstep(-0.3, 1.6, h));
             // Regen dunkelt Putz und Stein
@@ -1353,13 +1513,13 @@ class World {
             float fres = 0.08 + 0.92 * pow(1.0 - max(dot(-V, N), 0.0), 4.0);
             vec3 sky = R.y > 0.0 ? mix(uSkyHorizon, uSkyTop, pow(R.y, 0.6)) : mix(uSkyHorizon * 0.45, uSkyGround * 0.35, clamp(-R.y * 3.0, 0.0, 1.0));
             float k = fGlass * (0.12 + 0.55 * fres) * (1.0 - uNight * 0.85) * (1.0 - fCurtain * 0.5) * (1.0 - fShop * 0.45);
-            // manche Scheiben spiegeln eher die Häuser gegenüber als den Himmel
             sky = mix(sky, uSkyGround * 0.6, fGlassVar * 0.6);
             outgoingLight = mix(outgoingLight, sky, k);
-            // beleuchtete Schaufenster am Abend
-            outgoingLight += vec3(1.0, 0.74, 0.45) * 0.085 * uNight * fShop * (0.5 + 0.5 * fGlassVar) * (0.6 + 0.4 * smoothstep(0.5, 2.5, vMapUv.y * 12.4));
-            // nachts: Widerschein der Straßenlaternen unten an den Fassaden
-            outgoingLight += diffuseColor.rgb * vec3(1.0, 0.58, 0.26) * uNight * 0.14 * (1.0 - smoothstep(0.0, 8.0, vMapUv.y * 12.4)) * (1.0 - fGlass);
+            float hb = vWPos.y - vProfB.w;
+            outgoingLight += vec3(1.0, 0.74, 0.45) * 0.085 * uNight * fShop * (0.5 + 0.5 * fGlassVar) * (0.6 + 0.4 * smoothstep(0.5, 2.5, hb));
+            // nachts: Widerschein der Straßenlaternen unten an den Fassaden; erleuchtete Fenster der Landhäuser
+            outgoingLight += diffuseColor.rgb * vec3(1.0, 0.58, 0.26) * uNight * 0.14 * (1.0 - smoothstep(0.0, 8.0, hb)) * (1.0 - fGlass);
+            outgoingLight += vec3(1.0, 0.78, 0.48) * 0.55 * uNight * fLit * (1.0 - fCurtain * 0.3);
           }
           #include <opaque_fragment>`)
         .replace('#include <normal_fragment_maps>', `
@@ -1371,7 +1531,7 @@ class World {
           #endif`)
         .replace('#include <emissivemap_fragment>', `
           #ifdef USE_EMISSIVEMAP
-            totalEmissiveRadiance *= texture2D(emissiveMap, fUvG).rgb * (1.0 - fFlat) * step(0.5, fGlass);
+            totalEmissiveRadiance *= texture2D(emissiveMap, fUvG).rgb * (1.0 - fFlat) * step(0.5, fGlass) * (1.0 - fRural);
           #endif`);
     };
     mat.customProgramCacheKey = () => 'facade';
@@ -1467,8 +1627,10 @@ class World {
           const v0 = (base - minH) / BAY_H, v1 = (top - minH) / BAY_H;
           along += len;
           const A0 = [ax, base, az], B0 = [bx, base, bz], B1 = [bx, top, bz], A1 = [ax, top, az];
-          wb.tri(A0, B0, B1, wallCol, [u0, v0], [u1, v0], [u1, v1], ox, 0, oz);
-          wb.tri(A0, B1, A1, wallCol, [u0, v0], [u1, v1], [u0, v1], ox, 0, oz);
+          const gnd = Math.max(this.heightAt(ax, az), this.heightAt(bx, bz), this.heightAt((ax + bx) / 2, (az + bz) / 2));
+          const pr = rectProfile(u0 * BAY_W, len, top, Math.max(gnd, minH));
+          wb.tri(A0, B0, B1, wallCol, [u0, v0], [u1, v0], [u1, v1], ox, 0, oz, pr);
+          wb.tri(A0, B1, A1, wallCol, [u0, v0], [u1, v1], [u0, v1], ox, 0, oz, pr);
           if (!isCanopy) {
             this.edges.push(ax, az, bx, bz);
             const e = this.edges.length / 4 - 1;
@@ -1577,9 +1739,20 @@ class World {
         for (const i of rings[0]) d0 = Math.min(d0, X[i] * tx + Z[i] * tz);
         const uv = i => [(X[i] * tx + Z[i] * tz - d0) / BAY_W, (WY[i] - y0) / BAY_H];
         const p = i => [X[i], WY[i], Z[i]];
+        // Wandprofil: Umriss in (u, y), Boden an fünf Stellen entlang der Wand
+        const ring0 = rings[0], i0 = ring0[0], u0w = X[i0] * tx + Z[i0] * tz - d0;
+        const P2 = ring0.map(i => [X[i] * tx + Z[i] * tz - d0, WY[i]]);
+        let uMn = Infinity, uMx = -Infinity;
+        for (const q of P2) { uMn = Math.min(uMn, q[0]); uMx = Math.max(uMx, q[0]); }
+        let gnd = y0;
+        for (let k = 0; k <= 4; k++) {
+          const u = uMn + (uMx - uMn) * k / 4, x = X[i0] + tx * (u - u0w), z = Z[i0] + tz * (u - u0w);
+          gnd = Math.max(gnd, this.heightAt(x, z));
+        }
+        const pr = polyProfile(P2, Math.min(gnd, y0 + 3));
         let col = lmWall || wallCol;
         if (lmUpper) { let ym = 0; for (const i of rings[0]) ym += Y[i]; if (ym / rings[0].length > lm.upper.y) col = lmUpper; }
-        this.triPoly(rings, X, WY, Z, n, (i, j, k) => wb.tri(p(i), p(j), p(k), col, uv(i), uv(j), uv(k), n[0], n[1], n[2]));
+        this.triPoly(rings, X, WY, Z, n, (i, j, k) => wb.tri(p(i), p(j), p(k), col, uv(i), uv(j), uv(k), n[0], n[1], n[2], pr));
       }
       // Dächer: Luftbild von oben (oder Ziegel- bzw. Flachdachfarbe ohne Luftbild)
       const rt = roofTarget(ox, oz);
@@ -1778,6 +1951,19 @@ class World {
       if (!a || !b || !c) continue;
       this.roofTri(rt, [a.x, y, a.y], [b.x, y, b.y], [c.x, y, c.y], col, 0, dir, 0);
     }
+  }
+
+  // Quader (z. B. Schornstein, Vordach, Stufe) als Dreiecke in einen Topf: Mitte unten (x, y, z), Breite w (entlang
+  // der Richtung ang), Höhe h, Tiefe d
+  boxTris(bucket, x, y, z, w, h, d, ang, col) {
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const P = (u, v, k) => [x + ca * u - sa * k, y + v, z + sa * u + ca * k];
+    const hw = w / 2, hd = d / 2;
+    const c = [P(-hw, 0, -hd), P(hw, 0, -hd), P(hw, 0, hd), P(-hw, 0, hd), P(-hw, h, -hd), P(hw, h, -hd), P(hw, h, hd), P(-hw, h, hd)];
+    const quad = (a, b, cc, dd, nx, ny, nz) => { bucket.tri(c[a], c[b], c[cc], col, null, null, null, nx, ny, nz); bucket.tri(c[a], c[cc], c[dd], col, null, null, null, nx, ny, nz); };
+    quad(4, 5, 6, 7, 0, 1, 0); quad(0, 1, 2, 3, 0, -1, 0);
+    quad(0, 1, 5, 4, sa, 0, -ca); quad(2, 3, 7, 6, -sa, 0, ca);
+    quad(1, 2, 6, 5, ca, 0, sa); quad(3, 0, 4, 7, -ca, 0, -sa);
   }
 
   // Satteldach; die Dachflächen kommen nach rt, die Giebelwände nach wallBucket

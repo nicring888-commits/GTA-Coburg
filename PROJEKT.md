@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.5.0 „Grand Theft Coburg – Landschaft“ · **Letzte Aktualisierung:** 23.10.2026
+**Version:** 2.6.0 „Grand Theft Coburg – Häuser“ · **Letzte Aktualisierung:** 23.10.2026
 
 ---
 
@@ -214,6 +214,33 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v2.6.0 (23.10.2026): **Fenster passen in die Fassade, Landhäuser im Stil oberfränkischer Dörfer.**
+  - Ursache der abgeschnittenen Fenster: Das Fensterraster lief starr ab dem tiefsten Geländepunkt des Hauses in
+    12,8 × 12,4-m-Kacheln über jede Wand, ohne Dach- und Giebelkanten, Hang, Wandbreite oder Hausecken zu kennen.
+    Jetzt trägt jede Wand ein **Wandprofil** als Vertex-Attribut (`aProfA/B/C`, Int16, gebaut in `Bucket.tri` mit
+    `rectProfile` bzw. `polyProfile`): linke und rechte Kante, Oberkante als Linienzug links – First – rechts (aus dem
+    LoD2-Umriss in 25 Stichproben, so abgesenkt, dass er nie über der echten Kante liegt), Unterkante, Boden an der Wand
+    (höchstes Gelände entlang der Wand), Stil und Türfeld
+  - Stadt (Stil 0): Achsen werden auf ganze Achsen über die Wandbreite verteilt (symmetrisch), Geschosse bis zur Traufe
+    eingepasst (2,6–4,2 m), Geschossreihen beginnen am Boden der jeweiligen Wand. Ein Fenster erscheint nur, wenn
+    Gewände und Sohlbank ganz in der Wand liegen: unter Trauf-/Giebelkante (30 cm Abstand), über dem Boden und der
+    Unterkante, nicht über die Hausecke. Giebel bekommen so von selbst weniger Fenster nach oben hin; schmale
+    Wandstücke bleiben ohne Fenster. Gesims nur unterhalb der Traufe, Schaufenster nur unter der Traufe
+  - Landhaus (Stil 1/2, `RURAL_HOUSES` im Umland bis 300 m² und 14 m): Traufhöhe ein-, eineinhalb- oder zweigeschossig,
+    steiles Satteldach (40–52°) mit Dachüberstand an Traufe und Ortgang, Untersicht und Stirnbrettern, Schornstein
+    (verputzt oder Ziegel) auf dem First; Giebelwände mit Dreiecksprofil und Giebelfenstern; Walmdach bei anderen
+    Grundrissen. Fenster in Feldern zu ≈ 3,1 m, leicht versetzt, einzelne Felder leer, Größe je Haus verschieden,
+    Erdgeschoss größer als Obergeschoss, Giebelfenster kleiner; Faschen um die Fenster, Sohlbank aus Sandstein,
+    Fensterkreuz, Glas mit Tiefe; Fensterläden (grün, braun, graublau) an knapp der Hälfte der Häuser;
+    **Haustür** an der Wand zur Straße mit Füllungen, Oberlicht, Vordach und Stufe; Sandsteinsockel (gelb oder rot)
+    mit Fugen, Eckquader an manchen Häusern; Fachwerk nur noch an Landhäusern, im Obergeschoss und Giebel, mit
+    Ständern neben den Fenstern und Streben in fensterlosen Feldern; nachts einzelne erleuchtete Fenster
+  - Getestet im Browser: Markt (Stadthaus-Giebel: Fenster folgen der Dreiecksform), Altstadt-Dächer von oben,
+    Spitalgasse, Albertinum am Hang (10 m Höhenunterschied), Beiersdorf, Wohlbach, Neustadt; 60 Bilder/s, keine Fehler
+- ⚠️ Grenzen v2.6.0: LoD2-Wände mit Stufen in der Oberkante bekommen ein vorsichtiges Profil (unter der niedrigsten
+  Stelle), dort fehlen dann manche Fenster. Gauben und Dachfenster gibt es nicht. Landhaus-Erkennung nach OSM-Typ und
+  Größe, nicht nach echtem Baustil. Die Innenstadt-Fassaden bleiben beim gemeinsamen Fenstermuster.
 
 - ✅ v2.5.0 (23.10.2026): **Ländliche Gebiete wie echte Landschaft.** Neues Modul `js/landscape.js`.
   - **Boden**: Statt flachem Luftbild mischt der Geländeshader echte Materialien nach den OSM-Flächen (Acker, Wiese,

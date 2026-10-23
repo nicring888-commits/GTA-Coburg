@@ -45,6 +45,8 @@ const RURAL_FACADES = ['#efe9dc', '#e9dfc6', '#e6d3a8', '#f0ebe0', '#ddd3c0', '#
   '#e5ddd0', '#f1ece0', '#e2c48f', '#cdd3c2'];
 const BARN_WALLS = ['#8a6446', '#7a5a40', '#9b7b5b', '#a8957c', '#b06a4f', '#8c8478'];
 const FARM_TYPES = new Set(['barn', 'farm_auxiliary', 'stable', 'cowshed', 'silo', 'sty']);
+// kleine Wohnhäuser auf dem Land bekommen den Landhaus-Stil (Fassadenshader Stil 1/2) und ein steiles Satteldach
+const RURAL_HOUSES = new Set(['house', 'detached', 'semidetached_house', 'residential', 'yes', 'farm', 'bungalow', 'terrace']);
 const HALL_TYPES = new Set(['industrial', 'warehouse', 'retail', 'supermarket', 'commercial', 'hangar', 'manufacture']);
 const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600,
   scrub: 1 / 380, residential: 1 / 1700, meadow: 1 / 5000, farmyard: 1 / 2500 };
@@ -1040,36 +1042,72 @@ class Region {
       let minH = Infinity, maxH = -Infinity;
       for (let i = 0; i < ring.length; i += 2) { const h = W.heightAt0(ring[i], ring[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
       const isCanopy = b.t === 'roof' || b.t === 'carport';
-      const top = Math.max(minH + b.h, maxH + 2.2), base = isCanopy ? top - 0.6 : minH - 2;
-      const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
+      const area = U.polyArea(ring), absA = Math.abs(area), sgn = area > 0 ? 1 : -1;
       const farm = FARM_TYPES.has(b.t), hall = HALL_TYPES.has(b.t);
       const plainType = PLAIN_TYPES.has(b.t) || farm || hall || isCanopy;
+      // kleines Wohnhaus auf dem Land: eigener Haustyp (Landhaus) statt Stadtfassade
+      const rural = !plainType && RURAL_HOUSES.has(b.t) && absA >= 30 && absA <= 300 && b.h < 14 && n <= 12;
+      const eaveH = rural ? (b.h <= 4.6 ? 3.5 + rnd() * 0.5 : rnd() < 0.3 ? 4.1 + rnd() * 0.5 : 5.3 + rnd() * 0.9) : b.h;
+      const top = Math.max(minH + eaveH, maxH + 2.2), base = isCanopy ? top - 0.6 : minH - 2;
+      const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
       const hex = farm ? BARN_WALLS[Math.floor(rnd() * BARN_WALLS.length)] : hall ? '#c5c1b7' : PLAIN_TYPES.has(b.t) ? '#a7a39a'
         : /church|chapel|cathedral/.test(b.t) ? '#e6dfcc' : b.t === 'castle' ? '#d8ccae' : RURAL_FACADES[Math.floor(rnd() * RURAL_FACADES.length)];
       const wallCol = U.color(hex, 0.1, rnd);
       const wb = plainType ? plain.get(cx, cz) : walls.get(cx, cz), pb = plain.get(cx, cz);
-      const area = U.polyArea(ring), sgn = area > 0 ? 1 : -1;
+      // Haustür: an der längsten Wand, die zur nächsten Straße zeigt
+      let doorWall = -1, doorSlot = 0;
+      if (rural) {
+        const road = this.nearestRoad(cx, cz, 45, null);
+        let best = -Infinity;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
+          if (len < 3.6) continue;
+          const ox = sgn * (bz - az) / len, oz = -sgn * (bx - ax) / len;
+          const tx = road ? road.x - (ax + bx) / 2 : ox, tz = road ? road.z - (az + bz) / 2 : oz, tl = Math.hypot(tx, tz) || 1;
+          const score = (ox * tx + oz * tz) / tl + len * 0.02;
+          if (score > best) {
+            best = score; doorWall = i;
+            const nS = Math.max(1, Math.floor(len / 3.1)), sw = len / nS;
+            const proj = road ? U.clamp(((road.x - ax) * (bx - ax) + (road.z - az) * (bz - az)) / len, 0, len) : len / 2;
+            doorSlot = U.clamp(Math.floor(proj / sw), nS >= 3 ? 1 : 0, nS >= 3 ? nS - 2 : nS - 1);
+          }
+        }
+      }
       let along = 0;
+      const sideBase = [];
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1];
         const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
-        if (len < 0.01) continue;
+        if (len < 0.01) { sideBase.push(minH); continue; }
         const ox = sgn * dz / len, oz = -sgn * dx / len;
         const u0 = along / BAY_W, u1 = (along + len) / BAY_W, v0 = (base - minH) / BAY_H, v1 = (top - minH) / BAY_H;
+        // Boden an dieser Wand: höchstes Gelände an ihr (Fenster und Tür darüber)
+        const gnd = Math.max(minH, this.heightAt(ax, az), this.heightAt(bx, bz), this.heightAt((ax + bx) / 2, (az + bz) / 2));
+        sideBase.push(gnd);
+        const style = rural ? (i === doorWall ? 2 : 1) : 0;
+        const pr = plainType ? null : rectProfile(along, len, top, gnd, style, i === doorWall ? doorSlot : 0);
         along += len;
         const A0 = [ax, base, az], B0 = [bx, base, bz], B1 = [bx, top, bz], A1 = [ax, top, az];
-        wb.tri(A0, B0, B1, wallCol, [u0, v0], [u1, v0], [u1, v1], ox, 0, oz);
-        wb.tri(A0, B1, A1, wallCol, [u0, v0], [u1, v1], [u0, v1], ox, 0, oz);
+        wb.tri(A0, B0, B1, wallCol, [u0, v0], [u1, v0], [u1, v1], ox, 0, oz, pr);
+        wb.tri(A0, B1, A1, wallCol, [u0, v0], [u1, v1], [u0, v1], ox, 0, oz, pr);
         if (!isCanopy) { t.edges.push(ax, az, bx, bz); t.edgeGrid.insert(t.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)); }
+        if (i === doorWall) {
+          // Vordach über der Haustür und eine Stufe davor
+          const nS = Math.max(1, Math.floor(len / 3.1)), sw = len / nS, dm = (doorSlot + 0.5) * sw;
+          const px = ax + dx / len * dm, pz = az + dz / len * dm, ang = Math.atan2(dz, dx);
+          W.boxTris(pb, px + ox * 0.45, gnd + 2.42, pz + oz * 0.45, 1.75, 0.09, 0.9, ang, U.color('#4a4038', 0.1, rnd));
+          const gy = this.heightAt(px + ox * 0.35, pz + oz * 0.35);
+          W.boxTris(pb, px + ox * 0.3, gy - 0.3, pz + oz * 0.3, 1.5, gnd - gy + 0.3 + 0.02, 0.6, ang, U.color('#9c927f', 0.08, rnd));
+        }
       }
       // Dach: mit Luftbild das Foto von oben, sonst Ziegel- oder Flachdachfarbe
       const rt = t.photo ? { b: roofs.get(cx, cz), uv: tuv } : { b: plain.get(cx, cz) };
       const roofCol = t.photo ? photoCol : U.color(b.r || HIP_TYPES.has(b.t) ? TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)] : '#7c7973', 0.12, rnd);
-      const absA = Math.abs(area);
       if (isCanopy) W.flatRoof({ b: pb }, [ring], base, roofCol, -1);
-      if (/tower/.test(b.t) && absA < 200) W.pyramidRoof(rt, ring, top, roofCol, Math.sqrt(absA) * 1.1);
+      if (rural && n === 4) this.ruralRoof(t, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H);
+      else if (/tower/.test(b.t) && absA < 200) W.pyramidRoof(rt, ring, top, roofCol, Math.sqrt(absA) * 1.1);
       else if (b.r && n === 4) W.gableRoof(rt, pb, ring, top, wallCol, roofCol);
-      else if (!b.f && !isCanopy && (HIP_TYPES.has(b.t) || farm) && absA > 25 && absA < 3500 && b.h < 28 && W.hipRoof(rt, ring, top, roofCol)) { /* Walmdach */ }
+      else if (!b.f && !isCanopy && (HIP_TYPES.has(b.t) || farm || rural) && absA > 25 && absA < 3500 && b.h < 28 && W.hipRoof(rt, ring, top, roofCol)) { /* Walmdach */ }
       else W.flatRoof(rt, [ring], top, roofCol, 1);
       if (!isCanopy) {
         const rec = { p: ring, bb, top, n: b.n, t: b.t };
@@ -1081,6 +1119,61 @@ class Region {
     walls.meshes(mats.wall, { cast: true, receive: true }).forEach(m => t.group.add(m));
     plain.meshes(mats.plain, { cast: true, receive: true }).forEach(m => t.group.add(m));
     roofs.meshes(t.roofMat, { cast: true, receive: true }).forEach(m => t.group.add(m));
+  }
+
+  // Satteldach eines Landhauses (Grundriss mit vier Ecken): steil (40–52°), First über die lange Seite, Dachüberstand
+  // an Traufe (45 cm) und Ortgang (30 cm) mit Untersicht und Traufbrett, Giebelwände mit Fenstern (Wandprofil als
+  // Dreieck), Schornstein auf dem First
+  ruralRoof(t, rt, wb, pb, p, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H) {
+    const W = this.world;
+    const P = i => [p[(i % 4) * 2], p[(i % 4) * 2 + 1]];
+    const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const s = len(P(0), P(1)) >= len(P(1), P(2)) ? 0 : 1;
+    const p0 = P(s), p1 = P(s + 1), p2 = P(s + 2), p3 = P(s + 3);
+    const L = len(p0, p1), depth = (len(p1, p2) + len(p3, p0)) / 2;
+    const pitch = (40 + rnd() * 12) * Math.PI / 180, tn = Math.tan(pitch);
+    const rise = Math.min(depth / 2 * tn, 8.5), ridgeH = top + rise, slope = rise / (depth / 2);
+    const dx = (p1[0] - p0[0]) / L, dz = (p1[1] - p0[1]) / L;
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const r0 = mid(p3, p0), r1 = mid(p1, p2);
+    const cx = (p0[0] + p1[0] + p2[0] + p3[0]) / 4, cz = (p0[1] + p1[1] + p2[1] + p3[1]) / 4;
+    const oE = 0.45, oG = 0.3, yE = top - oE * slope;
+    const outA = (() => { const m = mid(p0, p1); const l = Math.hypot(m[0] - r0[0] - (r1[0] - r0[0]) / 2, m[1] - r0[1] - (r1[1] - r0[1]) / 2) || 1; return [(m[0] - (r0[0] + r1[0]) / 2) / l, (m[1] - (r0[1] + r1[1]) / 2) / l]; })();
+    const outB = [-outA[0], -outA[1]];
+    const v = (q, y) => [q[0], y, q[1]];
+    const off = (q, a, o, g) => [q[0] + dx * g + a[0] * o, q[1] + dz * g + a[1] * o];
+    const R0 = off(r0, [0, 0], 0, -oG), R1 = off(r1, [0, 0], 0, oG);
+    const A0 = off(p0, outA, oE, -oG), A1 = off(p1, outA, oE, oG), B2 = off(p2, outB, oE, oG), B3 = off(p3, outB, oE, -oG);
+    const face = (a, b, c, ref) => W.roofTri(rt, a, b, c, roofCol, ref[0], 0.6, ref[1]);
+    face(v(A0, yE), v(A1, yE), v(R1, ridgeH), outA); face(v(A0, yE), v(R1, ridgeH), v(R0, ridgeH), outA);
+    face(v(B2, yE), v(B3, yE), v(R0, ridgeH), outB); face(v(B2, yE), v(R0, ridgeH), v(R1, ridgeH), outB);
+    // Untersicht (Holz, dunkel) und Traufbrett
+    const under = U.color('#5a4636', 0.1, rnd), th = 0.16;
+    const quad = (a, b, c, d, nx, ny, nz, col) => { pb.tri(a, b, c, col, null, null, null, nx, ny, nz); pb.tri(a, c, d, col, null, null, null, nx, ny, nz); };
+    quad(v(A0, yE - th), v(A1, yE - th), v(R1, ridgeH - th), v(R0, ridgeH - th), outA[0] * 0.3, -1, outA[1] * 0.3, under);
+    quad(v(B2, yE - th), v(B3, yE - th), v(R0, ridgeH - th), v(R1, ridgeH - th), outB[0] * 0.3, -1, outB[1] * 0.3, under);
+    quad(v(A0, yE - th), v(A1, yE - th), v(A1, yE), v(A0, yE), outA[0], 0, outA[1], under);
+    quad(v(B2, yE - th), v(B3, yE - th), v(B3, yE), v(B2, yE), outB[0], 0, outB[1], under);
+    // Ortgang (Stirnbretter an den Giebeln)
+    quad(v(A0, yE - th), v(R0, ridgeH - th), v(R0, ridgeH), v(A0, yE), -dx, 0, -dz, under);
+    quad(v(B3, yE - th), v(R0, ridgeH - th), v(R0, ridgeH), v(B3, yE), -dx, 0, -dz, under);
+    quad(v(A1, yE - th), v(R1, ridgeH - th), v(R1, ridgeH), v(A1, yE), dx, 0, dz, under);
+    quad(v(B2, yE - th), v(R1, ridgeH - th), v(R1, ridgeH), v(B2, yE), dx, 0, dz, under);
+    // Giebelwände: Wandprofil als Dreieck, damit Giebelfenster unter der Dachschräge bleiben
+    const gable = (a, b, r, side) => {
+      const g = len(a, b), gx = (a[0] + b[0]) / 2 - cx, gz = (a[1] + b[1]) / 2 - cz;
+      const base = sideBase[side] !== undefined ? sideBase[side] : minH;
+      const pr = [0, g / 2, g, 1, top, ridgeH, top, base, top - 0.05, 0];
+      const uv = (q, y) => [len(q, a) / BAY_W, (y - minH) / BAY_H];
+      wb.tri(v(a, top), v(b, top), v(r, ridgeH), wallCol, uv(a, top), uv(b, top), uv(r, ridgeH), gx, 0, gz, pr);
+    };
+    gable(p1, p2, r1, (s + 1) % 4);
+    gable(p3, p0, r0, (s + 3) % 4);
+    // Schornstein auf dem First (verputzt oder Ziegel), mit Abdeckplatte
+    const f = rnd() < 0.5 ? 0.28 : 0.68, sx = r0[0] + (r1[0] - r0[0]) * f, sz = r0[1] + (r1[1] - r0[1]) * f, ang = Math.atan2(dz, dx);
+    const ch = rnd() < 0.55 ? U.color('#8c4a38', 0.1, rnd) : wallCol;
+    W.boxTris(pb, sx, top + rise * 0.4, sz, 0.55, ridgeH + 0.95 - (top + rise * 0.4), 0.55, ang, ch);
+    W.boxTris(pb, sx, ridgeH + 0.95, sz, 0.72, 0.08, 0.72, ang, U.color('#55524d', 0.05, rnd));
   }
 
   // ---------------- Bäume ----------------
