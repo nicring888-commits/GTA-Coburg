@@ -270,9 +270,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
     Süden, Waldrand bei Tiefenlauter, Lautertal von oben, Beiersdorf (Gärten, Zäune, Fachwerk), Fahrten nach Neustadt,
     Rödental, Seßlach, Bad Rodach; keine Fehler. Kachelaufbau ≈ 14 ms, Bäume ≈ 4 ms je Kachel. Bei ≈ 1930 × 1310 Pixeln
     60 Bilder/s im Lautertal, ≈ 4,3 Mio. Dreiecke und ≈ 700 Zeichenaufrufe pro Bild (vor den Detailstufen 21,8 Mio.)
-- ⚠️ Grenzen v2.5.0: Feldwege, Hecken und Baumreihen aus OSM: Stand 23.10. 99,8 % des Ausschnitts geladen
-  (22.366 Wege, 6.997 km, 1.336 Hecken, 584 Baumreihen); es fehlt nur das Randstück `rural_2_5_3_3` im Osten.
-  Nachladen: `node tools/fetch-region-rural.js`, dann `node tools/convert-region-rural.js`. Hecken, Zäune und Bewuchs sind keine Hindernisse. Die Gärten sind geschätzt
+- ⚠️ Grenzen v2.5.0: Feldwege, Hecken und Baumreihen aus OSM sind seit 23.10. vollständig geladen (60 Stücke). Hecken, Zäune und Bewuchs sind keine Hindernisse. Die Gärten sind geschätzt
   (keine Flurstücke), Fachwerk sitzt auch an manchen größeren Häusern. Die Kronendach-Hülle springt beim Bau der Bäume
   (≈ 1,1 km) auf echte Bäume um. Die Innenstadt (Festungsberg, Hofgarten) nutzt noch den alten Boden.
 
@@ -561,7 +559,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   Dachüberstände als Geometrie, Kanaldeckel auf der Fahrbahn, Scheinwerferkegel der KI-Autos nachts,
   Wolkenschatten auf dem Boden
 - [x] ~~Ferne Wälder als Baumkulisse (Hülle über den Waldflächen) bis an den Sichtrand~~ Erledigt in v2.5.0
-- [ ] Letztes Randstück der Feldwege/Hecken laden (`rural_2_5_3_3`, 0,2 %; `node tools/fetch-region-rural.js`, dann `node tools/convert-region-rural.js`)
+- [x] ~~Feldwege/Hecken fertig laden~~ Erledigt am 23.10.2026 (100 %)
 - [ ] Landschafts-Boden auch für die Innenstadt (Festungsberg, Hofgarten, Itzaue); Hecken und Zäune als Hindernisse;
   Feldwege befahrbar für den KI-Verkehr; Weidetiere, Hochsitze, Feldscheunen, Strommasten
 - [x] ~~Kartenausschnitt erweitern~~ Erledigt in v2.0.0 (ganzer Landkreis, kachelweise)
