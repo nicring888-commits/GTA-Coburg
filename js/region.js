@@ -46,7 +46,7 @@ const RURAL_FACADES = ['#efe9dc', '#e9dfc6', '#e6d3a8', '#f0ebe0', '#ddd3c0', '#
 const BARN_WALLS = ['#8a6446', '#7a5a40', '#9b7b5b', '#a8957c', '#b06a4f', '#8c8478'];
 const FARM_TYPES = new Set(['barn', 'farm_auxiliary', 'stable', 'cowshed', 'silo', 'sty']);
 const HALL_TYPES = new Set(['industrial', 'warehouse', 'retail', 'supermarket', 'commercial', 'hangar', 'manufacture']);
-const REGION_TREE_DENSITY = { forest: 1 / 150, orchard: 1 / 140, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600,
+const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600,
   scrub: 1 / 380, residential: 1 / 1700, meadow: 1 / 5000, farmyard: 1 / 2500 };
 const tileKey = (ti, tj) => (ti + 512) * 1024 + (tj + 512);
 
@@ -85,6 +85,10 @@ class Region {
     this.lifeOn = new Set();
     this.night = false;
     this.initBridges();
+    // Landschaft: Bodenbedeckung, Geländematerial, Bewuchs, Waldkulisse (js/landscape.js)
+    this.land = typeof Landscape !== 'undefined' ? new Landscape(this) : null;
+    // Feldwege, Hecken, Baumreihen (data/region-rural.js) nach Kacheln
+    this.rural = this.land && window.COBURG_RURAL ? Landscape.splitRural(this, window.COBURG_RURAL) : new Map();
   }
 
   // Objekt (Säule, Schild) auf das Gelände stellen; im Umland stimmt die Höhe erst, wenn die Kachel gebaut ist
@@ -296,7 +300,40 @@ class Region {
     const gr = fr / F, r0 = Math.floor(gr), tr = gr - r0, gc = fc / F, c0 = Math.floor(gc), tc = gc - c0;
     const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
     const row = k => cr(this.coarse(c0 - 1, r0 + k), this.coarse(c0, r0 + k), this.coarse(c0 + 1, r0 + k), this.coarse(c0 + 2, r0 + k), tc);
-    return tr === 0 ? row(0) : cr(row(-1), row(0), row(1), row(2), tr);
+    const h = tr === 0 ? row(0) : cr(row(-1), row(0), row(1), row(2), tr);
+    return h + this.relief(this.minX + fc * this.fx, this.minZ + fr * this.fz);
+  }
+  // Kleinrelief: sanfte Bodenwellen (bis ≈ ±1,8 m) im offenen Land, die das grobe Höhenmodell nicht kennt.
+  // An Straßen (bis 12 m neben der Fahrbahn) und am Rand der Innenstadt läuft es aus.
+  relief(x, z) {
+    const C = this.core, dc = Math.hypot(Math.max(C.minX - x, 0, x - C.maxX), Math.max(C.minZ - z, 0, z - C.maxZ));
+    if (dc < 150) return 0;
+    const m = this.reliefMask(x, z) * U.smoothstep(150, 450, dc);
+    if (m <= 0.001) return 0;
+    return m * ((U.vnoise(x / 140, z / 140) - 0.5) * 3.0 + (U.vnoise(x / 47 + 17.3, z / 47 - 3.1) - 0.5) * 1.0);
+  }
+  // Abstand zur nächsten Straße als Maske 0..1, auf einem 25-m-Raster zwischengespeichert und weich interpoliert
+  reliefMask(x, z) {
+    const G = 25, gx = x / G, gz = z / G, i = Math.floor(gx), j = Math.floor(gz), fx = gx - i, fz = gz - j;
+    const at = (a, b) => {
+      const k = a * 100003 + b;
+      let v = this._rmask.get(k);
+      if (v === undefined) {
+        const px = a * G, pz = b * G;
+        let d = 60;
+        for (const code of this.netGrid.query(px, pz, 60, this._rq3 || (this._rq3 = []))) {
+          const e = this.graph.edges[Math.floor(code / 4096)], q = (code % 4096) * 2;
+          const c = U.closestOnSeg(px, pz, e.p[q], e.p[q + 1], e.p[q + 2], e.p[q + 3]);
+          d = Math.min(d, Math.hypot(c[0] - px, c[1] - pz) - e.w / 2);
+        }
+        v = U.smoothstep(14, 50, d);
+        if (this._rmask.size > 400000) this._rmask.clear();
+        this._rmask.set(k, v);
+      }
+      return v;
+    };
+    if (!this._rmask) this._rmask = new Map();
+    return U.lerp(U.lerp(at(i, j), at(i + 1, j), fx), U.lerp(at(i, j + 1), at(i + 1, j + 1), fx), fz);
   }
   // Feines Höhenraster einer Kachel mit einem Punkt Rand (für Normalen), Zeilenlänge N + 3
   makeHeights(t) {
@@ -437,7 +474,11 @@ class Region {
       this.buildBuildings(t);
       this.buildRails(t);
       t.town = t.buildings.length >= REGION.townBuildings;
+      const rr = this.rural.get(t.key);
+      if (this.land && rr && rr.tracks.length) this.land.buildTracks(t, rr.tracks);
+      if (this.land) this.land.buildCanopy(t);
     }
+    if (this.land) this.land.tileChanged(t);
     this.world.group.add(t.group);
     for (const a of this.anchors.get(t.key) || []) a.obj.position.y = this.world.heightAt(a.x, a.z) + a.dy;
     this.stats.built++; this.stats.ms += performance.now() - t0;
@@ -452,6 +493,7 @@ class Region {
     for (const m of t.mats || []) m.dispose();
     if (t.tex) t.tex.dispose();
     if (t.texHd) t.texHd.dispose();
+    if (t.coverTex) { t.coverTex.dispose(); t.fieldTex.dispose(); }
     t.disposed = true;
     this.loaded.delete(t.key);
   }
@@ -481,8 +523,14 @@ class Region {
   }
   makeMaterials(t) {
     if (!this._detail) this._detail = this.world.makeDetailTexture();
-    t.terrainMat = new THREE.MeshLambertMaterial({ map: this.placeholder(), color: ORTHO_TINT });
-    this.world.addDetail(t.terrainMat, this._detail);
+    if (this.land) {
+      // Bodenbedeckung aus den OSM-Flächen, Material mischt Gras, Acker, Waldboden und Luftbild
+      if (t.st === 2) { t.d = t.d || this.decodeTile(t); this.land.paintCover(t); }
+      t.terrainMat = this.land.terrainMaterial(t);
+    } else {
+      t.terrainMat = new THREE.MeshLambertMaterial({ map: this.placeholder(), color: ORTHO_TINT });
+      this.world.addDetail(t.terrainMat, this._detail);
+    }
     t.roofMat = this.world.roofShader(new THREE.MeshLambertMaterial({ map: this.placeholder(), vertexColors: true }));
     t.mats = [t.terrainMat, t.roofMat];
     const flag = this.ortho && this.ortho.tiles[t.ti + ',' + t.tj];
@@ -500,6 +548,10 @@ class Region {
     tex.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     t.tex = tex;
+    // Gehölze aus dem Luftbild und die Farbe des Bewuchses brauchen das Foto: jetzt nachholen
+    t.photoSmall = null;
+    if (this.land) this.land.tileChanged(t);
+    if (this.treesOn.has(t.key) && !t.photoVeg) { this.dropTrees(t); this.buildTrees(t); }
     if (t.hd === 'an') return; // schärferes Bild liegt schon
     t.terrainMat.map = tex; t.roofMat.map = tex;
   }
@@ -1037,67 +1089,163 @@ class Region {
       // gleiche Formen wie in der Innenstadt (js/world.js), aber gröber, weil hier viel mehr Bäume stehen
       const A = treeAssets(0, this.world.renderer);
       this.world.leafShader(A.leafMat);
-      this._trees = { trunk: A.trunk, leaf: A.crowns[1], leafFar: A.crownsFar[1], pine: A.pine, trunkMat: A.trunkMat, leafMat: A.leafMat };
+      this._trees = { trunk: A.trunk, trunkFar: A.trunkFar, leaf: A.crowns[1], leafFar: A.crownsFar[1], bush: A.bush, bushFar: A.bushFar,
+        pine: A.pine, pineFar: A.pineFar, trunkMat: A.trunkMat, leafMat: A.leafMat };
     }
     return this._trees;
   }
+  // Bäume, Büsche und Hecken einer Kachel. Punkte: [x, z, Art (0 Laubbaum, 1 Nadelbaum, 2 Busch), Größe]
   buildTrees(t) {
     if (this.treesOn.has(t.key) || !t.d) return;
     this.treesOn.add(t.key);
     const pts = [];
     const d = t.d;
     const wet = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0; // keine Bäume im Wasser
-    for (let i = 0; i < d.trees.length; i += 2) if (!wet(d.trees[i], d.trees[i + 1])) pts.push([d.trees[i], d.trees[i + 1], 0]);
-    let budget = 7000;
+    const free = (x, z, m) => !this.inCore(x, z) && !this.insideBuilding(x, z, m, t) && !this.nearRoad(x, z, m, t) && !wet(x, z) &&
+      !(this.land && this.land.onTrack(x, z, t, m * 0.6));
+    const onEdge = (x, z) => Math.abs(x - t.x0) < 0.6 || Math.abs(x - t.x1) < 0.6 || Math.abs(z - t.z0) < 0.6 || Math.abs(z - t.z1) < 0.6;
+    const rT = U.rng(t.key * 31 + 7);
+    for (let i = 0; i < d.trees.length; i += 2) if (!wet(d.trees[i], d.trees[i + 1])) pts.push([d.trees[i], d.trees[i + 1], 0, 0.8 + rT() * 0.6]);
+    let budget = 9000;
     for (const a of d.areas) {
       const dens = REGION_TREE_DENSITY[a.k];
       if (!dens || budget <= 0) continue;
+      const forest = a.k === 'forest', scrub = a.k === 'scrub';
+      const h = U.hashStr(a.k + a.p[0] + ',' + a.p[1]);
+      // Anteil Nadelbäume je Waldstück (Fichte, Kiefer) wie in den Wäldern um Coburg sehr verschieden
+      const conifer = forest ? 0.15 + (h % 100) / 100 * 0.7 : 0;
       const area = Math.abs(U.polyArea(a.p)), count = Math.min(Math.round(area * dens), budget);
-      const bb = U.polyBBox(a.p), rnd = U.rng(U.hashStr(a.k + a.p[0] + ',' + a.p[1]));
+      const bb = U.polyBBox(a.p), rnd = U.rng(h);
+      const inside = (x, z) => U.pointInPoly(x, z, a.p) && !(a.ho && a.ho.some(q => U.pointInPoly(x, z, q)));
       let made = 0;
       for (let tries = 0; made < count && tries < count * 3; tries++) {
         const x = bb.minX + rnd() * (bb.maxX - bb.minX), z = bb.minZ + rnd() * (bb.maxZ - bb.minZ);
-        if (this.inCore(x, z) || !U.pointInPoly(x, z, a.p)) continue;
-        if (a.ho && a.ho.some(h => U.pointInPoly(x, z, h))) continue;
-        if (this.insideBuilding(x, z, 1.5, t) || this.nearRoad(x, z, 1.5, t) || wet(x, z)) continue;
-        pts.push([x, z, a.k === 'forest' && rnd() < 0.5 ? 1 : 0]);
+        if (!inside(x, z) || !free(x, z, 1.5)) continue;
+        if (scrub && rnd() < 0.6) pts.push([x, z, 2, 0.8 + rnd() * 0.9]);
+        else pts.push([x, z, rnd() < conifer ? 1 : 0, forest ? 0.55 + Math.pow(rnd(), 0.7) * 1.15 : 0.75 + rnd() * 0.7]);
         made++;
+      }
+      if (forest || scrub) {
+        // Waldrand: dichte Büsche und junge Bäume entlang der Grenze, etwas nach innen versetzt
+        const ring = a.p, n = ring.length / 2;
+        for (let i = 0; i < n && made < count + 2500; i++) {
+          const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1];
+          if (onEdge(ax, az) && onEdge(bx, bz)) continue;
+          const len = Math.hypot(bx - ax, bz - az);
+          if (len < 1) continue;
+          let nx = -(bz - az) / len, nz = (bx - ax) / len;
+          if (!inside((ax + bx) / 2 + nx * 2, (az + bz) / 2 + nz * 2)) { nx = -nx; nz = -nz; }
+          for (let s0 = rnd() * 3; s0 < len; s0 += 2.6 + rnd() * 2) {
+            const off = 0.5 + rnd() * 4.5, x = ax + (bx - ax) * s0 / len + nx * off, z = az + (bz - az) * s0 / len + nz * off;
+            if (!free(x, z, 1.2)) continue;
+            if (rnd() < 0.72) pts.push([x, z, 2, 0.7 + rnd() * 0.9]);
+            else pts.push([x, z, rnd() < conifer * 0.6 ? 1 : 0, 0.45 + rnd() * 0.45]);
+            made++;
+          }
+        }
+        // Unterholz
+        const under = Math.min(Math.round(area / 420), 900);
+        for (let k = 0, tries = 0; k < under && tries < under * 3; tries++) {
+          const x = bb.minX + rnd() * (bb.maxX - bb.minX), z = bb.minZ + rnd() * (bb.maxZ - bb.minZ);
+          if (!inside(x, z) || !free(x, z, 1)) continue;
+          pts.push([x, z, 2, 0.45 + rnd() * 0.5]); k++; made++;
+        }
       }
       budget -= made;
     }
+    // Hecken (dicht an dicht Büsche) und Baumreihen aus OSM
+    const rr = this.rural.get(t.key);
+    if (rr) {
+      const along = (p, step, f) => { for (let k = 0; k + 3 < p.length; k += 2) { const ax = p[k], az = p[k + 1], bx = p[k + 2], bz = p[k + 3], L = Math.hypot(bx - ax, bz - az); for (let s0 = rT() * step; s0 < L; s0 += step * (0.8 + rT() * 0.4)) f(ax + (bx - ax) * s0 / L, az + (bz - az) * s0 / L, -(bz - az) / L, (bx - ax) / L); } };
+      for (const h of rr.hedges) along(h.p, 1.7, (x, z, nx, nz) => { const o = (rT() - 0.5) * 0.9, px = x + nx * o, pz = z + nz * o; if (free(px, pz, 0.5)) pts.push([px, pz, 2, 0.85 + rT() * 0.5]); });
+      for (const r of rr.rows) along(r.p, 8, (x, z) => { if (free(x, z, 1)) pts.push([x, z, 0, 0.8 + rT() * 0.45]); });
+    }
+    // Gärten, Zäune, Einfahrten und Rundballen in den Dörfern
+    if (this.land && t.buildings.length) t.villageMeshes = this.land.buildVillage(t, pts, free);
+    // Feldgehölze, Hecken und Einzelbäume, die das Luftbild zeigt, OSM aber nicht kennt
+    this.photoVegetation(t, pts, free);
     if (!pts.length) return;
     const A = this.treeAssets(), rnd = U.rng(t.key);
-    const leaves = pts.filter(p => !p[2]), pines = pts.filter(p => p[2]);
-    const trunks = new THREE.InstancedMesh(A.trunk, A.trunkMat, pts.length);
-    // Laubbäume in Gruppen von 250 m, damit nur die nahen Gruppen die detaillierten Kronen zeichnen (LOD)
-    const groups = new Map();
-    for (const p of leaves) { const k = Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
-    const lms = new Map();
-    for (const [k, list] of groups) lms.set(k, { m: new THREE.InstancedMesh(A.leaf, A.leafMat, list.length), n: 0, list });
-    const pm = pines.length ? new THREE.InstancedMesh(A.pine, A.leafMat, pines.length) : null;
+    const leaves = pts.filter(p => p[2] === 0), pines = pts.filter(p => p[2] === 1), bushes = pts.filter(p => p[2] === 2);
+    // alles in Gruppen von 250 m, damit nur die nahen Gruppen die detaillierten Formen zeichnen (LOD)
+    const group = (list, near, mat) => {
+      const groups = new Map();
+      for (const p of list) { const k = Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+      const out = new Map();
+      for (const [k, l] of groups) out.set(k, { m: new THREE.InstancedMesh(near, mat || A.leafMat, l.length), n: 0, list: l });
+      return out;
+    };
+    const lms = group(leaves, A.leaf), bms = group(bushes, A.bush), pms = group(pines, A.pine), tms = group(leaves.concat(pines), A.trunk, A.trunkMat);
+    const gk = p => Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     const greens = ['#5f8d3e', '#4f7d35', '#6a9a45', '#577f3a', '#7a9e4a', '#46703a'];
+    const bushGreens = ['#5a7f38', '#6b8c3f', '#4d7334', '#7d9445', '#5f7a3a'];
     t.trees = []; t.treeGrid = new U.Grid(16);
-    let pi = 0;
-    pts.forEach((p, i) => {
-      const s = 0.75 + rnd() * 0.7;
+    for (const p of pts) {
+      const s = p[3];
       q.setFromAxisAngle(up, rnd() * 6.28);
       ps.set(p[0], this.heightAt(p[0], p[1]) - 0.2, p[1]); sc.set(s, s * (0.85 + rnd() * 0.35), s);
       m4.compose(ps, q, sc);
-      trunks.setMatrixAt(i, m4);
-      const col = new THREE.Color(p[2] ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
-      if (p[2]) { pm.setMatrixAt(pi, m4); pm.setColorAt(pi++, col); }
-      else { const g = lms.get(Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col); }
+      const kind = p[2];
+      if (kind === 2) {
+        const col = new THREE.Color(bushGreens[Math.floor(rnd() * bushGreens.length)]).multiplyScalar(0.8 + rnd() * 0.35);
+        const g = bms.get(gk(p)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col);
+        continue;
+      }
+      const tg = tms.get(gk(p)); tg.m.setMatrixAt(tg.n++, m4);
+      const col = new THREE.Color(kind ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
+      const g = (kind ? pms : lms).get(gk(p)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col);
       t.trees.push(p[0], p[1], 0.35 * s);
       t.treeGrid.insert(t.trees.length / 3 - 1, p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1);
-    });
-    t.treeMeshes = [trunks, pm, ...[...lms.values()].map(g => g.m)].filter(Boolean);
-    for (const m of t.treeMeshes) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); t.group.add(m); }
-    for (const g of lms.values()) this.world.addTreeLod(g.m, A.leaf, A.leafFar, g.list);
+    }
+    if (t.canopy) t.canopy.visible = false;
+    t.treeMeshes = [];
+    for (const [gs, near, far] of [[lms, A.leaf, A.leafFar], [bms, A.bush, A.bushFar], [pms, A.pine, A.pineFar], [tms, A.trunk, A.trunkFar]]) for (const g of gs.values()) {
+      const m = g.m;
+      m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); t.group.add(m);
+      t.treeMeshes.push(m);
+      this.world.addTreeLod(m, near, far, g.list);
+    }
+  }
+  // Gehölze aus dem Luftbild: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser werden zu Büschen
+  // (Hecken, schmale Streifen) und Bäumen (große Flecken)
+  photoVegetation(t, pts, free) {
+    const img = t.tex && t.tex.image;
+    if (!img || !img.width || img.width < 64) return;
+    t.photoVeg = true;
+    const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const c = cv.getContext('2d', { willReadFrequently: true }); c.drawImage(img, 0, 0, S, S);
+    const px = c.getImageData(0, 0, S, S).data, cov = t.coverRaw;
+    // Gehölz = deutlich dunkler als die Umgebung (Mittel über ≈ 50 m) und grünlich; Schatten von Häusern sind bläulich
+    const L = new Float32Array(S * S), M = new Uint8ClampedArray(S * S * 4);
+    for (let k = 0; k < S * S; k++) { L[k] = 0.3 * px[k * 4] + 0.59 * px[k * 4 + 1] + 0.11 * px[k * 4 + 2]; M[k * 4] = L[k]; }
+    Landscape.blur(M, S, 6, 1, 1);
+    const mean = k => M[k * 4];
+    const mask = new Uint8Array(S * S);
+    for (let k = 0; k < S * S; k++) {
+      const r = px[k * 4], g = px[k * 4 + 1], b = px[k * 4 + 2], l = L[k];
+      if (l > 18 && l < 125 && l < mean(k) * 0.84 && g >= r - 4 && g > b + 3 && !(cov && cov[k * 4 + 2] > 120)) mask[k] = 1;
+    }
+    const rnd = U.rng(t.key * 17 + 3);
+    let made = 0;
+    for (let y = 1; y < S - 1 && made < 5000; y++) for (let x = 1; x < S - 1; x++) {
+      if (!mask[y * S + x]) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) n += mask[(y + dy) * S + x + dx];
+      if (n < 3 || rnd() > 0.6) continue;
+      const wx = t.x0 + (x + rnd()) / S * this.tw, wz = t.z0 + (y + rnd()) / S * this.th;
+      if (!free(wx, wz, 1.2)) continue;
+      if (n >= 8 && rnd() < 0.45) pts.push([wx, wz, rnd() < 0.15 ? 1 : 0, 0.7 + rnd() * 0.6]);
+      else pts.push([wx, wz, 2, 0.8 + rnd() * 0.8]);
+      made++;
+    }
   }
   dropTrees(t) {
     if (!this.treesOn.has(t.key)) return;
     this.treesOn.delete(t.key);
+    if (t.canopy) t.canopy.visible = true;
+    for (const m of t.villageMeshes || []) { t.group.remove(m); if (m.isInstancedMesh) m.dispose(); else m.geometry.dispose(); }
+    t.villageMeshes = null;
     for (const m of t.treeMeshes || []) { t.group.remove(m); this.world.removeTreeLod(m); m.dispose(); }
     t.treeMeshes = null; t.trees = null; t.treeGrid = null;
   }

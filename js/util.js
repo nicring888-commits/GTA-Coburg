@@ -21,6 +21,12 @@ U.hashStr = function (s) {
 U.clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 U.lerp = (a, b, t) => a + (b - a) * t;
 U.smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// Wertrauschen 0..1 (glatt, deterministisch)
+U.vnoise = (x, z) => {
+  const h = (i, j) => { let n = Math.imul(i, 374761393) + Math.imul(j, 668265263); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  return U.lerp(U.lerp(h(i, j), h(i + 1, j), sx), U.lerp(h(i, j + 1), h(i + 1, j + 1), sx), sz);
+};
 U.damp = (a, b, lambda, dt) => a + (b - a) * (1 - Math.exp(-lambda * dt));
 U.wrapAngle = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 

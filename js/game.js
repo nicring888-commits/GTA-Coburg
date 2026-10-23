@@ -944,6 +944,7 @@
     if (!property.inside) { atmo.update(dt, camera); syncNight(); }
     peds.draw(camera.position.x, camera.position.z);
     world.updateTreeLod(camera.position.x, camera.position.z);
+    if (world.region && world.region.land) world.region.land.update(camera.position.x, camera.position.z, !property.inside);
     waterTick(dt);
     ui.updateLabels(camera);
     post.render(scene, camera);

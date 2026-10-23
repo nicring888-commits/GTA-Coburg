@@ -192,7 +192,7 @@ function treeCrown(seed, cards, r, cx, cy, cz, coreDetail = 1, coreScale = 0.62)
     N.push(nx / l, ny / l, nz / l); C.push(ao, ao, ao); UV.push(u, v);
   };
   // Kern
-  const core = new THREE.IcosahedronGeometry(1, coreDetail).toNonIndexed(), cp = core.attributes.position;
+  const core = new THREE.IcosahedronGeometry(1, coreDetail), cp = core.attributes.position;
   for (let i = 0; i < cp.count; i++) {
     const x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i);
     const d = coreScale + 0.08 * Math.sin(x * 5.1 + z * 3.7);
@@ -258,9 +258,25 @@ function treeAssets(detail, renderer) {
     tr.push(br);
   }
   const trunk = U.mergeParts(tr.map(g => [g, 0, 0, 0]));
+  // Busch (Hecken, Waldrand, Unterholz): sitzt auf dem Boden, zwei Laubballen
+  const bushShape = [[53, 0.7, 1.3, 0, 1.0, 0], [59, 0.4, 0.95, 0.85, 0.75, 0.35]];
+  const bush = treeMergeGeos(bushShape.map(([seed, f, r, x, y, z]) => treeCrown(seed, Math.round(n * f), r, x, y, z)));
+  const bushFar = treeMergeGeos([treeCrown(53, 0, 1.45, 0.3, 1.0, 0.1, 0, 0.92)]);
+  // ferne Stämme und Nadelbäume: wenige Dreiecke
+  const trunkFar = U.mergeParts([[new THREE.CylinderGeometry(0.16, 0.3, 3.9, 5, 1, true).translate(0, 1.95, 0), 0, 0, 0]]);
+  const pineFar = (() => {
+    const parts = [[2.2, 3.4, 3.3], [1.4, 3.2, 5.6]].map(([r, h, y]) => {
+      const c = new THREE.ConeGeometry(r, h, 6, 1, true).toNonIndexed(); c.translate(0, y, 0);
+      const n = c.attributes.position.count, col = new Float32Array(n * 3).fill(0.75), uv = c.attributes.uv;
+      for (let i = 0; i < n; i++) uv.setXY(i, SOLID_U[0] + uv.getX(i) * (SOLID_U[1] - SOLID_U[0]), uv.getY(i));
+      c.setAttribute('color', new THREE.BufferAttribute(col, 3)); c.computeVertexNormals();
+      return c;
+    });
+    return treeMergeGeos(parts);
+  })();
   const tex = leafTexture(renderer);
   _treeAssets[detail] = {
-    crowns, crownsFar, trunk, pine: treePine(5),
+    crowns, crownsFar, bush, bushFar, trunk, trunkFar, pine: treePine(5), pineFar,
     trunkMat: new THREE.MeshLambertMaterial({ color: '#5a4d40' }),
     leafMat: new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true, map: tex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide }),
   };
@@ -1215,6 +1231,8 @@ class World {
       sh.uniforms.facadeDepth = { value: tex.depth };
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.shopBox = { value: new THREE.Vector4(A.minX, A.minZ, A.maxX, A.maxZ) };
+      const CR = this.coreRect;  // Fachwerk nur im Umland (außerhalb der Innenstadt)
+      sh.uniforms.coreBox = { value: CR ? new THREE.Vector4(CR.minX, CR.minZ, CR.maxX, CR.maxZ) : new THREE.Vector4(0, 0, 0, 0) };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNor;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNor = normalize(mat3(modelMatrix) * objectNormal);');
@@ -1222,7 +1240,7 @@ class World {
         .replace('#include <common>', `#include <common>
           varying vec3 vWPos; varying vec3 vWNor;
           uniform sampler2D facadeMask, detailMap, facadeDepth;
-          uniform vec4 shopBox;
+          uniform vec4 shopBox, coreBox;
           uniform float uNight, uWet;
           uniform vec3 uSkyTop, uSkyHorizon, uSkyGround;
           float fh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -1285,6 +1303,27 @@ class World {
               float band = step(0.02, fl) * step(fl, 0.16);
               diffuseColor.rgb = mix(diffuseColor.rgb, frameC * 1.05, band * 0.85);
               relief *= 1.0 - 0.3 * step(0.16, fl) * (1.0 - smoothstep(0.16, 0.3, fl));
+            }
+            // Fachwerk an etwa einem Drittel der Häuser im Umland (Erdgeschoss und erstes Obergeschoss):
+            // Schwelle, Rähm, Brust- und Sturzriegel, Ständer neben den Fenstern, Streben unter den Fenstern
+            bool outside = coreBox.z > coreBox.x && (vWPos.x < coreBox.x || vWPos.x > coreBox.z || vWPos.z < coreBox.y || vWPos.z > coreBox.w);
+            if (outside && fract(bh2 * 7.31) < 0.34 && !shop && h > 0.45 && h < 2.0 * fH) {
+              float lx = fract(bay.x), fy = fl / fH, bw = 3.2 / kk.x;
+              float bx = 0.085 / bw, by = 0.085 / fH;          // halbe Balkenbreite als Anteil
+              float beam = max(step(fy, by * 2.0), step(1.0 - by * 1.6, fy));
+              beam = max(beam, step(abs(fy - 0.27), by));
+              beam = max(beam, step(abs(fy - 0.86), by));
+              beam = max(beam, max(step(min(lx, 1.0 - lx), bx), step(abs(lx - 0.28), bx)));
+              beam = max(beam, step(abs(lx - 0.72), bx));
+              // Streben: in den Feldern unter den Fenstern schräg (Feuerbock)
+              if (fy < 0.27) {
+                vec2 q = vec2((lx < 0.5 ? lx : 1.0 - lx) * bw, fy * fH);
+                float dl = abs(q.x * 0.27 * fH - q.y * 0.28 * bw) / length(vec2(0.27 * fH, 0.28 * bw));
+                if (q.x < 0.28 * bw) beam = max(beam, step(dl, 0.075));
+              }
+              vec3 beamC = (fract(bh * 3.7) < 0.6 ? vec3(0.12, 0.07, 0.04) : vec3(0.28, 0.085, 0.055)) * sampledDiffuseColor.rgb;
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.83, 0.76) * sampledDiffuseColor.rgb, 0.55 * (1.0 - glass));
+              diffuseColor.rgb = mix(diffuseColor.rgb, beamC, max(beam * (1.0 - glass) * (1.0 - reveal), frame));
             }
             // Glas: dunkel, je Fenster etwas anders; manche mit hellem Vorhang
             float wr = fh(cell + bh * 7.0);

@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.4.0 „Grand Theft Coburg – Grafik“ · **Letzte Aktualisierung:** 23.10.2026
+**Version:** 2.5.0 „Grand Theft Coburg – Landschaft“ · **Letzte Aktualisierung:** 23.10.2026
 
 ---
 
@@ -111,6 +111,7 @@ und müssen dort bleiben.
 | `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
+| `js/landscape.js` | Landschaft im Umland (seit v2.5.0): Bodenbedeckungskarte je Kachel aus den OSM-Flächen (`paintCover`: r Acker, g Wiese, b Wald, Feldraine an Feldgrenzen, weichgezeichnet; zweite Karte mit Reihenrichtung je Feld), Geländematerial (`terrainMaterial`: Gras-, Ackerboden- und Waldbodentextur aus der Leinwand, Farbe aus dem unscharfen Luftbild, Ackerart nach Fotofarbe mit Saatreihen, Furchen, Stoppeln, Fahrgassen; Relief über die Normale), 3D-Bewuchs um die Kamera (`update`/`makeCell`: Gras, Getreide, Blumen, Farn als Instanzen in 8-m-Zellen bis 88 m, sinkt am Rand ein), Kronendach-Hülle über fernen Wäldern (`buildCanopy`), Feld- und Waldwege (`splitRural`, `buildTracks`, `trackMaterial`: Fahrspuren, Grasnarbe, Schotter, Asphalt), Dörfer (`buildVillage`: Gärten mit Staketen- und Lattenzaun, Tor und Einfahrt zur Straße, Hecken, Obstbäume, Rundballen an Scheunen) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
 | `js/vehicle.js` | Automodelle (Pkw, Sportwagen mit Spoiler, Taxi mit Dachschild, Streifenwagen mit Blaulicht), Fahrwerte je Typ, Arcade-Fahrphysik (Längs- und Seitenhaftung, Handbremse, Steigung, Teilschritte gegen Durchtunneln), Schaden, Brand, Wrack, Auto-gegen-Auto-Kollision |
@@ -170,6 +171,8 @@ node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
 node tools/fetch-region-ortho-hd.js   # scharfe Ortskacheln, nach convert-region.js
 node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
 node tools/convert-region.js
+node tools/fetch-region-rural.js      # Feldwege, Hecken, Baumreihen (Overpass, oft überlastet; REVERSE=1 parallel)
+node tools/convert-region-rural.js    # → data/region-rural.js (geht auch mit einem Teil der Stücke)
 ```
 
 **Luftbilder in der Welt (`js/world.js`):** Jede Kachel ist ein eigenes Geländestück mit eigener Textur. Die Normalen
@@ -211,6 +214,40 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v2.5.0 (23.10.2026): **Ländliche Gebiete wie echte Landschaft.** Neues Modul `js/landscape.js`.
+  - **Boden**: Statt flachem Luftbild mischt der Geländeshader echte Materialien nach den OSM-Flächen (Acker, Wiese,
+    Wald) mit unregelmäßigen Rändern: Gras mit Halmen und trockenen Flecken, Ackerboden mit Erdkrumen und Steinchen,
+    Waldboden mit Laub, Nadeln und Zweigen. Das Luftbild bleibt als unscharfe Farbquelle (echte Felderteppiche bleiben
+    sichtbar) und bestimmt die Ackerart: grün = Saat in Reihen, braun = gepflügt mit Furchen, gelb = Stoppeln.
+    Reihenrichtung je Feld entlang der längsten Feldkante, Fahrgassen alle 20 m, Feldraine an den Feldgrenzen.
+    Texturen werden doppelt (gedreht, anderer Maßstab) gelesen, damit keine Kachelung zu sehen ist
+  - **3D-Bewuchs** um den Spieler (bis 88 m, Instanzen in Zellen): Grasbüschel, Getreide in den Saatreihen,
+    Wiesenblumen, Farn im Wald; wiegt sich im Wind, sinkt am Rand weich in den Boden; Farbe aus dem Luftbild
+  - **Gelände**: Kleinrelief (sanfte Wellen bis ≈ ±1,8 m) im offenen Land, läuft an Straßen und zur Innenstadt aus
+  - **Wälder**: dichter (1 Baum je 115 m²), Nadelbaum-Anteil je Waldstück 15–85 %, Baumgrößen von jung bis alt,
+    Waldränder mit dichten Büschen und Jungbäumen, Unterholz. Ferne Wälder (ohne gebaute Bäume) als Kronendach-Hülle mit
+    Kronenbuckeln, dadurch bewaldete Hügel bis an den Sichtrand
+  - **Hecken und Feldgehölze aus dem Luftbild**: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser
+    werden zu Büschen (Hecken) und Bäumen (größere Flecken), genau dort, wo sie wirklich stehen
+  - **Feldwege, Hecken, Baumreihen aus OSM** (neu geladen mit `tools/fetch-region-rural.js`): Wege als Bänder mit zwei
+    Fahrspuren und Grasnarbe (Erdweg), Schotter mit grasiger Mitte oder schmalem Asphalt; Hecken als dichte Buschreihen,
+    Baumreihen alle ≈ 8 m. Bewuchs und Bäume halten die Wege frei. Stand: Teil der Gebiete geladen (siehe Grenzen)
+  - **Dörfer**: Gärten um Wohnhäuser (Zaun zur Straße mit Tor, Kieseinfahrt zum Haus, an den anderen Seiten Hecke oder
+    Lattenzaun, Zäune nur bis zur Hälfte zum Nachbarhaus), Obstbäume und Büsche im Garten, Rundballen an Scheunen;
+    **Fachwerk** (Schwelle, Rähm, Riegel, Ständer, Streben; dunkelbraun oder ochsenblutrot, weiße Gefache) an etwa einem
+    Drittel der Häuser im Umland (Erdgeschoss und erstes Obergeschoss)
+  - Detailstufen: Laubbäume, Büsche, Nadelbäume und Stämme nah detailliert, ab ≈ 230 m grob (Stämme ohne Äste, Nadelbäume
+    aus zwei Kegeln, Busch als ein Ballen); dazu weniger Dunst bei klarem Wetter
+  - Getestet im Browser: Meeder (Acker mit Furchen bis zum Horizont, Hecken am Feldrand), Wiesenfeld, Feldweg im
+    Süden, Waldrand bei Tiefenlauter, Lautertal von oben, Beiersdorf (Gärten, Zäune, Fachwerk), Fahrten nach Neustadt,
+    Rödental, Seßlach, Bad Rodach; keine Fehler. Kachelaufbau ≈ 14 ms, Bäume ≈ 4 ms je Kachel. Bei ≈ 1930 × 1310 Pixeln
+    60 Bilder/s im Lautertal, ≈ 4,3 Mio. Dreiecke und ≈ 700 Zeichenaufrufe pro Bild (vor den Detailstufen 21,8 Mio.)
+- ⚠️ Grenzen v2.5.0: Feldwege, Hecken und Baumreihen aus OSM liegen erst für einen Teil des Ausschnitts vor (13 von
+  ≈ 30 Stücken beim Commit; Overpass war überlastet): `node tools/fetch-region-rural.js` erneut starten und dann
+  `node tools/convert-region-rural.js`. Hecken, Zäune und Bewuchs sind keine Hindernisse. Die Gärten sind geschätzt
+  (keine Flurstücke), Fachwerk sitzt auch an manchen größeren Häusern. Die Kronendach-Hülle springt beim Bau der Bäume
+  (≈ 1,1 km) auf echte Bäume um. Die Innenstadt (Festungsberg, Hofgarten) nutzt noch den alten Boden.
 
 - ✅ v2.4.0 (23.10.2026): **Grafik realistischer, Stil GTA IV.** Baut auf dem Zwischenstand v2.2.0 vom 21.10. auf.
   - **Nachbearbeitung** (`js/post.js`): HDR-Bild mit 4× MSAA, Umgebungsverdeckung (SSAO: Kontaktschatten unter Bänken,
@@ -496,13 +533,16 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [ ] Grafik weiter: zweites Fenstermuster (Rundbogen-, Sprossen- und Ladenfenster) je Haus, Balkone, Gauben und
   Dachüberstände als Geometrie, Kanaldeckel auf der Fahrbahn, Scheinwerferkegel der KI-Autos nachts,
   Wolkenschatten auf dem Boden
-- [ ] Ferne Wälder als Baumkulisse (Hülle über den Waldflächen) bis an den Sichtrand
+- [x] ~~Ferne Wälder als Baumkulisse (Hülle über den Waldflächen) bis an den Sichtrand~~ Erledigt in v2.5.0
+- [ ] Feldwege/Hecken fertig laden (`node tools/fetch-region-rural.js`, dann `node tools/convert-region-rural.js`)
+- [ ] Landschafts-Boden auch für die Innenstadt (Festungsberg, Hofgarten, Itzaue); Hecken und Zäune als Hindernisse;
+  Feldwege befahrbar für den KI-Verkehr; Weidetiere, Hochsitze, Feldscheunen, Strommasten
 - [x] ~~Kartenausschnitt erweitern~~ Erledigt in v2.0.0 (ganzer Landkreis, kachelweise)
 - [ ] **Scharfe Luftbilder fertig laden:** `node tools/fetch-region-ortho-hd.js` erneut starten, sobald
   geodaten.bayern.de wieder antwortet (lädt nur die fehlenden 367 Ortskacheln, eine Anfrage alle 1,5 s)
 - [ ] LoD2-Häuser für das ganze Umland (≈ 175 CityGML-Kacheln, mehrere GB; dann je Kachel als JSON nachladen)
 - [x] ~~Umland: Fußgänger, Laternen und Läden in den Orten~~ Erledigt in v2.1.0 (Wohnungen dort fehlen noch)
-- [ ] Ferne Wälder als einfache Baumkulisse; Schwimmen statt Zurückschieben am Wasser
+- [ ] Schwimmen statt Zurückschieben am Wasser
 - [ ] Polizeihubschrauber ab 4 Sternen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
 - [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)

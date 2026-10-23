@@ -282,7 +282,7 @@ class Atmosphere {
     const post = this.post;
     if (post && post.enabled) {
       const P = post.params;
-      P.fogCol.copy(fog.color); P.fogDensity = 3.0 / far;
+      P.fogCol.copy(fog.color); P.fogDensity = 2.1 / far;
       P.sunDir.copy(this.sunTrue); P.sunCol.copy(C.sun).multiplyScalar(1 + this.golden * 1.5);
       P.sunVis = w.sun * (1 - n) * (1 - g * 0.6); P.night = n; P.wet = this.wet;
       post.exposure = U.lerp(U.lerp(1.08, 1.2, this.golden), 1.85, n) * (1 + g * 0.12);
