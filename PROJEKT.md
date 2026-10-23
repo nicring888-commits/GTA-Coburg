@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.2.0 „Grand Theft Coburg – Grafik“ · **Letzte Aktualisierung:** 23.10.2026
+**Version:** 2.4.0 „Grand Theft Coburg – Grafik“ · **Letzte Aktualisierung:** 23.10.2026
 
 ---
 
@@ -52,8 +52,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Was | Wie es funktioniert |
 |---|---|
 | Start | Vorplatz des Bahnhofs (zwischen Bahnhofsgebäude und Lossaustraße), rotes Auto am Straßenrand, Startgeld € 500 |
-| Autos | Pkw (158 km/h), Sportwagen (216 km/h, schnell beschleunigend), Taxi (elfenbein mit Dachschild), Streifenwagen (silber-blau, Blaulicht, „POLIZEI“). Jedes Auto im Verkehr lässt sich mit `E` klauen. Autos nehmen Schaden: erst Rauch, unter 25 % weniger Leistung, bei 0 % brennt das Auto und explodiert nach 4,5 s (Druckwelle beschädigt Autos und verletzt Fußgänger). Wracks qualmen und bleiben eine Weile liegen |
-| Fahndung (★ 1–5) | Autodiebstahl, wenn ein Polizist oder ein Zeuge (30 %) es sieht · mit über 90 km/h an einer Streife vorbei · Unfall vor den Augen der Polizei · Polizeiauto rammen · Streifenwagen klauen (mind. 2 ★) · Polizist anfahren (mind. 2 ★) · Streifenwagen zerstören. Je länger die Polizei dich sieht, desto mehr Sterne |
+| Autos | Kleinwagen (144 km/h), Pkw (158 km/h), Kombi (166 km/h), Kleinbus (144 km/h, sehr robust), Pick-up (162 km/h), Geländewagen (169 km/h, fast so robust wie ein Streifenwagen), Cabrio (194 km/h, offen), Sportwagen (216 km/h, schnell beschleunigend), Taxi (elfenbein mit Dachschild), Streifenwagen (silber-blau, Blaulicht, „POLIZEI“). Jedes Auto im Verkehr lässt sich mit `E` klauen. Autos nehmen Schaden: erst Rauch, unter 25 % weniger Leistung, bei 0 % brennt das Auto und explodiert nach 4,5 s (Druckwelle beschädigt Autos und verletzt Fußgänger). Wracks qualmen und bleiben eine Weile liegen |
+| Fahndung (★ 1–5) | Autodiebstahl, wenn ein Polizist oder ein Zeuge (30 %) es sieht · Unfall vor den Augen der Polizei · Polizeiauto rammen · Streifenwagen klauen (mind. 2 ★) · Polizist anfahren (mind. 2 ★) · Streifenwagen zerstören. Je länger die Polizei dich sieht, desto mehr Sterne |
 | Polizei | 2/3/4/5/7 Streifenwagen je Sternzahl; zuerst werden Streifen aus dem Verkehr alarmiert, sonst kommen neue außer Sicht hinzu. Sie fahren mit der normalen Fahrphysik über das Straßennetz (kürzester Weg), rammen aus der Nähe, halten neben einem langsamen Spieler an. Tempo wächst mit den Sternen (1 ★ ≈ 135 km/h, 5 ★ ≈ 175 km/h). Ab 3 ★ Straßensperren vor dem Spieler. Martinshorn (Tatü-tata), Blaulicht, blinkende Punkte auf der Minikarte |
 | Festnahme | Steht man still, steigt ein Polizist aus und rennt hinterher (etwas langsamer als der rennende Spieler). Erwischt er dich, füllt sich der Balken „Festnahme“ → **VERHAFTET**, Strafe € 100 + 100 je Stern, Neustart am Bahnhof |
 | Entkommen | Außer Sicht der Polizei bleiben und sich von der Stelle entfernen, an der sie dich zuletzt gesehen hat (Sterne blinken). Nach 8 s + 3,5 s je Stern ist die Fahndung vorbei: **ENTKOMMEN**, Belohnung € 150 je Stern |
@@ -72,7 +72,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Wohnungen (seit v1.2.0) | Sieben kaufbare Wohnungen mit eigener Haustür an echten Fassaden (violette Säule, Schild mit Typ, Größe, Preis): Apartment Lossaustraße € 2.500 und Altbauwohnung Judengasse € 4.500 (klein), Stadtwohnung Mohrenstraße € 9.500, Loft am Steinweg € 12.000, Wohnung Ketschengasse € 14.000 (modern), Penthouse am Glockenberg € 38.000, Villa Leopoldstraße € 55.000 (Luxus). `F` an der Tür öffnet das Menü mit Grundriss, Ausstattung und Preis: **Besichtigen** (kostenlos), **Kaufen** (nur mit genug Geld), **Betreten**, **Garage**. Gekaufte Wohnungen leuchten gold |
 | Innenräume | Drei Typen, beim Betreten Überblendung in einen eigenen Raum, beim Verlassen (`E` an der Wohnungstür) steht man wieder vor derselben Haustür. **Klein** (9 × 7 m, Altbau mit Dielen und Tapete: Bett, Kochnische, Tisch, Sofa, Fernseher, Bücherregal, Küchenradio). **Modern** (13 × 10 m, Fensterfront, Kücheninsel mit Hockern, Essplatz, Sofalandschaft, Großbild-TV, Hi-Fi, Schlafbereich hinter Glaswand). **Luxus** (19 × 14 m, Marmor, Panoramafenster, Whirlpool mit Wellen und Blasen, Bar mit beleuchtetem Flaschenregal, Flügel, Kamin mit Flammen, Kino-TV, Kronleuchter, Schlafpodest). Blick aus dem Fenster auf Altstadtdächer und Veste, nachts mit Lichtern |
 | Interaktionen drinnen | `E`: Schlafen (Leben voll, Tag/Nacht wechselt, Spiel gespeichert), Fernseher (Coburg TV mit Laufband, Fußball, Stadtansicht), Licht an/aus, Radio/Musik (kleine Akkordschleife), Snack/Espresso/Drink (+30 Leben), Whirlpool (Leben voll), Klavier spielen, Kamin. `F`: Kaufen bzw. Infos. Bei Besichtigung gehen Schlafen und Essen erst nach dem Kauf. Mit Fahndung kommt man nicht hinein |
-| Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Pkw € 1.800, Taxi € 2.400, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
+| Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Kleinwagen € 1.100, Pkw € 1.800, Taxi € 2.400, Kombi € 2.900, Kleinbus € 3.400, Pick-up € 4.200, Geländewagen € 5.600, Cabrio € 6.900, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
 | Garage (`G`) | Eigene Autos (bis 8): Zustand, Farbe und Ort werden gespeichert. **Rausfahren/Herholen** stellt das Auto an den nächsten Straßenrand (immer nur eins draußen, das andere fährt zurück), **Einparken**, zerstörte Autos **reparieren** (20 % des Kaufpreises). Lackiererei ändert die gespeicherte Farbe, Verkauf beim Händler entfernt das Auto aus der Garage. Eigenes Auto: gelber Punkt auf Minikarte und Stadtplan, Einsteigen ohne Fahndung |
 | Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
 
@@ -107,8 +107,8 @@ und müssen dort bleiben.
 | Datei | Aufgabe |
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
-| `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.2.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
-| `js/post.js` | Nachbearbeitung (seit v2.2.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
+| `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
+| `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
@@ -212,7 +212,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- ✅ v2.2.0 (23.10.2026): **Grafik realistischer, Stil GTA IV.** Begonnen am 21.10. (Zwischenstand), fertig am 23.10.
+- ✅ v2.4.0 (23.10.2026): **Grafik realistischer, Stil GTA IV.** Baut auf dem Zwischenstand v2.2.0 vom 21.10. auf.
   - **Nachbearbeitung** (`js/post.js`): HDR-Bild mit 4× MSAA, Umgebungsverdeckung (SSAO: Kontaktschatten unter Bänken,
     an Hauskanten, unter Autos), Luftperspektive mit Höhennebel und warmer Streuung zur Sonne (ersetzt den linearen
     Nebel), Bloom (Sonne, Laternen, Scheinwerfer, beleuchtete Fenster), ACES-Tonwertkurve, Farbkorrektur wie GTA IV
@@ -245,11 +245,31 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
     alle vier Qualitätsstufen mit `O`, Rödental; keine Fehler in der Konsole. Bildrate: bei ≈ 1930 × 1310 Pixeln
     (Stufe Hoch mit MSAA, SSAO und Bloom) weiter 60 Bilder/s, auch in Rödental; dort ≈ 3,2 Mio. Dreiecke und ≈ 800
     Zeichenaufrufe pro Bild (ohne Baum-LOD waren es ≈ 7 Mio.)
-- ⚠️ Grenzen v2.2.0: Der Boden im Landkreis bleibt unscharf, weil dort nur Luftbilder mit 1,9 m pro Pixel vorliegen
+- ⚠️ Grenzen v2.4.0: Der Boden im Landkreis bleibt unscharf, weil dort nur Luftbilder mit 1,9 m pro Pixel vorliegen
   (bayerischer Dienst gesperrt). Fassaden haben weiter ein gemeinsames Fenstermuster (variiert in Maß, Farbe, Rahmen,
   Gesimsen, Vorhängen), keine Balkone, Gauben oder Dachüberstände. Gesichter sind einfach (Augen, Nase, Mund aus
   Formen). Die Uhr steht in Innenräumen still. Gemessen nur auf diesem Rechner; auf schwachen Grafikkarten Stufe
   Mittel oder Niedrig wählen (die dynamische Auflösung hilft automatisch).
+- ✅ v2.3.0 (22.10.2026): **Robustere Autos, Leitplanken, Brücken über Straßen.**
+  - Autos halten viel mehr aus: Rempler bis ≈ 25 km/h kosten nichts, ein Frontalaufprall mit 100 km/h etwa ein
+    Fünftel (vorher fast zwei Drittel). Explosionen beschädigen Autos in der Nähe weiterhin stark
+  - Große Straßen im Umland (Autobahn, B 4, B 303, B 89, B 289 …): durchgezogene Randlinien; Leitplanken mit Pfosten
+    an beiden Seiten (Bundesstraßen der Klasse `primary` nur außerhalb der Orte), an Kreuzungen und Einmündungen offen;
+    zweibahnige Abschnitte haben damit eine Leitplanke im Mittelstreifen, breite Straßen mit Gegenverkehr eine
+    Mittelleitplanke, schmalere eine doppelte durchgezogene Mittellinie, Richtungsfahrbahnen eine Spurtrennung
+  - Leitplanken und Brückenkanten halten nur Autos auf und nur auf ihrer Höhe (`Region.collide` mit Höhe `y`): Wer
+    unter einer Brücke durchfährt, prallt nicht an deren Geländer ab
+  - Brücken über Straßen (78 im Landkreis) liegen jetzt 6,2 m über der Straße darunter. Die anschließenden Straßen
+    steigen als Rampen mit höchstens 7 % an (Stützmauern, ab 1,1 m Höhe mit Brüstung); Widerlager an den Brückenenden.
+    Markierungen liegen auch auf Brücken und Rampen. Der Verkehr bremst nicht mehr für Autos auf einer anderen Ebene
+  - Nur im Umland: die Innenstadt (`world.js`) hat weiter ihre flachen Brücken und keine Leitplanken
+- ✅ v2.2.1 (22.10.2026): **Sechs neue Automodelle, kein Blitzen mehr.**
+  - Neue Modelle mit eigener Karosserie und eigenen Fahrwerten: Kleinwagen (€ 1.100), Kombi (€ 2.900), Kleinbus
+    (€ 3.400), Pick-up mit Ladefläche (€ 4.200), Geländewagen mit Dachreling (€ 5.600), offenes Cabrio (€ 6.900).
+    Alle im Autohaus kaufbar und in der Garage, außerdem fahren sie im Verkehr mit (und lassen sich klauen)
+  - Die Seitenansichten im Autohaus und in der Garage werden jetzt aus dem Seitenprofil der 3D-Modelle gezeichnet
+  - Zu schnelles Fahren an einer Streife vorbei löst keine Fahndung mehr aus
+- ✅ v2.2.0 (21.10.2026): Zwischenstand der Grafik (Himmel, Wetter, Fassaden-, Straßen- und Autodetails); fertig in v2.4.0, siehe dort
 
 - ✅ v2.1.0 (21.10.2026): **Wasser, Talbrücken, Leben in den Orten, schärfere Luftbilder.**
   - Echtes Wasser in Stadt und Landkreis: ausgehobenes Bett, Wasseroberfläche mit Wellen, Ufer als Hindernis
@@ -472,7 +492,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [ ] Spielziele: Taxi- oder Lieferaufträge zwischen Sehenswürdigkeiten, Sammelobjekte, Zeitrennen
 - [ ] Straßenlaternen und Ampeln (aus OSM `highway=street_lamp`, `traffic_signals`)
 - [ ] Touch-Steuerung für Smartphone und Tablet
-- [x] ~~Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)~~ Erledigt in v2.2.0 (Uhr, Abendrot, Wetter)
+- [x] ~~Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)~~ Erledigt in v2.4.0 (Uhr, Abendrot, Wetter)
 - [ ] Grafik weiter: zweites Fenstermuster (Rundbogen-, Sprossen- und Ladenfenster) je Haus, Balkone, Gauben und
   Dachüberstände als Geometrie, Kanaldeckel auf der Fahrbahn, Scheinwerferkegel der KI-Autos nachts,
   Wolkenschatten auf dem Boden

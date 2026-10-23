@@ -1,4 +1,4 @@
-// Autos: Modelle (Pkw, Sportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik mit Driften,
+// Autos: Modelle (Pkw, Kleinwagen, Kombi, Geländewagen, Kleinbus, Pick-up, Cabrio, Sportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik mit Driften,
 // Schaden bis zum Ausbrennen.
 'use strict';
 
@@ -18,7 +18,15 @@ const VEHICLE_KINDS = {
   sport: { name: 'Sportwagen', maxSpeed: 60, accel: 12.5, grip: 11.5, armor: 0.85, value: 1400 },
   taxi: { name: 'Taxi', maxSpeed: 44, accel: 8.5, grip: 10, armor: 1.1, value: 350 },
   police: { name: 'Streifenwagen', maxSpeed: 53, accel: 11, grip: 11, armor: 1.5, value: 900 },
+  kleinwagen: { name: 'Kleinwagen', maxSpeed: 40, accel: 9.5, grip: 10.5, armor: 0.85, value: 300 },
+  kombi: { name: 'Kombi', maxSpeed: 46, accel: 9, grip: 10, armor: 1.1, value: 600 },
+  van: { name: 'Kleinbus', maxSpeed: 40, accel: 7, grip: 9, armor: 1.35, value: 650 },
+  pickup: { name: 'Pick-up', maxSpeed: 45, accel: 8.5, grip: 9.5, armor: 1.3, value: 750 },
+  suv: { name: 'Geländewagen', maxSpeed: 47, accel: 9.5, grip: 10.5, armor: 1.45, value: 950 },
+  cabrio: { name: 'Cabrio', maxSpeed: 54, accel: 11, grip: 11, armor: 0.9, value: 1100 },
 };
+// Lackfarben je Typ (Händler, Lackiererei, Verkehr)
+function kindPalette(kind) { return kind === 'sport' || kind === 'cabrio' ? SPORT_COLORS : CAR_COLORS; }
 
 // ---------------- Modelle ----------------
 // Karosserie als Seitenprofil (Länge × Höhe) mit Radkästen, über die Breite extrudiert und an den Kanten gerundet.
@@ -38,7 +46,57 @@ const CAR_SHAPES = {
     pillars: [[0.64, 0.8, -0.25, 1.18], [-1.0, 1.19, -1.75, 0.85]], bPillar: null,
     head: [2.12, 0.58], tail: [-2.17, 0.74], cabinW: 1.42, mirror: [0.5, 0.86], roofY: 1.22,
   },
+  kleinwagen: {
+    body: [[-1.85, 0.3], [1.85, 0.3], [1.92, 0.5], [1.9, 0.72], [1.75, 0.84], [1.05, 0.94], [0.85, 0.98], [-1.6, 1.0], [-1.88, 0.96], [-1.94, 0.8], [-1.92, 0.45]],
+    cabin: [[0.86, 0.94], [0.1, 1.44], [-1.45, 1.46], [-1.75, 0.99], [-1.7, 0.92]],
+    roof: [[0.15, 1.41], [0.09, 1.49], [-1.45, 1.5], [-1.55, 1.42]],
+    pillars: [[0.86, 0.96, 0.1, 1.45], [-1.45, 1.47, -1.75, 0.99]], bPillar: [-0.5, 0.97, 1.46],
+    head: [1.88, 0.74], tail: [-1.92, 0.88], cabinW: 1.48, mirror: [0.72, 1.02], roofY: 1.5,
+  },
+  kombi: {
+    body: [[-2.2, 0.3], [2.1, 0.3], [2.17, 0.5], [2.15, 0.7], [2.02, 0.82], [1.05, 0.93], [0.82, 0.96], [-2.0, 0.98], [-2.2, 0.92], [-2.22, 0.45]],
+    cabin: [[0.84, 0.92], [0.06, 1.42], [-1.9, 1.44], [-2.08, 0.97], [-2.0, 0.9]],
+    roof: [[0.11, 1.39], [0.05, 1.47], [-1.92, 1.48], [-1.98, 1.39]],
+    pillars: [[0.84, 0.94, 0.06, 1.43], [-1.92, 1.45, -2.08, 0.97]], bPillar: [[-0.45, 0.95, 1.44], [-1.3, 0.96, 1.45]],
+    head: [2.1, 0.74], tail: [-2.2, 0.86], cabinW: 1.5, mirror: [0.72, 1.0], roofY: 1.48,
+  },
+  suv: {
+    body: [[-2.2, 0.42], [2.15, 0.42], [2.24, 0.62], [2.22, 0.92], [2.05, 1.08], [1.0, 1.16], [0.8, 1.2], [-2.05, 1.22], [-2.24, 1.15], [-2.24, 0.6]],
+    cabin: [[0.82, 1.16], [0.15, 1.68], [-1.95, 1.7], [-2.12, 1.2], [-2.0, 1.14]],
+    roof: [[0.2, 1.65], [0.14, 1.74], [-1.95, 1.75], [-2.02, 1.66]],
+    pillars: [[0.82, 1.18, 0.15, 1.69], [-1.95, 1.71, -2.12, 1.2]], bPillar: [[-0.55, 1.19, 1.7], [-1.35, 1.2, 1.71]],
+    head: [2.15, 0.98], tail: [-2.24, 1.04], cabinW: 1.56, mirror: [0.7, 1.24], roofY: 1.75,
+    // Dachreling
+    extra: [[0.05, 0.06, 1.9, 0.68, 1.78, -0.9], [0.05, 0.06, 1.9, -0.68, 1.78, -0.9]],
+  },
+  van: {
+    body: [[-2.25, 0.36], [2.15, 0.36], [2.26, 0.55], [2.25, 0.95], [2.1, 1.1], [1.75, 1.15], [-2.15, 1.15], [-2.28, 1.05], [-2.28, 0.55]],
+    cabin: [[1.75, 1.12], [1.35, 1.82], [-2.1, 1.86], [-2.2, 1.12]],
+    roof: [[1.38, 1.78], [1.3, 1.9], [-2.12, 1.92], [-2.2, 1.8]],
+    pillars: [[1.75, 1.14, 1.35, 1.83], [-2.12, 1.86, -2.2, 1.14]], bPillar: [[0.75, 1.14, 1.86], [-0.7, 1.14, 1.88]],
+    head: [2.22, 0.8], tail: [-2.28, 0.9], cabinW: 1.62, mirror: [1.6, 1.2], roofY: 1.92,
+  },
+  pickup: {
+    body: [[-2.25, 0.34], [2.12, 0.34], [2.2, 0.55], [2.18, 0.8], [2.02, 0.95], [0.95, 1.03], [0.75, 1.06], [-2.15, 1.08], [-2.26, 1.02], [-2.26, 0.5]],
+    cabin: [[0.78, 1.03], [0.2, 1.5], [-0.5, 1.52], [-0.62, 1.04], [-0.55, 1.0]],
+    roof: [[0.25, 1.47], [0.19, 1.55], [-0.5, 1.56], [-0.58, 1.48]],
+    pillars: [[0.78, 1.05, 0.2, 1.51], [-0.5, 1.53, -0.62, 1.05]], bPillar: null,
+    head: [2.15, 0.82], tail: [-2.26, 0.9], cabinW: 1.5, mirror: [0.62, 1.1], roofY: 1.56,
+    // Ladefläche: Boden, Bordwände, Heckklappe
+    extra: [[1.6, 0.03, 1.5, 0, 1.09, -1.38], [0.06, 0.14, 1.55, 0.84, 1.14, -1.38], [0.06, 0.14, 1.55, -0.84, 1.14, -1.38], [1.74, 0.14, 0.06, 0, 1.14, -2.14]],
+  },
+  cabrio: {
+    body: [[-2.13, 0.3], [2.1, 0.3], [2.17, 0.48], [2.15, 0.66], [2.0, 0.78], [0.95, 0.88], [0.7, 0.9], [-1.7, 0.92], [-2.05, 0.9], [-2.16, 0.72], [-2.16, 0.42]],
+    cabin: [[0.72, 0.88], [0.3, 1.2], [0.22, 1.2], [0.6, 0.88]],   // nur Windschutzscheibe
+    roof: null,
+    pillars: [[0.72, 0.9, 0.3, 1.21]], bPillar: null,
+    head: [2.1, 0.68], tail: [-2.16, 0.78], cabinW: 1.46, mirror: [0.6, 0.95], roofY: 1.2,
+    // offener Innenraum: Boden und zwei Sitzlehnen
+    extra: [[1.5, 0.03, 1.75, 0, 0.93, -0.5], [0.52, 0.5, 0.12, 0.38, 1.15, -0.6], [0.52, 0.5, 0.12, -0.38, 1.15, -0.6]],
+  },
 };
+// Modell (Form) eines Fahrzeugtyps: Taxi und Polizei sind Pkw
+function carShapeKey(kind) { return CAR_SHAPES[kind] && kind !== 'car' ? kind : 'car'; }
 const WHEEL_X = 0.8, WHEEL_Z = 1.33;
 
 // Form aus Teilen zusammenfügen: [[geometry, matrix], …] → eine nicht indizierte Geometrie
@@ -103,9 +161,11 @@ function carExtrude(profile, w, r, arches) {
   g.computeVertexNormals();
   return carSmooth(g.index ? g.toNonIndexed() : g);
 }
+// Säulen quer über das Dach (B-, C-Säule): [[länge, unten, oben], …]
+function carPosts(S) { return !S.bPillar ? [] : Array.isArray(S.bPillar[0]) ? S.bPillar : [S.bPillar]; }
 const _carGeo = {};
 function carGeometries(kind = 'car') {
-  const key = kind === 'sport' ? 'sport' : 'car';
+  const key = carShapeKey(kind);
   if (_carGeo[key]) return _carGeo[key];
   const S = CAR_SHAPES[key], M4 = (x, y, z, rx = 0, ry = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, 0)), new THREE.Vector3(1, 1, 1));
   const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
@@ -115,9 +175,10 @@ function carGeometries(kind = 'car') {
     return [box(0.07, 0.07, L), M4(x, (y0 + y1) / 2, (s0 + s1) / 2, Math.atan2(-(y1 - y0), s1 - s0))];
   };
   const cw = S.cabinW, px = cw / 2 + 0.005;
-  const paintParts = [[carExtrude(S.body, 1.8, 0.09, true)], [carExtrude(S.roof, cw + 0.03, 0.03)]];
+  const paintParts = [[carExtrude(S.body, 1.8, 0.09, true)]];
+  if (S.roof) paintParts.push([carExtrude(S.roof, cw + 0.03, 0.03)]);
   for (const [s0, y0, s1, y1] of S.pillars) for (const x of [px, -px]) paintParts.push(pillar(s0, y0, s1, y1, x));
-  if (S.bPillar) paintParts.push([box(cw + 0.02, S.bPillar[2] - S.bPillar[1], 0.1), M4(0, (S.bPillar[1] + S.bPillar[2]) / 2, S.bPillar[0])]);
+  for (const [bz, y0, y1] of carPosts(S)) paintParts.push([box(cw + 0.02, y1 - y0, 0.1), M4(0, (y0 + y1) / 2, bz)]);
   for (const x of [1, -1]) paintParts.push([box(0.16, 0.1, 0.2), M4(x * 0.98, S.mirror[1] + 0.05, S.mirror[0])]);
   const [hz, hy] = S.head, [tz, ty] = S.tail;
   const G = {
@@ -128,6 +189,7 @@ function carGeometries(kind = 'car') {
       [box(0.9, 0.15, 0.06), M4(0, hy - 0.12, hz + 0.11)],                       // Kühlergrill
       [box(1.82, 0.06, 2.6), M4(0, 0.31, 0)],                                    // Schweller
       [box(0.05, 0.1, 0.2), M4(0.93, S.mirror[1], S.mirror[0])], [box(0.05, 0.1, 0.2), M4(-0.93, S.mirror[1], S.mirror[0])],
+      ...(S.extra || []).map(([w, h, d, x, y, z]) => [box(w, h, d), M4(x, y, z)]),
     ]),
     head: carMerge([[box(0.44, 0.13, 0.14), M4(0.6, hy, hz + 0.05)], [box(0.44, 0.13, 0.14), M4(-0.6, hy, hz + 0.05)]]),
     tail: carMerge([[box(0.5, 0.12, 0.12), M4(0.58, ty, tz - 0.02)], [box(0.5, 0.12, 0.12), M4(-0.58, ty, tz - 0.02)]]),
@@ -149,7 +211,7 @@ function carGeometries(kind = 'car') {
   G.lamp = new THREE.BoxGeometry(0.42, 0.14, 0.24);
   G.side = new THREE.PlaneGeometry(2.4, 0.3);
   G.sign = new THREE.BoxGeometry(0.62, 0.2, 0.2);
-  G.roofPlate = carExtrude(S.roof, cw + 0.05, 0.03);
+  G.roofPlate = S.roof ? carExtrude(S.roof, cw + 0.05, 0.03) : null;
   G.blob = new THREE.PlaneGeometry(2.5, 5.0); G.blob.rotateX(-Math.PI / 2);
   _carGeo[key] = G;
   return G;
@@ -215,8 +277,7 @@ class Vehicle {
     if (!color) {
       if (kind === 'police') color = '#e9edf1';
       else if (kind === 'taxi') color = '#efe6c4';
-      else if (kind === 'sport') color = SPORT_COLORS[Math.floor(Math.random() * SPORT_COLORS.length)];
-      else color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+      else { const pal = kindPalette(kind); color = pal[Math.floor(Math.random() * pal.length)]; }
     }
     this.color = color;
     // Lack mit Klarlack: spiegelt Himmel und Umgebung (scene.environment aus js/atmosphere.js)
@@ -349,7 +410,7 @@ class Vehicle {
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     for (const off of CAR.circles) {
       const cx = this.x + fx * off, cz = this.z + fz * off;
-      const r = world.collideCircle(cx, cz, CAR.radius, this._col);
+      const r = world.collideCircle(cx, cz, CAR.radius, this._col, this.y);
       if (r.hit) {
         this.x += r.x - cx; this.z += r.z - cz;
         this.bounce(r.nx, r.nz, 0.25);
@@ -370,10 +431,11 @@ class Vehicle {
     }
   }
 
-  // Schaden aus einer Aufprallgeschwindigkeit (m/s)
+  // Schaden aus einer Aufprallgeschwindigkeit (m/s): Rempler bis ≈ 25 km/h kosten nichts, ein Frontalaufprall
+  // mit 100 km/h etwa ein Fünftel
   damage(v) {
-    if (v < 4 || this.wrecked) return;
-    this.health -= (v - 4) * 2.6 / this.spec.armor;
+    if (v < 7 || this.wrecked) return;
+    this.health -= (v - 7) * 1.0 / this.spec.armor;
     if (this.health <= 0 && !this.burning) { this.health = 0; this.burning = 4.5; }
     // Lack wird mit dem Schaden dunkler und matter
     const f = 0.45 + 0.55 * U.clamp(this.health / 100, 0, 1);

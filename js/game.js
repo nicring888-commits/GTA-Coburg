@@ -415,7 +415,7 @@
     addMoney(-cost);
     let color = null;
     if (car.kind !== 'police' && car.kind !== 'taxi') {
-      const pal = car.kind === 'sport' ? SPORT_COLORS : CAR_COLORS;
+      const pal = kindPalette(car.kind);
       do color = pal[Math.floor(Math.random() * pal.length)]; while (pal.length > 1 && color === car.color);
       car.color = color;
     }
@@ -548,7 +548,7 @@
       if (o === c || o.disposed) continue;
       const d = Math.hypot(o.x - c.x, o.z - c.z);
       if (d > 9) continue;
-      o.damage((9 - d) * 5);
+      o.damage((9 - d) * 9);
       if (!o.ai) { const k = (9 - d) * 1.5 / (d || 1); o.vx += (o.x - c.x) * k; o.vz += (o.z - c.z) * k; o.sleeping = false; }
     }
     if (car === c) {

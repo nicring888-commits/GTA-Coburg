@@ -17,6 +17,18 @@ const REGION = {
   lifeDrop: 950,
   townBuildings: 12,  // ab so vielen Häusern gilt eine Kachel als Ort
 };
+// Brücken über Straßen: Fahrbahn so hoch über der unteren Straße (m), Rampen höchstens so steil
+const BRIDGE = { lift: 6.2, slope: 0.07, step: 4 };
+// große Straßen (Bundesstraßen, Autobahn): Randlinien, Mittelstreifen, Leitplanken
+const BIG_ROADS = /^(motorway|motorway_link|trunk|trunk_link|primary)$/;
+const BIG_MEDIAN_W = 10;   // zweibahnige Straßen ab dieser Breite bekommen eine Mittelleitplanke
+// Schnittpunkt der Strecken a-b und c-d als Anteil t auf a-b (sonst null)
+function segHit(ax, az, bx, bz, cx, cz, dx, dz) {
+  const rx = bx - ax, rz = bz - az, sx = dx - cx, sz = dz - cz, den = rx * sz - rz * sx;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((cx - ax) * sz - (cz - az) * sx) / den, u = ((cx - ax) * rz - (cz - az) * rx) / den;
+  return t > 0 && t < 1 && u > 0 && u < 1 ? t : null;
+}
 const LAMP_ROADS = /residential|living_street|tertiary|secondary|primary|unclassified/;
 // begehbare Lokale und Läden im Landkreis: Art aus OSM -> Raumtyp (venues.js)
 function regionVenueType(name, kind) {
@@ -137,31 +149,109 @@ class Region {
   }
 
   // ---------------- Brücken ----------------
-  // Brücken über Täler: Fahrbahn als Gerade zwischen den Brückenenden statt auf dem Gelände
+  // Brücken über Täler: Fahrbahn als Gerade zwischen den Brückenenden statt auf dem Gelände. Führt eine Brücke über
+  // eine andere Straße, liegt sie dort BRIDGE.lift m über deren Fahrbahn; die Zufahrten steigen als Rampen
+  // (höchstens BRIDGE.slope) auf den anschließenden Straßen an.
   initBridges() {
     this.bridgeGrid = new U.Grid(30);
     this.bridges = [];
-    this.graph.edges.forEach((e, ei) => {
-      if (!e.br) return;
-      const p = e.p, n = p.length / 2;
-      if (p.every((v, k) => k % 2 || this.inCore(v, p[k + 1]))) return;
-      const cum = [0];
+    const E = this.graph.edges, step = BRIDGE.step;
+    const adj = new Map();
+    E.forEach((e, ei) => { for (const nd of [e.a, e.b]) { if (!adj.has(nd)) adj.set(nd, []); adj.get(nd).push(ei); } });
+    this.nodeDeg = nd => (adj.get(nd) || []).length;
+    // Höhenprofil einer Kante, alle `step` m (Fahrbahn ohne Brücke: Gelände)
+    const make = (ei, linear) => {
+      const e = E[ei], p = e.p, n = p.length / 2, cum = [0];
       for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1]));
-      const len = cum[n - 1];
-      if (len < 8) return;
+      const len = cum[n - 1], B = { ei, p, cum, len, w: e.w, prof: null, ramp: !linear };
+      const m = Math.max(1, Math.ceil(len / step)), prof = new Float32Array(m + 1);
       const hA = this.fineAt(p[0], p[1]), hB = this.fineAt(p[n * 2 - 2], p[n * 2 - 1]);
-      const B = { ei, p, cum, len, hA, hB, w: e.w };
-      // nur echte Hochbrücken: irgendwo mindestens 1,5 m über dem Gelände
+      for (let j = 0; j <= m; j++) {
+        const s = Math.min(len, j * step);
+        if (linear) prof[j] = hA + (hB - hA) * s / (len || 1);
+        else { const q = this.along(B, s); prof[j] = this.fineAt(q[0], q[1]); }
+      }
+      B.prof = prof;
+      return B;
+    };
+    const ground = (B, j) => { const q = this.along(B, Math.min(B.len, j * step)); return this.fineAt(q[0], q[1]); };
+    // Profil von Abstand s0 aus auf mindestens h anheben (mit Gefälle zu beiden Seiten)
+    const raise = (B, s0, h) => {
+      for (let j = 0; j < B.prof.length; j++) B.prof[j] = Math.max(B.prof[j], h - BRIDGE.slope * Math.abs(Math.min(B.len, j * step) - s0));
+    };
+    const decks = new Map(), under = new Set();
+    E.forEach((e, ei) => {
+      if (!e.br || e.p.every((v, k) => k % 2 || this.inCore(v, e.p[k + 1]))) return;
+      const B = make(ei, true);
+      if (B.len < 8) return;
+      decks.set(ei, B);
+    });
+    // Kreuzungen mit Straßen unter der Brücke
+    const lifts = [];
+    for (const [ei, B] of decks) {
+      const e = E[ei], p = e.p;
+      for (let i = 0; i + 3 < p.length; i += 2) {
+        const ax = p[i], az = p[i + 1], bx = p[i + 2], bz = p[i + 3];
+        const list = this.netGrid.query((ax + bx) / 2, (az + bz) / 2, Math.hypot(bx - ax, bz - az) / 2 + 1, this._rq || (this._rq = []));
+        for (const code of list) {
+          const oi = Math.floor(code / 4096), k = (code % 4096) * 2, o = E[oi];
+          if (oi === ei || o.br || o.a === e.a || o.a === e.b || o.b === e.a || o.b === e.b) continue;
+          const t = segHit(ax, az, bx, bz, o.p[k], o.p[k + 1], o.p[k + 2], o.p[k + 3]);
+          if (t === null) continue;
+          const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+          under.add(oi);
+          lifts.push([ei, B.cum[i / 2] + (B.cum[i / 2 + 1] - B.cum[i / 2]) * t, this.fineAt(x, z) + BRIDGE.lift]);
+        }
+      }
+    }
+    // Rampe an Knoten `nd` weiterführen: auf der geradesten anschließenden Straße
+    const carry = (fromEi, nd, h, depth) => {
+      const from = E[fromEi], fp = from.p, n = fp.length / 2;
+      const atA = from.a === nd;
+      const dx = atA ? fp[0] - fp[2] : fp[n * 2 - 2] - fp[n * 2 - 4], dz = atA ? fp[1] - fp[3] : fp[n * 2 - 1] - fp[n * 2 - 3];
+      const dl = Math.hypot(dx, dz) || 1;
+      let best = null, bestDot = 0.5;
+      for (const ni of adj.get(nd) || []) {
+        if (ni === fromEi || under.has(ni)) continue;
+        const o = E[ni], op = o.p, m = op.length / 2;
+        if (op.some((v, k) => !(k % 2) && this.inCore(v, op[k + 1]))) continue;
+        const oa = o.a === nd;
+        const ox = oa ? op[2] - op[0] : op[m * 2 - 4] - op[m * 2 - 2], oz = oa ? op[3] - op[1] : op[m * 2 - 3] - op[m * 2 - 1];
+        const dot = (dx * ox + dz * oz) / dl / (Math.hypot(ox, oz) || 1);
+        if (dot > bestDot) { bestDot = dot; best = ni; }
+      }
+      if (best === null) return;
+      let B = decks.get(best);
+      if (!B) { B = make(best, false); decks.set(best, B); }
+      const o = E[best], s0 = o.a === nd ? 0 : B.len;
+      raise(B, s0, h);
+      const far = o.a === nd ? o.b : o.a, j = s0 ? 0 : B.prof.length - 1;
+      const hf = B.prof[j];
+      if (hf > ground(B, j) + 0.3 && depth < 6) carry(best, far, hf, depth + 1);
+    };
+    for (const [ei, s0, h] of lifts) raise(decks.get(ei), s0, h);
+    for (const [ei, s0, h] of lifts) {
+      const B = decks.get(ei), e = E[ei], last = B.prof.length - 1;
+      if (B.prof[0] > ground(B, 0) + 0.3) carry(ei, e.a, B.prof[0], 0);
+      if (B.prof[last] > ground(B, last) + 0.3) carry(ei, e.b, B.prof[last], 0);
+    }
+    for (const [ei, B] of decks) {
+      const e = E[ei], p = B.p, n = p.length / 2;
+      // nur echte Hochbrücken und Rampen: irgendwo mindestens 1,5 m (Rampen 0,5 m) über dem Gelände
       let gap = 0;
-      for (let s = 0; s <= len; s += 4) { const q = this.along(B, s); gap = Math.max(gap, this.deckH(B, s) - this.fineAt(q[0], q[1])); }
-      if (gap < 1.5) return;
+      for (let j = 0; j < B.prof.length; j++) gap = Math.max(gap, B.prof[j] - ground(B, j));
+      if (gap < (B.ramp ? 0.5 : 1.5)) continue;
       e.deck = B;
       this.bridges.push(B);
       for (let i = 0; i < n - 1; i++) this.bridgeGrid.insert({ B, i }, Math.min(p[i * 2], p[i * 2 + 2]) - e.w, Math.min(p[i * 2 + 1], p[i * 2 + 3]) - e.w,
         Math.max(p[i * 2], p[i * 2 + 2]) + e.w, Math.max(p[i * 2 + 1], p[i * 2 + 3]) + e.w);
-    });
+    }
   }
-  deckH(B, s) { return B.hA + (B.hB - B.hA) * U.clamp(s / B.len, 0, 1); }
+  deckH(B, s) {
+    const f = U.clamp(s, 0, B.len) / BRIDGE.step, j = Math.min(Math.floor(f), B.prof.length - 2);
+    if (j < 0) return B.prof[0];
+    return B.prof[j] + (B.prof[j + 1] - B.prof[j]) * (f - j);
+  }
   along(B, s) {
     const p = B.p, cum = B.cum;
     let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
@@ -345,6 +435,7 @@ class Region {
       this.buildRoads(t);
       this.buildWater(t);
       this.buildBuildings(t);
+      this.buildRails(t);
       t.town = t.buildings.length >= REGION.townBuildings;
     }
     this.world.group.add(t.group);
@@ -588,13 +679,113 @@ class Region {
           b.tri(c, [p1x, W.heightAt(p1x, p1z) + y, p1z], [p2x, W.heightAt(p2x, p2z) + y, p2z], col, null, null, null, 0, 1, 0);
         }
       }
-      // Mittellinie auf zweispurigen Straßen
-      if (!B && e.w >= 5.5 && !e.o && !/residential|living_street/.test(e.h)) W.dashes(pts, 3, 6, 0.07, y + 0.02, marks, white);
+      // Fahrbahnmarkierung (auf Brücken und Rampen auf der Fahrbahnhöhe)
+      const hf = B ? (x, z) => { const d = this.deckAt(x, z); return d !== null ? d : W.heightAt(x, z); } : undefined;
+      const big = BIG_ROADS.test(e.h);
+      if (big) {
+        // Randlinien, Mittelstreifen (zweibahnig: Leitplanke, sonst doppelte durchgezogene Linie), Spurtrennung
+        for (const E of [L, R]) {
+          const k = (half - 0.45) / half, side = [];
+          for (let i = 0; i < n; i++) side.push(pts[i * 2] + (E[i][0] - pts[i * 2]) * k, pts[i * 2 + 1] + (E[i][2] - pts[i * 2 + 1]) * k);
+          W.dashes(side, 1e9, 1, 0.065, y + 0.02, marks, white, hf);
+        }
+        if (e.o) { if (e.w >= 7) W.dashes(pts, 6, 12, 0.07, y + 0.02, marks, white, hf); }
+        else if (e.w < BIG_MEDIAN_W) for (const o of [-0.14, 0.14]) W.dashes(this.offsetLine(pts, o), 1e9, 1, 0.06, y + 0.02, marks, white, hf);
+      } else if (e.w >= 5.5 && !e.o && !/residential|living_street/.test(e.h)) W.dashes(pts, 3, 6, 0.07, y + 0.02, marks, white, hf);
+      // Leitplanken an großen Straßen und auf Brücken/Rampen: erst nach den Häusern (Ortsdurchfahrten erkennen)
+      if (big || B) (t.railJobs || (t.railJobs = [])).push({ e, run, pts, sAt, B, big });
     }
     const [rm, mm] = this.roadMaterials();
     if (t.bridgeParts) t.bridgeParts.meshes(this.world.buildingMaterials().plain, { cast: true, receive: true }).forEach(m => t.group.add(m));
     roads.meshes(rm, { receive: true }).forEach(m => t.group.add(m));
     marks.meshes(mm, { receive: true }).forEach(m => t.group.add(m));
+  }
+
+  // Linie parallel zur Polylinie im Abstand o (positiv: links)
+  offsetLine(pts, o) {
+    const n = pts.length / 2, out = [];
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+      const dx = pts[b * 2] - pts[a * 2], dz = pts[b * 2 + 1] - pts[a * 2 + 1], l = Math.hypot(dx, dz) || 1;
+      out.push(pts[i * 2] - dz / l * o, pts[i * 2 + 1] + dx / l * o);
+    }
+    return out;
+  }
+
+  // Leitplanken (verzinkt, Holm 0,45–0,78 m mit Pfosten) neben großen Straßen außerhalb der Orte, als Mittelstreifen
+  // breiter zweibahniger Straßen und als unsichtbare Kante auf Brücken und Rampen. Sie halten nur Autos auf und nur
+  // auf ihrer Höhe (Straßen darunter oder darüber bleiben frei). An Kreuzungen und Einmündungen bleiben sie offen.
+  buildRails(t) {
+    const jobs = t.railJobs;
+    t.railJobs = null;
+    t.rails = []; t.railGrid = new U.Grid(16);
+    if (!jobs) return;
+    const W = this.world, E = this.graph.edges, parts = new Chunks(), steel = new THREE.Color('#b9bdc1'), post = new THREE.Color('#7d8186');
+    const town = (x, z) => t.polyGrid.query(x, z, 35, W._tmp).some(b => Math.abs(b.bb.minX - x) < 65 && Math.abs(b.bb.minZ - z) < 65);
+    const quad = (b, a, c, d, e, col, nx, ny, nz) => { b.tri(a, c, d, col, null, null, null, nx, ny, nz); b.tri(a, d, e, col, null, null, null, nx, ny, nz); };
+    // Höhe einer anderen Straße am Punkt (x, z) nahe ihrem Abschnitt k
+    const levelOf = (o, k, x, z) => {
+      if (!o.deck) return W.heightAt(x, z);
+      const c = U.closestOnSeg(x, z, o.p[k], o.p[k + 1], o.p[k + 2], o.p[k + 3]);
+      return this.deckH(o.deck, o.deck.cum[k / 2] + (o.deck.cum[k / 2 + 1] - o.deck.cum[k / 2]) * c[2]);
+    };
+    for (const { e, run, pts, sAt, B, big } of jobs) {
+      const n = pts.length / 2, half = e.w / 2, ei = run.e;
+      // Abstand ab Kantenanfang
+      let s0 = 0;
+      for (let k = 1; k <= run.k0; k++) s0 += Math.hypot(e.p[k * 2] - e.p[k * 2 - 2], e.p[k * 2 + 1] - e.p[k * 2 - 1]);
+      let len = s0;
+      for (let k = run.k0 + 1; k < e.p.length / 2; k++) len += Math.hypot(e.p[k * 2] - e.p[k * 2 - 2], e.p[k * 2 + 1] - e.p[k * 2 - 1]);
+      const sE = [s0];
+      for (let i = 1; i < n; i++) sE.push(sE[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]));
+      const openA = this.nodeDeg(e.a) >= 3, openB = this.nodeDeg(e.b) >= 3;
+      const lines = [];
+      if (big || B) lines.push(half + 0.45, -(half + 0.45));
+      if (big && !e.o && e.w >= BIG_MEDIAN_W) lines.push(0);
+      for (const off of lines) {
+        const P = [], ok = [];
+        const line = this.offsetLine(pts, off);
+        for (let i = 0; i < n; i++) {
+          const x = line[i * 2], z = line[i * 2 + 1];
+          const h = (B ? this.deckH(B, sAt[i]) : W.heightAt(x, z)) + REGION.roadY;
+          P.push([x, h, z]);
+          let free = !(openA && sE[i] < 16) && !(openB && sE[i] > len - 16);
+          if (free) {
+            // andere Fahrbahn auf gleicher Höhe direkt daneben: offen lassen
+            for (const code of this.netGrid.query(x, z, 12, this._rq2 || (this._rq2 = []))) {
+              const oi = Math.floor(code / 4096), k = (code % 4096) * 2, o = E[oi];
+              if (oi === ei) continue;
+              const c = U.closestOnSeg(x, z, o.p[k], o.p[k + 1], o.p[k + 2], o.p[k + 3]);
+              if (Math.hypot(c[0] - x, c[1] - z) > o.w / 2 + 1.2) continue;
+              if (Math.abs(levelOf(o, k, c[0], c[1]) + REGION.roadY - h) < 3) { free = false; break; }
+            }
+          }
+          ok.push(free);
+        }
+        for (let i = 0; i < n - 1; i++) {
+          if (!ok[i] || !ok[i + 1]) continue;
+          const a = P[i], c = P[i + 1];
+          t.rails.push(a[0], a[2], c[0], c[2], (a[1] + c[1]) / 2);
+          t.railGrid.insert(t.rails.length / 5 - 1, Math.min(a[0], c[0]), Math.min(a[2], c[2]), Math.max(a[0], c[0]), Math.max(a[2], c[2]));
+          // sichtbar nur neben großen Straßen außerhalb der Orte; auf Brücken steht schon die Brüstung
+          const bare = B && (B.ramp ? Math.min(a[1] - W.heightAt(a[0], a[2]), c[1] - W.heightAt(c[0], c[2])) > 1.1 : true);
+          if (bare || (!B && !big) || (e.h === 'primary' && off !== 0 && town(a[0], a[2]))) continue;
+          const b = parts.get(a[0], a[2]);
+          const dx = c[0] - a[0], dz = c[2] - a[2], l = Math.hypot(dx, dz) || 1, nx = -dz / l, nz = dx / l;
+          const up = (q, d) => [q[0], q[1] + d, q[2]];
+          quad(b, up(a, 0.45), up(c, 0.45), up(c, 0.78), up(a, 0.78), steel, nx, 0, nz);
+          quad(b, up(a, 0.45), up(a, 0.78), up(c, 0.78), up(c, 0.45), steel, -nx, 0, -nz);
+          quad(b, up(a, 0.78), up(c, 0.78), [c[0] + nx * 0.06, c[1] + 0.78, c[2] + nz * 0.06], [a[0] + nx * 0.06, a[1] + 0.78, a[2] + nz * 0.06], steel, 0, 1, 0);
+          // Pfosten
+          const r = 0.06, sq = [[-r, -r], [r, -r], [r, r], [-r, r]];
+          for (let q = 0; q < 4; q++) {
+            const [px, pz] = sq[q], [qx, qz] = sq[(q + 1) % 4];
+            quad(b, [a[0] + px, a[1] - 0.3, a[2] + pz], [a[0] + qx, a[1] - 0.3, a[2] + qz], [a[0] + qx, a[1] + 0.72, a[2] + qz], [a[0] + px, a[1] + 0.72, a[2] + pz], post, px + qx, 0, pz + qz);
+          }
+        }
+      }
+    }
+    parts.meshes(W.buildingMaterials().plain, { cast: true, receive: true }).forEach(m => t.group.add(m));
   }
 
   // Brückenbauwerk: Platte unter der Fahrbahn, Geländer, Pfeiler bis zum Gelände
@@ -608,10 +799,19 @@ class Region {
       const b = parts.get(pts[i * 2], pts[i * 2 + 1]);
       const dx = pts[i * 2 + 2] - pts[i * 2], dz = pts[i * 2 + 3] - pts[i * 2 + 1], l = Math.hypot(dx, dz) || 1;
       const ox = -dz / l, oz = dx / l; // links
-      // Unterseite und Seitenflächen der Platte (0,9 m stark)
-      quad(b, dn(L[i], 0.9), dn(L[i + 1], 0.9), dn(R[i + 1], 0.9), dn(R[i], 0.9), concrete, 0, -1, 0);
-      quad(b, L[i], L[i + 1], dn(L[i + 1], 0.9), dn(L[i], 0.9), concrete, ox, 0, oz);
-      quad(b, R[i], dn(R[i], 0.9), dn(R[i + 1], 0.9), R[i + 1], concrete, -ox, 0, -oz);
+      if (B.ramp) {
+        // Rampe: Stützmauern bis ins Gelände, Brüstung erst ab 1,2 m Höhe
+        const gL = q => [q[0], W.heightAt(q[0], q[2]) - 0.5, q[2]];
+        if (Math.max(L[i][1] - gL(L[i])[1], L[i + 1][1] - gL(L[i + 1])[1]) < 0.9) continue;
+        quad(b, L[i], L[i + 1], gL(L[i + 1]), gL(L[i]), concrete, ox, 0, oz);
+        quad(b, R[i], gL(R[i]), gL(R[i + 1]), R[i + 1], concrete, -ox, 0, -oz);
+        if (Math.min(L[i][1] - gL(L[i])[1], L[i + 1][1] - gL(L[i + 1])[1]) < 1.7) continue;
+      } else {
+        // Unterseite und Seitenflächen der Platte (0,9 m stark)
+        quad(b, dn(L[i], 0.9), dn(L[i + 1], 0.9), dn(R[i + 1], 0.9), dn(R[i], 0.9), concrete, 0, -1, 0);
+        quad(b, L[i], L[i + 1], dn(L[i + 1], 0.9), dn(L[i], 0.9), concrete, ox, 0, oz);
+        quad(b, R[i], dn(R[i], 0.9), dn(R[i + 1], 0.9), R[i + 1], concrete, -ox, 0, -oz);
+      }
       // Geländer: Brüstung 0,9 m hoch auf beiden Seiten
       for (const [P, s] of [[L, 1], [R, -1]]) {
         const a = P[i], c = P[i + 1], up = q => [q[0], q[1] + 0.9, q[2]];
@@ -619,8 +819,17 @@ class Region {
         quad(b, a, up(a), up(c), c, rail, -ox * s, 0, -oz * s);
       }
     }
+    // Widerlager: Wand unter den Brückenenden bis ins Gelände
+    if (!B.ramp) for (const i of [0, n - 1]) {
+      if (sAt[i] > 1 && sAt[i] < B.len - 1) continue;
+      const g = q => [q[0], W.heightAt(q[0], q[2]) - 0.5, q[2]];
+      if (L[i][1] - g(L[i])[1] < 1.6) continue;
+      const dx = pts[Math.min(n - 1, i + 1) * 2] - pts[Math.max(0, i - 1) * 2], dz = pts[Math.min(n - 1, i + 1) * 2 + 1] - pts[Math.max(0, i - 1) * 2 + 1];
+      const sg = i ? 1 : -1, b = parts.get(pts[i * 2], pts[i * 2 + 1]);
+      quad(b, dn(L[i], 0.9), g(L[i]), g(R[i]), dn(R[i], 0.9), concrete, dx * sg, 0, dz * sg);
+    }
     // Pfeiler alle ≈ 28 m, wo die Brücke hoch genug ist
-    for (let i = 3; i < n - 3; i += 7) {
+    for (let i = 3; !B.ramp && i < n - 3; i += 7) {
       const x = pts[i * 2], z = pts[i * 2 + 1], top = this.deckH(B, sAt[i]) - 0.9, ground = W.heightAt(x, z);
       if (top - ground < 2) continue;
       const b = parts.get(x, z), r = Math.min(0.9, B.w * 0.12);
@@ -933,9 +1142,24 @@ class Region {
     return best;
   }
   // Kollision mit Häusern und Bäumen des Umlands; verschiebt out.x/out.z
-  collide(out, r) {
+  collide(out, r, y) {
     let x = out.x, z = out.z, moved = false;
     for (const t of this.tilesNear(x, z, 90).slice()) {
+      // Leitplanken und Brückenkanten: nur für Autos (mit Höhe y) und nur auf ihrer Höhe
+      if (y !== undefined && t.railGrid) {
+        const RL = t.rails, list = t.railGrid.query(x, z, r + 1, this.world._tmp);
+        for (let n = 0; n < list.length; n++) {
+          const e = list[n] * 5;
+          if (Math.abs(RL[e + 4] - y) > 2) continue;
+          const c = U.closestOnSeg(x, z, RL[e], RL[e + 1], RL[e + 2], RL[e + 3]);
+          const dx = x - c[0], dz = z - c[1], d2 = dx * dx + dz * dz;
+          if (d2 < r * r) {
+            const d = Math.sqrt(d2) || 1e-4, nx = dx / d, nz = dz / d;
+            x += nx * (r - d); z += nz * (r - d);
+            out.nx += nx; out.nz += nz; out.hit = true; moved = true;
+          }
+        }
+      }
       const E = t.edges, list = t.edgeGrid.query(x, z, r + 1, this.world._tmp);
       for (let n = 0; n < list.length; n++) {
         const e = list[n];
