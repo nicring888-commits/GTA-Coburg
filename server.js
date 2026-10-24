@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
 });
 mp.attach(server);
 server.listen(PORT, HOST, () => {
-  console.log(`Grand Theft Coburg läuft auf http://127.0.0.1:${PORT} (Mehrspieler: ws://…:${PORT}/mp)`);
+  console.log(`GTA Coburg läuft auf http://127.0.0.1:${PORT} (Mehrspieler: ws://…:${PORT}/mp)`);
   if (HOST === '0.0.0.0') {
     for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) {
       if (a.family === 'IPv4' && !a.internal) console.log(`  im Heimnetz: http://${a.address}:${PORT}`);

@@ -1,4 +1,4 @@
-# Grand Theft Coburg
+# GTA Coburg
 
 Ein Open-World-Spiel im Browser in der echten Coburger Innenstadt: Autos klauen, Straßenrennen fahren und die
 Polizei abhängen. Straßen, Gelände, Luftbilder und 3D-Gebäude stammen aus offenen Geodaten. Du startest am Bahnhof.

@@ -1,4 +1,4 @@
-// Kern des Mehrspieler-Servers von Grand Theft Coburg: Lobbys, Spieler, Autos, Sitzplätze, Uhrzeit und Wetter.
+// Kern des Mehrspieler-Servers von GTA Coburg: Lobbys, Spieler, Autos, Sitzplätze, Uhrzeit und Wetter.
 // Läuft im Node-Server (mp/game-server.js, über WebSocket) und beim Peer-to-Peer-Gastgeber im Browser
 // (js/mp-host-worker.js, über WebRTC). Jedes Spiel rechnet seine eigene Figur bzw. sein Auto (flüssige Steuerung) und
 // schickt den Zustand; der Kern prüft ihn (Tempo, Kartenrand, Sitzplätze, Besitz, Raten) und verteilt Momentaufnahmen

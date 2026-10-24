@@ -1,9 +1,9 @@
-# Grand Theft Coburg (Coburg Open World) – Projektdokumentation
+# GTA Coburg (Coburg Open World) – Projektdokumentation
 
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.1.0 „Grand Theft Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.1.1 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -16,7 +16,7 @@ Luftbilder** der Bayerischen Vermessungsverwaltung auf dem Boden und auf allen D
 als **amtliche 3D-Gebäudemodelle (LoD2)** in der Stadt: mit echten Höhen und echten Dachformen, von der Altstadt über
 Schloss Ehrenburg bis zur Veste.
 
-**Seit v1.0.0 ist es „Grand Theft Coburg“** (bis v1.0.1 hieß es „GTA Coburg“): das Spielprinzip von Vice City io auf der Coburger Karte: **Autos** klauen
+**Seit v1.0.0 ist es ein GTA-artiges Spiel**, seit v3.1.1 heißt es wieder **„GTA Coburg“** (v1.0.1–v3.1.0 „Grand Theft Coburg“): das Spielprinzip von Vice City io auf der Coburger Karte: **Autos** klauen
 und verkaufen, **Straßenrennen** gegen KI-Fahrer um Preisgeld und die **Polizei**, die mit Sternen fahndet, verfolgt,
 rammt, Straßensperren baut und festnimmt. Man startet am **Bahnhof** (Vorplatz an der Lossaustraße), ein Auto steht bereit.
 
@@ -244,6 +244,9 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.1.1 (24.10.2026): Spielname wieder **„GTA Coburg“** (Fenstertitel, Logo auf Lade-, Start- und Lobby-Bildschirm,
+  Willkommensmeldung, README, Serverausgabe, `package.json`).
 
 - ✅ v3.1.0 (24.10.2026): **Online auch auf Vercel.** Auf `gta-coburg.vercel.app` kam „Keine Verbindung zum Server“,
   weil Vercel keine dauerhaften WebSocket-Verbindungen kann. Jetzt automatisch Peer-to-Peer (siehe 2), lokal bzw.

@@ -91,7 +91,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 14px; }
 #landmarks button:hover { border-color: var(--accent); background: rgba(233,185,73,0.12); }
 
-/* Grand Theft Coburg */
+/* GTA Coburg */
 .logo { font-family: Impact, "Arial Black", "Segoe UI", sans-serif; font-weight: 400; letter-spacing: 1px; font-size: clamp(34px, 7vw, 64px); line-height: 1.05;
   text-shadow: 0 4px 0 #000, 0 0 30px rgba(233,185,73,0.35); }
 .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0 0 16px; text-align: left; }
