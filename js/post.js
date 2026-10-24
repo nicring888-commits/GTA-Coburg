@@ -31,8 +31,10 @@ class PostFX {
   constructor(renderer) {
     this.renderer = renderer;
     this.gl2 = renderer.capabilities.isWebGL2;
-    let q = 'hoch';
-    try { const s = localStorage.getItem('gta-coburg-quality'); if (POST_QUALITY[s]) q = s; } catch (e) { /* Standard */ }
+    // Smartphones (js/boot.js) starten niedriger; in der leichten Grafik bleibt es dabei, auch nach Taste O
+    const Q = window.QUALITY || {};
+    let q = Q.post || 'hoch';
+    if (!Q.postForce) try { const s = localStorage.getItem('gta-coburg-quality'); if (POST_QUALITY[s]) q = s; } catch (e) { /* Standard */ }
     this.level = q;
     this.scale = 1;            // dynamische Auflösung (Anteil der vollen Auflösung)
     this.ft = 16.7;            // geglättete Bildzeit (ms)
@@ -66,7 +68,7 @@ class PostFX {
 
   apply() {
     const r = this.renderer;
-    r.setPixelRatio(Math.min(devicePixelRatio || 1, this.q.ratio));
+    r.setPixelRatio(Math.min(devicePixelRatio || 1, this.q.ratio, (window.QUALITY && window.QUALITY.pixelRatio) || Infinity));
     r.setSize(innerWidth, innerHeight);
     // ohne Nachbearbeitung macht der Renderer Tonwertkurve und Farbraum selbst
     r.toneMapping = this.enabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;

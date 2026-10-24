@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.1.1 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.1.2 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -33,7 +33,12 @@ Der Nullpunkt der Welt ist der Marktplatz.
 - Notfalls geht auch ein direkter Doppelklick auf `index.html`. Dann fehlen aber die Luftbilder, weil der Browser
   Bilddateien von der Festplatte nicht als Textur erlaubt. Das Spiel nimmt dann die gemalte Bodentextur.
 
-Für three.js (r160, über das CDN jsDelivr) wird eine Internetverbindung gebraucht.
+Für three.js (r160, über das CDN jsDelivr, ersatzweise unpkg) wird eine Internetverbindung gebraucht.
+
+**Grafikstufen (seit v3.1.2):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
+Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder auf dem Startbildschirm; die Wahl bleibt gespeichert
+(`localStorage` `gta-coburg-grafik`). Bricht ein Start beim Aufbau ab (Safari lädt die Seite nach zu viel Speicher neu),
+startet das Spiel beim nächsten Mal automatisch eine Stufe leichter und sagt das auf dem Ladebildschirm.
 
 **Online spielen (seit v3.0.0):** Der Server (`server.js`) betreibt neben dem Spiel den Mehrspieler-Server
 (WebSocket unter `/mp`, ohne Fremdpakete). Auf dem Startbildschirm „🌐 Online spielen“ → Name, Lobby wählen,
@@ -128,6 +133,7 @@ und müssen dort bleiben.
 | Datei | Aufgabe |
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
+| `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
 | `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
@@ -244,6 +250,39 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.1.2 (24.10.2026): **Endloser Ladebildschirm auf dem iPhone behoben.**
+  - Ursache: Das Spiel brauchte beim Start mehr Speicher, als Safari auf dem iPhone einem Tab erlaubt. Gemessen
+    (Chromium, iPhone-13-Emulation): ≈ 480 MB JS-Spitze beim Aufbau, ≈ 260 MB JS bleibend (davon ≈ 42 MB nur
+    behaltener Quelltext der 20 MB Datenskripte) und ≈ 360 MB Grafikspeicher (4096er-Schattenkarte, Antialiasing,
+    24 Luftbilder, Umland bis 2 km). iOS beendet den Tab dann; Safari lädt die Seite neu, der Aufbau beginnt von vorn
+    und stürzt wieder ab: Für den Spieler steht der Ladebildschirm endlos. Dazu kamen Fehler, die den Ladetext für immer
+    stehen ließen statt eine Meldung zu zeigen: `new THREE.WebGLRenderer` ohne WebGL (z. B. Blockierungsmodus) warf
+    ungefangen, ein fehlendes Spielskript ebenso, und `ctx.roundRect` fehlt in Safari vor iOS 16 (Abbruch bei „Straßen bauen“).
+  - Neuer Startlader `js/boot.js` (siehe 5, lädt auch PeerJS optional, `mp/`, `data/region-rural.js`): Fortschritt schon beim Herunterladen, Daten per `JSON.parse` statt als
+    Riesenskript (weniger Speicher, kein behaltener Quelltext), Zeitlimits (Hinweis nach 45 s ohne Fortschritt, Abbruch
+    mit Meldung nach 90 s je Datei bzw. 150 s gesamt; Luftbilder der Innenstadt 40 s, sonst gemalter Boden), verständliche
+    Meldungen bei fehlendem three.js, fehlenden oder beschädigten Daten, fehlendem WebGL und verlorenem Grafikkontext,
+    jeweils mit „Neu laden“ und „Leichte Grafik laden“.
+  - Grafikstufe `mobil`: Pixelverhältnis höchstens 1,25, kein Antialiasing, Schattenkarte 1024, Umland bis 1,2 km
+    (Bäume 700 m), Nebel ab spätestens 1,5 km, keine scharfen HD-Luftbilder; feste Geometrie und Luftbilder werden nach dem
+    Hochladen auf die Grafikkarte aus dem Arbeitsspeicher entfernt. `leicht`: zusätzlich ohne LoD2-Häuser (OSM-Häuser),
+    Umland bis 800 m. Die Nachbearbeitung (`js/post.js`, Taste `O`) startet auf Smartphones mit `Niedrig`, in `leicht`
+    bleibt sie dort; das Pixelverhältnis wird zusätzlich begrenzt. Luftbilder des Umlands bleiben im Speicher, weil
+    `js/landscape.js` sie für Bewuchs und Gehölze ausliest. Gemessen (vor dem Zusammenführen mit v3.1.1): Grafikspeicher voll 357 MB, mobil 160 MB, leicht 146 MB; JS bleibend 269/226/166 MB.
+  - Desktop (`voll`) unverändert, auch der Start per Doppelklick auf `index.html`.
+  - Getestet (Chromium, iPhone-Emulation und Desktop): Laden, Fahren, Schnellreise ins Umland ohne Fehler; Fehlerfälle
+    three.js gesperrt, `data/region.js` fehlt (Spiel läuft ohne Umland), `js/world.js` fehlt, `data/coburg.js` beschädigt,
+    kein WebGL, hängende Datei (Hinweis nach 46 s, Meldung nach 90 s), abgestürzter Start (nächster Start `leicht`).
+  - ⚠️ Nicht auf einem echten iPhone getestet; die Speichergrenze von Safari hängt vom Modell ab. Reicht `mobil` auf einem
+    älteren Gerät nicht, schaltet der Absturzschutz beim nächsten Start auf `leicht`.
+- ✅ v3.1.2: **Neue Fahrphysik zum Driften** (Branch-Stand vom 22.10.2026, mit v3.1.2 übernommen).
+  - Das Auto hat jetzt eine eigene Gierrate mit Trägheit und eine Haftgrenze der Reifen (`Vehicle.update`):
+    Normales Fahren haftet, zu schnell in die Kurve schiebt das Heck leicht. Vollgas in der Kurve hält einen Drift von
+    ≈ 30°, die Handbremse (`Leertaste`) lässt das Heck kommen, Gegenlenken fängt das Auto ab, ohne Gas ziehen die
+    Reifen es von selbst gerade. Rutschen kostet Tempo. KI-Autos (Polizei, Rennfahrer) fahren wie bisher
+  - Bremsspuren auf der Fahrbahn (Ringpuffer mit 900 Stücken, `FX.skid`), Reifenqualm und Reifenquietschen beim
+    Rutschen, Handbremsen und harten Bremsen; nach einem Drift über 1,4 s zeigt eine Meldung Strecke und Dauer
 
 - ✅ v3.1.1 (24.10.2026): Spielname wieder **„GTA Coburg“** (Fenstertitel, Logo auf Lade-, Start- und Lobby-Bildschirm,
   Willkommensmeldung, README, Serverausgabe, `package.json`).

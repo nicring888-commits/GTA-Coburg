@@ -2,6 +2,8 @@
 // (Rennstart, Checkpoints, Lackiererei, Autohändler).
 'use strict';
 
+const SKID = { max: 900, hw: 0.11 };
+
 class FX {
   constructor(scene) {
     this.scene = scene;
@@ -15,6 +17,35 @@ class FX {
     this.flashLight = new THREE.PointLight('#ffb35c', 0, 60, 1.6);
     scene.add(this.flashLight);
     this.flashT = 0;
+    // Bremsspuren: Ringpuffer aus Vierecken (die ältesten werden überschrieben)
+    const N = SKID.max;
+    this.skidPos = new Float32Array(N * 18);
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(this.skidPos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.skidMesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: '#141414', transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+    this.skidMesh.frustumCulled = false; this.skidMesh.renderOrder = 1;
+    scene.add(this.skidMesh);
+    this.skidI = 0;
+    this.skidLast = [null, null];
+  }
+
+  // Spur des Rads w (0/1) bis (x, y, z) weiterziehen; null beendet die Spur
+  skid(w, x, y, z) {
+    if (x === null) { this.skidLast[w] = null; return; }
+    const L = this.skidLast[w];
+    if (!L) { this.skidLast[w] = [x, y, z]; return; }
+    const dx = x - L[0], dz = z - L[2], l = Math.hypot(dx, dz);
+    if (l < 0.35) return;
+    if (l > 6) { this.skidLast[w] = [x, y, z]; return; }
+    const nx = -dz / l * SKID.hw, nz = dx / l * SKID.hw, P = this.skidPos, o = this.skidI * 18;
+    const v = [L[0] + nx, L[1], L[2] + nz, L[0] - nx, L[1], L[2] - nz, x - nx, y, z - nz,
+      L[0] + nx, L[1], L[2] + nz, x - nx, y, z - nz, x + nx, y, z + nz];
+    for (let k = 0; k < 18; k++) P[o + k] = v[k];
+    this.skidI = (this.skidI + 1) % SKID.max;
+    const attr = this.skidMesh.geometry.attributes.position;
+    attr.needsUpdate = true;
+    this.skidLast[w] = [x, y, z];
   }
 
   particle(x, y, z, o) {

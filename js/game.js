@@ -4,17 +4,37 @@
 
 (function () {
   const $ = id => document.getElementById(id);
-  if (!window.THREE) { $('load-text').textContent = 'three.js konnte nicht geladen werden. Bitte Internetverbindung prüfen.'; return; }
-  if (!window.COBURG) { $('load-text').textContent = 'Kartendaten fehlen (data/coburg.js). Bitte tools/convert.js ausführen.'; return; }
+  // Lader aus js/boot.js (Fortschritt, Fehlermeldung); ohne ihn nur den Ladetext setzen
+  const boot = window.Boot || { progress: (t, f) => { $('load-text').textContent = t; $('load-bar').style.width = Math.round(f * 100) + '%'; },
+    fail: (t, d) => { $('load-text').textContent = t + (d ? ' ' + d : ''); }, done() {} };
+  const Q = window.QUALITY || { antialias: true, shadow: 0, ensure: 1400 };
+  if (!window.THREE) { boot.fail('three.js konnte nicht geladen werden.', 'Bitte Internetverbindung prüfen.'); return; }
+  if (!window.COBURG) { boot.fail('Kartendaten fehlen (data/coburg.js).', 'Bitte tools/convert.js ausführen.'); return; }
 
   // ---------- Renderer und Szene ----------
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: Q.antialias !== false, powerPreference: Q.phone ? 'default' : 'high-performance' });
+  } catch (e) {
+    boot.fail('3D-Grafik (WebGL) ist auf diesem Gerät nicht verfügbar.',
+      'Auf dem iPhone: Blockierungsmodus für diese Seite ausschalten (Safari: aA → Website-Einstellungen) oder andere Tabs schließen und neu laden.');
+    return;
+  }
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // Nachbearbeitung (js/post.js): HDR mit MSAA, Umgebungsverdeckung, Luftperspektive, Bloom, filmische Tonwertkurve
   // und Farbkorrektur; setzt Auflösung und Tonwertkurve je Qualitätsstufe (Taste O)
   const post = new PostFX(renderer);
   $('app').appendChild(renderer.domElement);
+  // Grafikspeicher voll (häufig auf dem iPhone): verständlich melden statt schwarzes Bild
+  renderer.domElement.addEventListener('webglcontextlost', e => {
+    e.preventDefault();
+    const msg = 'Die 3D-Grafik wurde vom Gerät beendet (zu wenig Grafikspeicher).';
+    if (!boot.finished) { boot.fail(msg, 'Bitte die leichte Grafik laden.'); return; }
+    $('loading').classList.remove('hidden'); $('loading').classList.add('error');
+    $('load-text').textContent = msg; $('load-detail').textContent = 'Neu laden oder die leichte Grafik wählen.';
+    $('load-actions').classList.remove('hidden');
+  });
 
   const scene = new THREE.Scene();
   const BASE_FOV = 65;
@@ -28,7 +48,7 @@
   const SUN_DIR = new THREE.Vector3(0.15, 1.3, 0.95).normalize();
   sun.castShadow = true;
   // große Schattenkarte, wenn die Grafikkarte sie kann (schärfere Schatten bei gleicher Reichweite)
-  const MAX_SHADOW = renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048;
+  const MAX_SHADOW = Math.min(renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048, Q.shadow || Infinity);
   let SC = 110;
   sun.shadow.bias = -0.0005;
   const setShadow = q => {
@@ -37,10 +57,11 @@
       sun.shadow.mapSize.set(px, px);
       if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     }
-    SC = px > 2048 ? 135 : 110;
+    // Smartphones: kleinere Schattenkarte (Q.shadow) über kürzere Reichweite
+    SC = px > 2048 ? 135 : px < 2048 ? 85 : 110;
     Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 1, far: 700 });
     sun.shadow.camera.updateProjectionMatrix();
-    sun.shadow.normalBias = px > 2048 ? 0.4 : 0.6;
+    sun.shadow.normalBias = px > 2048 ? 0.4 : px < 2048 ? 0.8 : 0.6;
   };
   post.onChange = setShadow;
   setShadow(post.q);
@@ -76,7 +97,7 @@
   let camMode = 0;         // 0 Verfolger, 1 Motorhaube
   let over = null;         // Verhaftet/Erledigt-Sequenz
 
-  const progress = (text, f) => { $('load-text').textContent = text; $('load-bar').style.width = Math.round(f * 100) + '%'; };
+  const progress = (text, f) => boot.progress(text, f);
   world.build(progress).then(() => {
     progress('Polizei und Rennstrecken …', 0.98);
     $('attr-ortho').classList.toggle('hidden', !world.ortho);
@@ -115,7 +136,7 @@
       // Laternen, Ladenschilder und Lokale in den Orten nutzen dieselben Bausteine wie die Innenstadt
       world.region.props = props; world.region.property = property;
       progress('Landkreis um den Bahnhof aufbauen …', 0.995);
-      world.region.ensure(spawn.x, spawn.z, 1400);
+      world.region.ensure(spawn.x, spawn.z, Q.ensure);
       // Übersichtskarte des Landkreises nebenbei malen
       setTimeout(() => world.region.paintMap((canvas, scale) => { world.regionMap = { canvas, scale }; }), 1500);
     }
@@ -134,6 +155,7 @@
       net.sys(`Willkommen, ${w.name}! T = Chat, Tab = Spielerliste und Einladungslink`);
     });
     progress('Fertig', 1);
+    boot.done();
     $('loading').classList.add('hidden');
     $('start').classList.remove('hidden');
     lobby.ready();
@@ -141,7 +163,7 @@
     requestAnimationFrame(loop);
   }).catch(err => {
     console.error(err);
-    progress('Fehler beim Aufbau: ' + err.message, 1);
+    boot.fail('Fehler beim Aufbau der Welt.', err && err.message);
   });
 
   const drivable = s => s.k === 'road' && !/motorway|trunk/.test(s.h || '');
@@ -253,6 +275,28 @@
   };
   $('help-close').onclick = () => { $('help').classList.add('hidden'); };
 
+  // ---------- Reifen: Bremsspuren, Qualm, Quietschen, Drift-Anzeige ----------
+  let driftT = 0, driftM = 0;
+  function tireMarks(c, input, dt) {
+    const sp = Math.hypot(c.vx, c.vz), slip = Math.abs(c.slip || 0);
+    const braking = input.throttle < 0 && c.speed > 14;
+    const level = c.wrecked ? 0 : U.clamp(Math.max((slip - 0.14) * 2.5, input.handbrake && sp > 4 ? 0.7 : 0, braking ? 0.45 : 0), 0, 1) * Math.min(1, sp / 8);
+    audio.squeal(level * 0.6);
+    const fx0 = Math.sin(c.heading), fz0 = Math.cos(c.heading), rx = -fz0, rz = fx0;
+    for (const w of [0, 1]) {
+      if (level < 0.25) { fx.skid(w, null); continue; }
+      const sd = w ? 1 : -1, x = c.x + rx * WHEEL_X * sd - fx0 * WHEEL_Z, z = c.z + rz * WHEEL_X * sd - fz0 * WHEEL_Z;
+      fx.skid(w, x, c.y + 0.13, z);   // knapp über Fahrbahn und Markierungen
+      if (Math.random() < level * dt * 14) fx.smoke(x, c.y + 0.3, z, 0.05);
+    }
+    // Drift: Zeit und Strecke mitzählen, bei langen Drifts kurz anzeigen
+    if (slip > 0.3 && sp > 8 && !input.handbrake) { driftT += dt; driftM += sp * dt; }
+    else if (slip < 0.15) {
+      if (driftT > 1.4) ui.toast(`Drift! ${Math.round(driftM)} m · ${driftT.toFixed(1).replace('.', ',')} s`, 1.6);
+      driftT = 0; driftM = 0;
+    }
+  }
+
   // ---------- Ton ----------
   const audio = {
     ctx: null,
@@ -288,6 +332,13 @@
         const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.8;
         this.crowdGain = c.createGain(); this.crowdGain.gain.value = 0;
         src.connect(bp); bp.connect(this.crowdGain); this.crowdGain.connect(this.master); src.start();
+        // Reifenquietschen: Rauschen durch einen schmalen Bandpass
+        const sq = c.createBuffer(1, c.sampleRate, c.sampleRate), sd = sq.getChannelData(0);
+        for (let i = 0; i < sd.length; i++) sd[i] = Math.random() * 2 - 1;
+        const ss = c.createBufferSource(); ss.buffer = sq; ss.loop = true;
+        this.squealBp = c.createBiquadFilter(); this.squealBp.type = 'bandpass'; this.squealBp.frequency.value = 1700; this.squealBp.Q.value = 9;
+        this.squealGain = c.createGain(); this.squealGain.gain.value = 0;
+        ss.connect(this.squealBp); this.squealBp.connect(this.squealGain); this.squealGain.connect(this.master); ss.start();
       } catch (e) { this.ctx = null; }
     },
     engine(on, speed, throttle) {
@@ -300,6 +351,13 @@
       this.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
       this.filter.frequency.setTargetAtTime(350 + Math.abs(throttle) * 900 + rpm * 400, t, 0.08);
       this.engGain.gain.setTargetAtTime(on ? 0.11 + Math.abs(throttle) * 0.12 : 0, t, 0.1);
+      if (!on) this.squeal(0);
+    },
+    squeal(v) {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      this.squealGain.gain.setTargetAtTime(v * 0.5, t, 0.06);
+      this.squealBp.frequency.setTargetAtTime(1500 + v * 500, t, 0.1);
     },
     horn(on) { if (this.ctx) this.hornGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, 0.02); },
     siren(vol) {
@@ -913,6 +971,7 @@
       car.sync();
       if (car.lastImpact > 3) audio.thump(car.lastImpact);
       audio.engine(true, car.speed, input.throttle);
+      tireMarks(car, input, dt);
       audio.horn(!!keys.KeyH);
       if (pressed.KeyH) peds.panic(car.x + Math.sin(car.heading) * 7, car.z + Math.cos(car.heading) * 7, 8, 0.5); // Hupe: aus dem Weg!
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }

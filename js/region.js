@@ -17,6 +17,8 @@ const REGION = {
   lifeDrop: 950,
   townBuildings: 12,  // ab so vielen Häusern gilt eine Kachel als Ort
 };
+// Smartphones (js/boot.js): kleinerer Umkreis, damit der Speicher reicht
+if (window.QUALITY && window.QUALITY.region) Object.assign(REGION, window.QUALITY.region);
 // Brücken über Straßen: Fahrbahn so hoch über der unteren Straße (m), Rampen höchstens so steil
 const BRIDGE = { lift: 6.2, slope: 0.07, step: 4 };
 // große Straßen (Bundesstraßen, Autobahn): Randlinien, Mittelstreifen, Leitplanken. Eine Mittelleitplanke gibt es nur
