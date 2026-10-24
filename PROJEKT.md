@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.1.3 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.2.0 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -251,6 +251,15 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- ✅ v3.2.0 (24.10.2026): **Fahrphysik im Arcade-Stil: kein Wegrutschen mehr.** Bisher brach das Heck schon bei
+  Vollgas in der Kurve aus (Power-Slide) und die Reifen griffen danach nur langsam wieder. Jetzt (`Vehicle.update`):
+  Die Reifen haften normal immer (Querhaftung 3,6 × `grip` statt 2,3 ×, Querbewegung wird doppelt so schnell abgebaut),
+  kein Power-Slide mehr, Rutschen gibt es nur noch mit der Handbremse (`Leertaste`); danach greifen die Reifen zügig
+  wieder. Lenkung direkter (schnellerer Einschlag), bei hohem Tempo etwas weniger Einschlag, damit das Auto auf
+  schnellen Straßen ruhig bleibt. KI-Autos fahren unverändert. Gemessen (Pkw, ohne Hindernisse, vorher → nachher):
+  Vollgas-Kurve bei 90 km/h mit voller Lenkung max. 41° → 5° quer, Rutschzeit 2,2 s → 0 s; Slalom 4,1 s → 0 s Rutschen;
+  nach dem Driften wieder gerade 0,65 s → 0,13 s; Handbremsen-Drift weiter bis ≈ 80° (gerade nach 0,5 s statt 0,9 s);
+  Drehrate bei 54 km/h 65 → 81 °/s, bei 144 km/h mit leichter Lenkung unverändert ≈ 33 °/s.
 - ✅ v3.1.3 (24.10.2026): **Startmenü auf dem Handy scrollbar.** `js/touch.js` hat jedes Wischen auf der Seite
   verhindert (gegen Gummiband-Scrollen und Zoomen im Spiel), deshalb ließ sich das Startfenster nicht scrollen und
   „Allein spielen“ lag unerreichbar unterhalb des Bildschirms. Jetzt dürfen Fenster mit scrollbarem Inhalt (Startmenü,

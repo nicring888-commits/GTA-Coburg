@@ -1,4 +1,4 @@
-// Autos: Modelle (Pkw, Kleinwagen, Kombi, Geländewagen, Kleinbus, Pick-up, Cabrio, Sportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik mit Driften,
+// Autos: Modelle (Pkw, Kleinwagen, Kombi, Geländewagen, Kleinbus, Pick-up, Cabrio, Sportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik (haftet, Driften mit Handbremse),
 // Schaden bis zum Ausbrennen.
 'use strict';
 
@@ -376,45 +376,43 @@ class Vehicle {
     vf += a * dt;
     if (thr === 0 && Math.sign(vf) !== Math.sign(before) && Math.abs(this.pitch) < 0.05) vf = 0;
 
-    const maxSteer = 0.62 / (1 + Math.abs(vf) * 0.055);
-    this.steer = U.damp(this.steer, input.steer * maxSteer, 9, dt);
-    // Drehung mit Trägheit: Haften die Reifen, folgt die Gierrate fast sofort dem Lenkeinschlag. Rutscht das Auto
-    // (Driften), dreht es mit Schwung weiter; Gegenlenken fängt es ab, die Reifen ziehen es langsam gerade.
+    // Arcade-Lenkung: schnell und direkt, bei hohem Tempo etwas weniger Einschlag (ruhiger geradeaus)
+    const maxSteer = 0.62 / (1 + Math.abs(vf) * 0.085);
+    this.steer = U.damp(this.steer, input.steer * maxSteer, 12, dt);
+    // Arcade-Fahrphysik: Die Reifen haften (das Auto fährt, wohin man lenkt), gerutscht wird nur mit der Handbremse.
+    // Im Drift dreht das Auto mit Schwung weiter; nach dem Loslassen ziehen die Reifen es schnell wieder gerade.
     const speed = Math.hypot(vf, vl), slip = Math.atan2(vl, Math.abs(vf) + 1);
     const hbOn = hb && Math.abs(vf) > 4;
     const yawK = vf * Math.tan(this.steer) / CAR.wheelBase;
     if (this.isPlayer) {
-      if (hbOn || (Math.abs(slip) > 0.16 && speed > 7)) this.sliding = Math.min(0.6, (this.sliding || 0) + dt * 3);
-      else this.sliding = Math.max(0, (this.sliding || 0) - dt * (Math.abs(slip) < 0.08 ? 2.5 : 0.8));
+      if (hbOn) this.sliding = Math.min(0.6, (this.sliding || 0) + dt * 3);
+      else this.sliding = Math.max(0, (this.sliding || 0) - dt * (Math.abs(slip) < 0.1 ? 4 : 1.6));
     } else this.sliding = 0;
     const sl = this.sliding / 0.6;                         // 0 = Haften, 1 = Rutschen
-    // Haftgrenze der Reifen quer (m/s²); KI-Autos haften wie bisher
-    const latGrip = this.isPlayer ? S.grip * 2.3 : 1e9;
-    // Haften: nicht schneller drehen, als die Reifen tragen (etwas mehr mit Vollgas: das Heck kommt leicht)
-    const powerSlide = thr > 0.5 && speed > 9 && Math.abs(input.steer) > 0.5;
-    const yawCap = latGrip * (powerSlide ? 1.3 : 1.08) / Math.max(speed, 1);
+    // Haftgrenze der Reifen quer (m/s²): großzügig wie im Arcade-Spiel; KI-Autos haften wie bisher
+    const latGrip = this.isPlayer ? S.grip * 3.6 : 1e9;
+    // nicht schneller drehen, als die Reifen tragen (so schiebt das Auto bei Vollgas in engen Kurven leicht, statt auszubrechen)
+    const yawCap = latGrip / Math.max(speed, 1);
     let target = U.clamp(yawK, -yawCap, yawCap);
     if (sl > 0) {
-      // in Fahrtrichtung zurückdrehen (weniger mit Gas, kaum mit Handbremse); ab ≈ 55° stärker, damit das Auto
-      // sich nicht von selbst dreht
+      // in Fahrtrichtung zurückdrehen (kaum mit Handbremse); ab ≈ 55° stärker, damit das Auto sich nicht von selbst dreht
       const hv = Math.atan2(this.vx, this.vz), back = U.wrapAngle(hv - this.heading);
       const spin = Math.max(0, Math.abs(slip) - 0.95) * 2.5;
-      const align = back * (vf >= 0 ? 1 : 0) * (2.8 * (1 - 0.5 * Math.max(0, thr)) * (hbOn ? 0.2 : 1) + (hbOn ? 0 : spin));
-      target = U.lerp(target, yawK * (hbOn ? 1.4 : 0.6), sl) + U.clamp(align, -1.6, 1.6) * sl;
+      const align = back * (vf >= 0 ? 1 : 0) * (3.6 * (hbOn ? 0.2 : 1) + (hbOn ? 0 : spin));
+      target = U.lerp(target, yawK * (hbOn ? 1.4 : 0.8), sl) + U.clamp(align, -2, 2) * sl;
       // Handbremse: das Heck kommt
-      if (hbOn) target += Math.sign(this.steer || this.yawRate || 0) * Math.min(1, speed / 14) * 0.6;
+      if (hbOn) target += Math.sign(this.steer || this.yawRate || 0) * Math.min(1, speed / 14) * 0.55;
     }
     this.yawRate = this.yawRate || 0;
-    this.yawRate += (target - this.yawRate) * (1 - Math.exp(-U.lerp(16, 3.2, sl) * dt));
+    this.yawRate += (target - this.yawRate) * (1 - Math.exp(-U.lerp(20, 3.2, sl) * dt));
     this.heading += this.yawRate * dt;
 
-    // Seitenführung bis zur Haftgrenze: darüber rutscht das Auto. Im Rutschen und mit der Handbremse haften die
-    // Reifen weniger, Vollgas hält den Drift.
+    // Seitenführung: ohne Handbremse wird die Querbewegung fast sofort abgebaut (kein Wegschmieren); mit Handbremse
+    // haften die Reifen wenig, danach greifen sie zügig wieder.
     let latMax = latGrip;
     if (hbOn && this.isPlayer) latMax = CAR.driftGrip * 2.4;
-    else if (sl > 0) latMax *= 0.55 - 0.15 * Math.max(0, thr);
-    else if (powerSlide) latMax *= 0.85;
-    const rate = hbOn ? CAR.driftGrip : S.grip;
+    else if (sl > 0) latMax *= 0.75;
+    const rate = hbOn ? CAR.driftGrip : S.grip * (this.isPlayer ? 2 : 1);
     const dv = Math.min(Math.abs(vl) * (1 - Math.exp(-rate * dt)), latMax * dt);
     vl -= Math.sign(vl) * dv;
     // Rutschen kostet Tempo
