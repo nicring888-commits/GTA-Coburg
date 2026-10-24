@@ -127,8 +127,15 @@
   });
   const lookEnd = e => { look.delete(e.pointerId); pinch = null; };
   canvasArea.addEventListener('pointerup', lookEnd); canvasArea.addEventListener('pointercancel', lookEnd);
-  // Scrollen/Zoomen der Seite verhindern
-  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  // Scrollen/Zoomen der Seite verhindern, aber Fenster mit Inhalt zum Scrollen (Startmenü, Hilfe, Lobby, Menüs) wischen lassen
+  const scrollsY = el => {
+    for (; el && el !== document.body; el = el.parentElement) {
+      const o = getComputedStyle(el).overflowY;
+      if ((o === 'auto' || o === 'scroll') && el.scrollHeight > el.clientHeight + 1) return true;
+    }
+    return false;
+  };
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1 || !scrollsY(e.target)) e.preventDefault(); }, { passive: false });
   document.addEventListener('gesturestart', e => e.preventDefault());
 
   // ---------- Sichtbarkeit / Modus ----------

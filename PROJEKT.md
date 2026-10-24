@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.1.2 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.1.3 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -251,6 +251,13 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- ✅ v3.1.3 (24.10.2026): **Startmenü auf dem Handy scrollbar.** `js/touch.js` hat jedes Wischen auf der Seite
+  verhindert (gegen Gummiband-Scrollen und Zoomen im Spiel), deshalb ließ sich das Startfenster nicht scrollen und
+  „Allein spielen“ lag unerreichbar unterhalb des Bildschirms. Jetzt dürfen Fenster mit scrollbarem Inhalt (Startmenü,
+  Hilfe, Lobby, Menüs, Schnellreise-Liste) gewischt werden, im Spielbild bleibt alles gesperrt; zwei Finger werden
+  weiter abgefangen. Auf Touch-Geräten stehen die Knöpfe „Allein spielen“/„Online spielen“ fest am unteren Rand des
+  Startfensters. Getestet (Chromium, iPhone SE und 13, Wischen per Touch-Ereignissen): vorher kein Scrollen und Knopf
+  bei y = 1087 von 568 px, jetzt scrollt das Fenster und der Knopf ist sofort sichtbar und antippbar.
 - ✅ v3.1.2 (24.10.2026): **Endloser Ladebildschirm auf dem iPhone behoben.**
   - Ursache: Das Spiel brauchte beim Start mehr Speicher, als Safari auf dem iPhone einem Tab erlaubt. Gemessen
     (Chromium, iPhone-13-Emulation): ≈ 480 MB JS-Spitze beim Aufbau, ≈ 260 MB JS bleibend (davon ≈ 42 MB nur
