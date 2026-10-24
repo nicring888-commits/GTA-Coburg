@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Grand Theft Coburg</title>
+<title>GTA Coburg</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
 <!-- Ladebildschirm -->
 <div id="loading">
   <div class="load-box">
-    <h1 class="logo">Grand Theft <span>Coburg</span></h1>
+    <h1 class="logo">GTA <span>Coburg</span></h1>
     <p id="load-text">Lade Kartendaten …</p>
     <div class="bar"><div id="load-bar"></div></div>
     <p id="load-detail"></p>
@@ -29,7 +29,7 @@
 <!-- Startbildschirm -->
 <div id="start" class="hidden">
   <div class="start-box">
-    <h1 class="logo">Grand Theft <span>Coburg</span></h1>
+    <h1 class="logo">GTA <span>Coburg</span></h1>
     <p class="sub">Die echte Coburger Innenstadt und der ganze Landkreis drumherum. Du kommst am Bahnhof an: Schnapp dir
       ein Auto, fahr Straßenrennen bis nach Rödental, Neustadt oder Bad Rodach und häng die Polizei ab.</p>
     <div class="features">
@@ -52,12 +52,47 @@
       <div><h3>Allgemein</h3>
         <p><kbd>E</kbd> einsteigen, Auto klauen, aussteigen</p>
         <p><kbd>F</kbd> Rennen · Wohnung · Autohaus · verkaufen</p>
-        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht · <kbd>F1</kbd> Hilfe</p>
+        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>F1</kbd> Hilfe</p>
+        <p><kbd>N</kbd> Zeitraffer Tag/Nacht · <kbd>K</kbd> Wetter · <kbd>O</kbd> Grafikqualität</p>
+        <p>Online: <kbd>T</kbd> Chat · <kbd>Tab</kbd> Spielerliste · <kbd>E</kbd> mitfahren</p>
       </div>
     </div>
-    <button id="start-btn">Los geht's</button>
+    <div class="start-btns">
+      <button id="start-btn">Allein spielen</button>
+      <button id="mp-btn">🌐 Online spielen</button>
+    </div>
     <p class="hint">Klick ins Bild fängt die Maus ein, <kbd>Esc</kbd> gibt sie wieder frei.</p>
     <p class="hint hidden" id="grafik-line"></p>
+  </div>
+</div>
+
+<!-- Lobby (Mehrspieler) -->
+<div id="lobby" class="hidden">
+  <div class="start-box lobby-box">
+    <h1 class="logo">GTA <span>Coburg</span> <small>Online</small></h1>
+    <p class="sub">Bis zu 16 Spieler in derselben Stadt: zusammen fahren, mitfahren, Rennen um die Wette, Polizei abhängen.
+      Geld, Wohnungen und Garage bleiben dein eigener Spielstand.</p>
+    <label class="lb-name">Dein Name <input id="lobby-name" maxlength="16" placeholder="z. B. Coburger Jung" autocomplete="nickname"></label>
+    <div class="lobby-cols">
+      <div>
+        <h3>Lobbys <button id="lobby-refresh" class="mini" title="Neu laden">⟳</button></h3>
+        <ul id="lobby-rooms"></ul>
+        <button id="lobby-quick" class="wide">Schnell beitreten</button>
+      </div>
+      <div>
+        <h3>Mit Code beitreten</h3>
+        <div class="lb-row"><input id="lobby-code" maxlength="8" placeholder="Code"><button id="lobby-code-join">Beitreten</button></div>
+        <h3>Neue Lobby</h3>
+        <div class="lb-row"><input id="lobby-new-name" maxlength="28" placeholder="Name der Lobby"><button id="lobby-create">Erstellen</button></div>
+        <label class="lb-check"><input type="checkbox" id="lobby-new-priv"> privat (nur mit Code oder Einladungslink)</label>
+        <details><summary>Server</summary>
+          <div class="lb-row"><input id="lobby-server" placeholder="automatisch"><button id="lobby-server-save">Übernehmen</button></div>
+          <p class="hint">Leer = automatisch: eigener Server dieser Seite, sonst Peer-to-Peer. Oder <code>wss://…</code> bzw. <code>p2p</code>.</p>
+        </details>
+      </div>
+    </div>
+    <p id="lobby-status"></p>
+    <button id="lobby-back" class="ghost">Zurück</button>
   </div>
 </div>
 
@@ -66,6 +101,7 @@
   <div id="location"><div id="loc-street">Markt</div><div id="loc-mode">zu Fuß</div></div>
   <div id="help-hint"><kbd>F1</kbd> Hilfe · <kbd>M</kbd> Stadtplan</div>
   <div id="status">
+    <div id="clock">12:00</div>
     <div id="money">€ 0</div>
     <div id="stars"></div>
     <div class="bar-row"><span class="ico">♥</span><div class="hbar"><div id="hp-bar"></div></div></div>
@@ -123,8 +159,10 @@
         <p><kbd>E</kbd> ein-/aussteigen, Auto klauen</p>
         <p><kbd>F</kbd> Rennen starten/abbrechen, Auto verkaufen</p>
         <p><kbd>F</kbd> an Haustür oder Autohaus: ansehen, kaufen</p>
-        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Tag/Nacht</p>
+        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>N</kbd> Zeitraffer Tag/Nacht</p>
+        <p><kbd>K</kbd> Wetter wechseln · <kbd>O</kbd> Grafik: Ultra, Hoch, Mittel, Niedrig</p>
         <p>In der Wohnung: <kbd>E</kbd> benutzen · <kbd>F</kbd> kaufen/Infos</p>
+        <p>Online: <kbd>T</kbd>/<kbd>Enter</kbd> Chat · <kbd>Tab</kbd> Spieler, Einladungslink · <kbd>E</kbd> am Auto eines Mitspielers: mitfahren</p>
       </div>
     </div>
     <div class="legend">

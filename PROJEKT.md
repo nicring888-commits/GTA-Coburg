@@ -1,9 +1,9 @@
-# Grand Theft Coburg (Coburg Open World) – Projektdokumentation
+# GTA Coburg (Coburg Open World) – Projektdokumentation
 
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.4.1 „Grand Theft Coburg – Landkreis“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.1.2 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -16,7 +16,7 @@ Luftbilder** der Bayerischen Vermessungsverwaltung auf dem Boden und auf allen D
 als **amtliche 3D-Gebäudemodelle (LoD2)** in der Stadt: mit echten Höhen und echten Dachformen, von der Altstadt über
 Schloss Ehrenburg bis zur Veste.
 
-**Seit v1.0.0 ist es „Grand Theft Coburg“** (bis v1.0.1 hieß es „GTA Coburg“): das Spielprinzip von Vice City io auf der Coburger Karte: **Autos** klauen
+**Seit v1.0.0 ist es ein GTA-artiges Spiel**, seit v3.1.1 heißt es wieder **„GTA Coburg“** (v1.0.1–v3.1.0 „Grand Theft Coburg“): das Spielprinzip von Vice City io auf der Coburger Karte: **Autos** klauen
 und verkaufen, **Straßenrennen** gegen KI-Fahrer um Preisgeld und die **Polizei**, die mit Sternen fahndet, verfolgt,
 rammt, Straßensperren baut und festnimmt. Man startet am **Bahnhof** (Vorplatz an der Lossaustraße), ein Auto steht bereit.
 
@@ -35,10 +35,29 @@ Der Nullpunkt der Welt ist der Marktplatz.
 
 Für three.js (r160, über das CDN jsDelivr, ersatzweise unpkg) wird eine Internetverbindung gebraucht.
 
-**Grafikstufen (seit v2.4.1):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
+**Grafikstufen (seit v3.1.2):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
 Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder auf dem Startbildschirm; die Wahl bleibt gespeichert
 (`localStorage` `gta-coburg-grafik`). Bricht ein Start beim Aufbau ab (Safari lädt die Seite nach zu viel Speicher neu),
 startet das Spiel beim nächsten Mal automatisch eine Stufe leichter und sagt das auf dem Ladebildschirm.
+
+**Online spielen (seit v3.0.0):** Der Server (`server.js`) betreibt neben dem Spiel den Mehrspieler-Server
+(WebSocket unter `/mp`, ohne Fremdpakete). Auf dem Startbildschirm „🌐 Online spielen“ → Name, Lobby wählen,
+„Schnell beitreten“, eigene (auch private) Lobby erstellen oder mit Code beitreten. Einladungslink: `?lobby=CODE`.
+- **Auf Vercel, GitHub Pages & Co. (seit v3.1.0, ohne eigenen Server):** Das Spiel merkt, dass die Seite keinen
+  Mehrspieler-Server hat (`/api/health` fehlt), und spielt **Peer-to-Peer** über WebRTC: Wer eine leere Lobby betritt,
+  wird Gastgeber; der Mehrspieler-Kern mit allen Prüfungen läuft dann in seinem Browser. Verbindungsaufbau über den
+  kostenlosen PeerJS-Dienst (inkl. TURN-Relais für schwierige Router), Spieldaten direkt zwischen den Browsern.
+  Verlässt der Gastgeber das Spiel, übernimmt ein anderer Spieler in ≈ 1 s (Autos werden neu angemeldet).
+  Erzwingen mit `?server=p2p`.
+- **Nur dieser Rechner:** `start.bat` bzw. `node server.js` (mehrere Browserfenster zum Ausprobieren).
+- **Heimnetz (LAN):** `start-lan.bat` bzw. `node server.js --lan`; die Konsole zeigt die Adresse
+  (`http://192.168.x.x:8175`), die Freunde im selben WLAN öffnen. Windows fragt einmal nach der Firewall-Freigabe.
+- **Internet, kostenlos:** auf Render (render.com, Free-Plan) das GitHub-Repository als „Blueprint“ verbinden;
+  `render.yaml` startet `node server.js --public` (Spiel und Server zusammen, WebSocket über `wss://`). Free-Dienste
+  schlafen nach 15 min ohne Besucher ein, der erste Aufruf dauert dann ≈ 1 min. Liegt das Spiel woanders (Vercel,
+  GitHub Pages), in `js/mp-config.js` `window.MP_SERVER = 'wss://….onrender.com'` eintragen (oder `?server=…`).
+- Grenzen per Umgebungsvariable: `MP_MAX_PER_IP` (Standard 8), `MP_MAX_CONN` (256), `MP_ORIGINS` (erlaubte Seiten,
+  kommagetrennt; leer = alle).
 
 **Repository:** https://github.com/nicring888-commits/GTA-Coburg (Branch `main`, öffentlich). Die Rohdaten
 `data/raw/` (≈ 430 MB) sind per `.gitignore` ausgeschlossen. Das Spiel ist eine statische Seite und lässt sich ohne
@@ -50,7 +69,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 |---|---|---|
 | Bewegen | `W A S D` (relativ zur Kamera) | `W`/`S` Gas, Bremse, rückwärts · `A`/`D` lenken |
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
-| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Tag/Nacht · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
+| Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
+| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
 
@@ -79,6 +99,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Interaktionen drinnen | `E`: Schlafen (Leben voll, Tag/Nacht wechselt, Spiel gespeichert), Fernseher (Coburg TV mit Laufband, Fußball, Stadtansicht), Licht an/aus, Radio/Musik (kleine Akkordschleife), Snack/Espresso/Drink (+30 Leben), Whirlpool (Leben voll), Klavier spielen, Kamin. `F`: Kaufen bzw. Infos. Bei Besichtigung gehen Schlafen und Essen erst nach dem Kauf. Mit Fahndung kommt man nicht hinein |
 | Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Kleinwagen € 1.100, Pkw € 1.800, Taxi € 2.400, Kombi € 2.900, Kleinbus € 3.400, Pick-up € 4.200, Geländewagen € 5.600, Cabrio € 6.900, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
 | Garage (`G`) | Eigene Autos (bis 8): Zustand, Farbe und Ort werden gespeichert. **Rausfahren/Herholen** stellt das Auto an den nächsten Straßenrand (immer nur eins draußen, das andere fährt zurück), **Einparken**, zerstörte Autos **reparieren** (20 % des Kaufpreises). Lackiererei ändert die gespeicherte Farbe, Verkauf beim Händler entfernt das Auto aus der Garage. Eigenes Auto: gelber Punkt auf Minikarte und Stadtplan, Einsteigen ohne Fahndung |
+| Online (seit v3.0.0) | Bis 16 Spieler je Lobby in derselben Welt. Man sieht die anderen als Figuren mit Namensschild (Farbe, Sterne), ihre Autos mit Lenkung, Neigung, Schaden, Feuer, Blaulicht und Hupe, auf Minikarte und Stadtplan als farbige Punkte (Stadtplan: „Spieler: Name“ = Schnellreise hin). Wer in ein Auto steigt, macht es für alle sichtbar; nach dem Aussteigen bleibt es stehen und andere können es nehmen (Garagenautos sind abgeschlossen, dort nur mitfahren). Bis zu 3 Mitfahrer. Autos anderer sind Hindernisse, fahren einen um und explodieren für alle. Uhrzeit und Wetter gelten für die Lobby. Geld, Wohnungen, Garage, Bestzeiten bleiben im eigenen Spielstand; Verkehr, Fußgänger, Polizei und Rennen rechnet jedes Spiel für sich |
 | Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
 
 ## 4. Inhalt der Welt
@@ -112,16 +133,19 @@ und müssen dort bleiben.
 | Datei | Aufgabe |
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
-| `js/boot.js` | Startlader (seit v2.4.1): Grafikstufe (`window.QUALITY`), lädt three.js (jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
-| `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen |
+| `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
+| `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
+| `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
+| `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
+| `js/landscape.js` | Landschaft im Umland (seit v2.5.0): Bodenbedeckungskarte je Kachel aus den OSM-Flächen (`paintCover`: r Acker, g Wiese, b Wald, Feldraine an Feldgrenzen, weichgezeichnet; zweite Karte mit Reihenrichtung je Feld), Geländematerial (`terrainMaterial`: Gras-, Ackerboden- und Waldbodentextur aus der Leinwand, Farbe aus dem unscharfen Luftbild, Ackerart nach Fotofarbe mit Saatreihen, Furchen, Stoppeln, Fahrgassen; Relief über die Normale), 3D-Bewuchs um die Kamera (`update`/`makeCell`: Gras, Getreide, Blumen, Farn als Instanzen in 8-m-Zellen bis 88 m, sinkt am Rand ein), Kronendach-Hülle über fernen Wäldern (`buildCanopy`), Feld- und Waldwege (`splitRural`, `buildTracks`, `trackMaterial`: Fahrspuren, Grasnarbe, Schotter, Asphalt), Dörfer (`buildVillage`: Gärten mit Staketen- und Lattenzaun, Tor und Einfahrt zur Straße, Hecken, Obstbäume, Rundballen an Scheunen) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
 | `js/vehicle.js` | Automodelle (Pkw, Sportwagen mit Spoiler, Taxi mit Dachschild, Streifenwagen mit Blaulicht), Fahrwerte je Typ, Arcade-Fahrphysik (Längs- und Seitenhaftung, Handbremse, Steigung, Teilschritte gegen Durchtunneln), Schaden, Brand, Wrack, Auto-gegen-Auto-Kollision |
 | `js/traffic.js` | KI-Verkehr auf dem Straßennetz: fährt rechts, beachtet Einbahnstraßen, bremst vor Kurven, Hindernissen und dem Spieler |
 | `js/player.js` | Spielfigur mit Lauf-Animation, Springen, Kollision mit Häusern, Bäumen und Autos; mit anderem Aussehen auch Polizisten |
 | `js/ui.js` | Minikarte (dreht mit, Markierungen für Polizei, Checkpoints, Rennstarts, Läden, ferne am Rand), großer Stadtplan (Zoom, Verschieben, Klick = Reise), Ortsschilder, Geld, Sterne, Lebens- und Schadensbalken, große Meldungen |
-| `js/game.js` | Szene, Licht und Schatten (folgt dem Spieler), Tag/Nacht, Eingabe, Kamera (weicht Hauswänden aus), Ton (WebAudio: Motor, Hupe, Aufprall, Martinshorn, Explosion, Signaltöne), Spielstand (Geld, Leben), Spawn am Bahnhof, Straftaten, Verhaftet/Erledigt, Feuer und Explosionen, Lackiererei und Händler, Hauptschleife |
+| `js/game.js` | Szene, Licht und Schatten (folgt dem Spieler, Größe je Qualitätsstufe), Tag/Nacht folgt der Uhr (`syncNight`), Eingabe, Kamera (weicht Hauswänden aus), Ton (WebAudio: Motor, Hupe, Aufprall, Martinshorn, Explosion, Signaltöne), Spielstand (Geld, Leben), Spawn am Bahnhof, Straftaten, Verhaftet/Erledigt, Feuer und Explosionen, Lackiererei und Händler, Hauptschleife |
 | `js/driver.js` | `RoadNav`: Straßennetz als Graph (beide Richtungen, ohne Durchfahrten durch Gebäude), Dijkstra nach Fahrzeit, Wegsuche, Zufallspunkte. `AutoDriver`: KI-Fahrer mit echter Fahrphysik (Vorausschau-Lenkung, Kurvenbremsung, Ausweichen, Freifahren) |
 | `js/police.js` | Fahndung, Streifenwagen (Verfolgen, Rammen, Anhalten), Polizisten zu Fuß, Festnahme, Straßensperren, Entkommen |
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
@@ -152,7 +176,16 @@ und müssen dort bleiben.
 | `tools/fetch-lod2.js` | Lädt die LoD2-Kacheln für den Ausschnitt von `download1/2.bayernwolke.de` und prüft sie mit den SHA-256-Summen aus der Metalink-Datei `geodaten.bayern.de/odd/a/lod2/citygml/meta/metalink/09.meta4` |
 | `tools/convert-lod2.js` | CityGML → `data/lod2.js`: Wand-, Dach- und Bodenflächen, UTM → Länge/Breite → Spielmeter (`projX`/`projZ` wie in `convert.js`), Höhen relativ zu `terrain.base`, Wände nach außen und Dächer nach oben gedreht, Namen und Typen aus OSM |
 | `tools/convert.js` | Rohdaten → `data/coburg.js` (Projektion in Meter, Gebäudehöhen, Straßenbreiten, Multipolygone, Straßennetz, Gelände) |
-| `server.js`, `start.bat` | Statischer Webserver ohne Abhängigkeiten auf Port 8175 |
+| `server.js`, `start.bat`, `start-lan.bat` | Webserver ohne Abhängigkeiten auf Port 8175 (`--lan` Heimnetz, `--public` Hosting), hängt den Mehrspieler-Server an; `/api/rooms` (Lobby-Liste), `/api/health` |
+| `mp/protocol.js` | Gemeinsame Werte für Server und Spiel (Node `require` und Browser `<script>`): Protokollversion, Takt (20 Hz), Interpolation 110 ms, Sichtbereich 1,6 km, Tempo-Grenzen je Autotyp, Sitze, Farben |
+| `mp/ws.js` | WebSocket nach RFC 6455 ohne Fremdpaket: Handshake, maskierte Rahmen, Fragmente, Ping/Pong, Größenlimit 8 KB, `setNoDelay` |
+| `mp/core.js` | **Kern** (seit v3.1.0 aus `game-server.js` herausgelöst, läuft in Node und im Browser): siehe nächste Zeile; `createCore(MP, { rooms, single })`, Transport von außen (`accept`, `message`, `closed`, `tick`) |
+| `mp/game-server.js` | Node-Anbindung des Kerns (WebSocket, Verbindungen je IP, `/api/rooms`, `/api/health`). Kern: Lobbys (zwei feste: „Coburg Altstadt“ `COBURG`, „Landkreis-Tour“ `LANDKR`; eigene öffentlich/privat mit 5-stelligem Code, leer nach 2 min gelöscht), Spieler, Netz-Autos (`vid`, Besitzer, Fahrer, Mitfahrer, abgeschlossen), Uhr und Wetter je Lobby, Momentaufnahmen 20 Hz nur im Umkreis und nur Geändertes (jede Sekunde alles), grobe Orte aller für die Karte. **Schutz:** Bewegungsprüfung mit Weg-Guthaben (Lauf 12 m/s, Auto Höchsttempo × 1,3 + 6), Teleport nur über `tp` alle 2 s, Unplausibles wird verworfen und zurückgesetzt (`fix`), ab 8 Verstößen Rauswurf; Server entscheidet Einsteigen (Abstand, freier Sitz, Besitz), Explosion nur durch den Besitzer; Nachrichten-Rate (60/s), Größe, Namen/Chat bereinigt, Verbindungen je IP, Gegendruck bei langsamen Spielern |
+| `js/net.js` | `NetClient`: Verbindung, Wiederverbinden (5 Versuche), Uhrabgleich per Ping, Zustand senden (20 Hz, in Ruhe 2 Hz), andere Spieler (`Player`-Figuren, Namensschild-Sprite) und Autos (`Vehicle` mit `remote`) zwischen zwei Aufnahmen gleitend darstellen (≤ 250 ms vorausrechnen), Einsteigen/Mitfahren/Besitzwechsel, Chat, Spielerliste; `NetLobby`: Lobby-Fenster |
+| `js/net-p2p.js` | Peer-to-Peer (seit v3.1.0): `P2PSocket` verhält sich wie ein WebSocket; Lobby = feste Peer-Kennung `gtcoburg-v1-CODE`, erst verbinden, sonst Gastgeber werden (gleichzeitige Versuche klärt die Kennungs-Vergabe), Lobby-Liste durch Abfrage der festen Lobbys, Gegendruck über `bufferedAmount`, Kennung beim Schließen des Tabs freigeben |
+| `js/mp-host-worker.js` | Gastgeber: Kern in einem Worker-Thread (taktet auch bei verdecktem Tab mit 20 Hz) |
+| `js/mp-config.js` | Adresse eines entfernten Mehrspieler-Servers (leer = gleicher Server) |
+| `tools/mp-test.js`, `tools/mp-bot.js`, `tools/mp-load.js` | Protokolltest (27 Prüfungen), Test-Mitspieler (läuft/fährt im Kreis, `--drive`), Lasttest mit N Bots |
 
 **Koordinaten:** Meter, x = Osten, z = Süden, Höhe relativ zum Marktplatz.
 
@@ -174,6 +207,8 @@ node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
 node tools/fetch-region-ortho-hd.js   # scharfe Ortskacheln, nach convert-region.js
 node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
 node tools/convert-region.js
+node tools/fetch-region-rural.js      # Feldwege, Hecken, Baumreihen (Overpass, oft überlastet; REVERSE=1 parallel)
+node tools/convert-region-rural.js    # → data/region-rural.js (geht auch mit einem Teil der Stücke)
 ```
 
 **Luftbilder in der Welt (`js/world.js`):** Jede Kachel ist ein eigenes Geländestück mit eigener Textur. Die Normalen
@@ -197,6 +232,7 @@ sie nicht zum Gelände (`meta.base`), baut das Spiel alle Häuser wie bisher aus
 Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races.list` / `game.races.start(r, game.car)`,
 `game.addMoney(1000)`, `game.explode(auto)`, `game.busted()`, `game.wasted('Grund')` und
 `game.property` (z. B. `game.property.enter(game.property.homes[0], true)`, `.exit()`, `.openGarage()`, `.openShop(game.property.shops[0])`) und
+`game.atmo.clock = 19.5` (Uhrzeit), `game.atmo.setWeather('rain', true)`, `game.post.cycle()`, `game.post.debugAO = true` und
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
@@ -215,7 +251,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- ✅ v2.4.1 (24.10.2026): **Endloser Ladebildschirm auf dem iPhone behoben.**
+- ✅ v3.1.2 (24.10.2026): **Endloser Ladebildschirm auf dem iPhone behoben.**
   - Ursache: Das Spiel brauchte beim Start mehr Speicher, als Safari auf dem iPhone einem Tab erlaubt. Gemessen
     (Chromium, iPhone-13-Emulation): ≈ 480 MB JS-Spitze beim Aufbau, ≈ 260 MB JS bleibend (davon ≈ 42 MB nur
     behaltener Quelltext der 20 MB Datenskripte) und ≈ 360 MB Grafikspeicher (4096er-Schattenkarte, Antialiasing,
@@ -223,7 +259,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
     und stürzt wieder ab: Für den Spieler steht der Ladebildschirm endlos. Dazu kamen Fehler, die den Ladetext für immer
     stehen ließen statt eine Meldung zu zeigen: `new THREE.WebGLRenderer` ohne WebGL (z. B. Blockierungsmodus) warf
     ungefangen, ein fehlendes Spielskript ebenso, und `ctx.roundRect` fehlt in Safari vor iOS 16 (Abbruch bei „Straßen bauen“).
-  - Neuer Startlader `js/boot.js` (siehe 5): Fortschritt schon beim Herunterladen, Daten per `JSON.parse` statt als
+  - Neuer Startlader `js/boot.js` (siehe 5, lädt auch PeerJS optional, `mp/`, `data/region-rural.js`): Fortschritt schon beim Herunterladen, Daten per `JSON.parse` statt als
     Riesenskript (weniger Speicher, kein behaltener Quelltext), Zeitlimits (Hinweis nach 45 s ohne Fortschritt, Abbruch
     mit Meldung nach 90 s je Datei bzw. 150 s gesamt; Luftbilder der Innenstadt 40 s, sonst gemalter Boden), verständliche
     Meldungen bei fehlendem three.js, fehlenden oder beschädigten Daten, fehlendem WebGL und verlorenem Grafikkontext,
@@ -231,20 +267,177 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   - Grafikstufe `mobil`: Pixelverhältnis höchstens 1,25, kein Antialiasing, Schattenkarte 1024, Umland bis 1,2 km
     (Bäume 700 m), Nebel ab spätestens 1,5 km, keine scharfen HD-Luftbilder; feste Geometrie und Luftbilder werden nach dem
     Hochladen auf die Grafikkarte aus dem Arbeitsspeicher entfernt. `leicht`: zusätzlich ohne LoD2-Häuser (OSM-Häuser),
-    Umland bis 800 m. Gemessen: Grafikspeicher voll 357 MB, mobil 160 MB, leicht 146 MB; JS bleibend 269/226/166 MB.
+    Umland bis 800 m. Die Nachbearbeitung (`js/post.js`, Taste `O`) startet auf Smartphones mit `Niedrig`, in `leicht`
+    bleibt sie dort; das Pixelverhältnis wird zusätzlich begrenzt. Luftbilder des Umlands bleiben im Speicher, weil
+    `js/landscape.js` sie für Bewuchs und Gehölze ausliest. Gemessen (vor dem Zusammenführen mit v3.1.1): Grafikspeicher voll 357 MB, mobil 160 MB, leicht 146 MB; JS bleibend 269/226/166 MB.
   - Desktop (`voll`) unverändert, auch der Start per Doppelklick auf `index.html`.
   - Getestet (Chromium, iPhone-Emulation und Desktop): Laden, Fahren, Schnellreise ins Umland ohne Fehler; Fehlerfälle
     three.js gesperrt, `data/region.js` fehlt (Spiel läuft ohne Umland), `js/world.js` fehlt, `data/coburg.js` beschädigt,
     kein WebGL, hängende Datei (Hinweis nach 46 s, Meldung nach 90 s), abgestürzter Start (nächster Start `leicht`).
   - ⚠️ Nicht auf einem echten iPhone getestet; die Speichergrenze von Safari hängt vom Modell ab. Reicht `mobil` auf einem
     älteren Gerät nicht, schaltet der Absturzschutz beim nächsten Start auf `leicht`.
-- ✅ v2.4.0 (22.10.2026): **Neue Fahrphysik zum Driften.**
+- ✅ v3.1.2: **Neue Fahrphysik zum Driften** (Branch-Stand vom 22.10.2026, mit v3.1.2 übernommen).
   - Das Auto hat jetzt eine eigene Gierrate mit Trägheit und eine Haftgrenze der Reifen (`Vehicle.update`):
     Normales Fahren haftet, zu schnell in die Kurve schiebt das Heck leicht. Vollgas in der Kurve hält einen Drift von
     ≈ 30°, die Handbremse (`Leertaste`) lässt das Heck kommen, Gegenlenken fängt das Auto ab, ohne Gas ziehen die
     Reifen es von selbst gerade. Rutschen kostet Tempo. KI-Autos (Polizei, Rennfahrer) fahren wie bisher
   - Bremsspuren auf der Fahrbahn (Ringpuffer mit 900 Stücken, `FX.skid`), Reifenqualm und Reifenquietschen beim
     Rutschen, Handbremsen und harten Bremsen; nach einem Drift über 1,4 s zeigt eine Meldung Strecke und Dauer
+
+- ✅ v3.1.1 (24.10.2026): Spielname wieder **„GTA Coburg“** (Fenstertitel, Logo auf Lade-, Start- und Lobby-Bildschirm,
+  Willkommensmeldung, README, Serverausgabe, `package.json`).
+
+- ✅ v3.1.0 (24.10.2026): **Online auch auf Vercel.** Auf `gta-coburg.vercel.app` kam „Keine Verbindung zum Server“,
+  weil Vercel keine dauerhaften WebSocket-Verbindungen kann. Jetzt automatisch Peer-to-Peer (siehe 2), lokal bzw.
+  auf Render weiter der Node-Server. Kern nach `mp/core.js` verschoben; Verbindungs-Wächter (6 s still → neu
+  verbinden); Namensschild „(du bist Gastgeber)“.
+  - Getestet: Node-Server weiter 27/27; im Browser mit `?server=p2p` zwei Spieler: Lobby-Liste mit Belegung,
+    Gastgeber in 0,7 s, Beitritt per WebRTC in 1,2 s, Ping ≈ 10 ms, Fahren und Mitfahren, Teleport-Schummeln vom
+    Browser-Gastgeber zurückgesetzt, Gastgeber schließt den Tab → anderer Spieler übernimmt in 0,9 s, Neuankömmling
+    tritt beim neuen Gastgeber bei; ohne Parameter lokal weiter der Node-Server
+- ⚠️ Grenzen v3.1.0: Im Peer-to-Peer-Modus prüft der Browser des Gastgebers; ihm selbst muss man vertrauen. Eigene
+  (nicht feste) Lobbys sind nur per Code/Einladungslink auffindbar. Beim Gastgeber-Wechsel verschwinden abgestellte
+  Netz-Autos (gefahrene werden neu angemeldet). Abhängig vom kostenlosen PeerJS-Vermittlungsdienst.
+
+- ✅ v3.0.0 (24.10.2026): **Online-Mehrspieler.** Eigener Server ohne Abhängigkeiten (WebSocket in `server.js`),
+  Lobby auf dem Startbildschirm, bis 16 Spieler je Lobby (Details: 3a „Online“, 5 `mp/…`, `js/net.js`).
+  - Eigene Figur und eigenes Auto rechnet weiter das eigene Spiel (keine Eingabeverzögerung), der Server prüft und
+    verteilt; andere werden 110 ms verzögert gleitend dargestellt
+  - Eingebaut in `game.js`: `net`-Schnittstelle, Mitfahrer-Modus (`ride`: Kamera, Tacho, Aussteigen mit E auf der
+    Beifahrerseite), fremde Autos in `allCars`/`enterable`/Verkehrs- und Fußgänger-Hindernissen, `collideCars`
+    schiebt fremde Autos nicht, Explosion fremder Autos (Druckwelle auf eigene Figur/Auto), Teleport-Meldung bei
+    Schnellreise/Neustart/Zurücksetzen, `N`/`K` gehen an die Lobby, Schlafen ohne Zeitraffer, Eingaben in Textfeldern
+    sind keine Spieltasten mehr; Touch: 💬 und 👥
+  - Getestet: `node tools/mp-test.js` 27/27 (Beitritt, Code, Doppelname, Sichtbarkeit, Autos, Mitfahren, Besitzwechsel,
+    Garagenauto abgeschlossen, Explosion, Chat ohne HTML, Wetter, Speedhack → 7 Korrekturen + Rauswurf, Flutbremse,
+    Verlassen); im Browser zwei echte Spieler + zwei Bots: Lobby, Einladungslink, Schnell beitreten, gegenseitig
+    sehen, Mitfahren in beide Richtungen, Auto des anderen übernehmen, Explosion, Chat, Wetter-Sync, Spielerliste,
+    Teleport-Schummeln zurückgesetzt, Server-Neustart → automatisch wieder verbunden; Lasttest 15 Bots: ≈ 21 KB/s je
+    Spieler, Momentaufnahmen alle 50 ms (95 % ≤ 66 ms), Darstellung der Mitspieler < 0,01 ms pro Bild, keine Fehler
+  - Beim Testen behoben: doppelte Wiederverbindungs-Kette (doppelter Beitritt), Server lauschte unter der Vorschau auf
+    allen Adressen (jetzt nur mit `--lan`/`--public`), zu kleine Namensschilder, Wracks fremder Autos ohne Kollision
+- ⚠️ Grenzen v3.0.0: Verkehr, Fußgänger, Polizei und Rennen sind je Spiel eigen (andere sehen deine Sterne, aber
+  nicht deine Streifenwagen; KI-Autos stehen bei jedem anders). Bewegung ist „Client rechnet, Server prüft“: Tempo
+  und Teleports sind geschützt, Geld/Leben nicht (betrifft nur den eigenen Spielstand, es gibt keinen Handel und
+  keinen PvP-Schaden außer Anfahren). Wer angefahren wird, entscheidet sein eigenes Spiel. Kein öffentlicher Server
+  vorkonfiguriert: Der Render-Dienst muss einmal mit dem eigenen Konto angelegt werden.
+
+- ✅ v2.6.1 (23.10.2026): **Brücken über Wasser, nichts mehr auf der Fahrbahn** (vor dem Multiplayer-Einbau).
+  - Ursache Wasser auf der Straße (Viktoriastraße/Alexandrinenbrücke der Lossaustraße): Fahrbahnen lagen auf dem
+    ausgehobenen Flussbett-Gelände (12,5-m-Raster) und sanken unter den Wasserspiegel. Jetzt liegen Fahrbahnen auf dem
+    Gelände ohne Bett (`World.roadHeightAt`, im Umland `heightAt0`), mit Böschung (`bankSkirt`) wo das Ufer tiefer liegt
+  - Brücken (OSM `bridge`) über Wasser werden echte niedrige Brücken (`initLowBridges` in world.js, `B.low` in
+    region.js): leicht gewölbte Platte zwischen den Enden, darunter wird das Bett ausgehoben, Sandsteinbrüstung bzw.
+    Stahlgeländer bei Fußgängerbrücken, Widerlager (`lowBridgeParts` in water.js); Autos, Figuren und Fußgänger laufen
+    auf der Platte (`groundAt`), Brüstung ist Hindernis. Innenstadt 23, Umland 240 Brücken
+  - Wasserspiegel von Flüssen und Wasserflächen höchstens auf Uferhöhe (kein schwebendes Wasserband mehr)
+  - Ursache Objekte auf der Fahrbahn (B 289 u. a.): Mittelleitplanke auf allen Straßen mit Gegenverkehr ab 10 m
+    (70 Abschnitte) → entfällt, doppelte durchgezogene Linie; unsichtbare Leitplanken-Kollision in Orten → nur noch wo
+    sichtbar; Bäume prüften nur Straßen der eigenen Kachel → `Region.nearRoad` sucht im ganzen Netz; OSM-Einzelbäume,
+    Laternen, Bänke, Kübel und Café-Tische (außer in Spielstraßen) werden von Fahrbahnen weggerückt bzw. weggelassen
+  - Getestet: Alexandrinenbrücke, Mohrenstraße, Fußgängersteg, Rosenauer Straße (Itz), B 303, B 289; Fahrt mit
+    90 km/h über die Brücke; Prüfskript über 10 Gebiete: 0 Leitplanken/Bäume auf Fahrbahnen, Innenstadt 0 Hindernisse;
+    keine Fehler. Kachelaufbau ≈ 26 statt 24 ms (Wasserspiegel)
+- ⚠️ Grenzen v2.6.1: Wenig Durchfahrtshöhe unter niedrigen Brücken (das EU-DEM legt Flüsse fast auf Straßenhöhe);
+  Brücken ohne Pfeiler; Einfahrten zu Wegen außerhalb des Straßennetzes (Tankstellen) sind nicht in Leitplanken offen.
+
+- ✅ v2.6.0 (23.10.2026): **Fenster passen in die Fassade, Landhäuser im Stil oberfränkischer Dörfer.**
+  - Ursache der abgeschnittenen Fenster: Das Fensterraster lief starr ab dem tiefsten Geländepunkt des Hauses in
+    12,8 × 12,4-m-Kacheln über jede Wand, ohne Dach- und Giebelkanten, Hang, Wandbreite oder Hausecken zu kennen.
+    Jetzt trägt jede Wand ein **Wandprofil** als Vertex-Attribut (`aProfA/B/C`, Int16, gebaut in `Bucket.tri` mit
+    `rectProfile` bzw. `polyProfile`): linke und rechte Kante, Oberkante als Linienzug links – First – rechts (aus dem
+    LoD2-Umriss in 25 Stichproben, so abgesenkt, dass er nie über der echten Kante liegt), Unterkante, Boden an der Wand
+    (höchstes Gelände entlang der Wand), Stil und Türfeld
+  - Stadt (Stil 0): Achsen werden auf ganze Achsen über die Wandbreite verteilt (symmetrisch), Geschosse bis zur Traufe
+    eingepasst (2,6–4,2 m), Geschossreihen beginnen am Boden der jeweiligen Wand. Ein Fenster erscheint nur, wenn
+    Gewände und Sohlbank ganz in der Wand liegen: unter Trauf-/Giebelkante (30 cm Abstand), über dem Boden und der
+    Unterkante, nicht über die Hausecke. Giebel bekommen so von selbst weniger Fenster nach oben hin; schmale
+    Wandstücke bleiben ohne Fenster. Gesims nur unterhalb der Traufe, Schaufenster nur unter der Traufe
+  - Landhaus (Stil 1/2, `RURAL_HOUSES` im Umland bis 300 m² und 14 m): Traufhöhe ein-, eineinhalb- oder zweigeschossig,
+    steiles Satteldach (40–52°) mit Dachüberstand an Traufe und Ortgang, Untersicht und Stirnbrettern, Schornstein
+    (verputzt oder Ziegel) auf dem First; Giebelwände mit Dreiecksprofil und Giebelfenstern; Walmdach bei anderen
+    Grundrissen. Fenster in Feldern zu ≈ 3,1 m, leicht versetzt, einzelne Felder leer, Größe je Haus verschieden,
+    Erdgeschoss größer als Obergeschoss, Giebelfenster kleiner; Faschen um die Fenster, Sohlbank aus Sandstein,
+    Fensterkreuz, Glas mit Tiefe; Fensterläden (grün, braun, graublau) an knapp der Hälfte der Häuser;
+    **Haustür** an der Wand zur Straße mit Füllungen, Oberlicht, Vordach und Stufe; Sandsteinsockel (gelb oder rot)
+    mit Fugen, Eckquader an manchen Häusern; Fachwerk nur noch an Landhäusern, im Obergeschoss und Giebel, mit
+    Ständern neben den Fenstern und Streben in fensterlosen Feldern; nachts einzelne erleuchtete Fenster
+  - Getestet im Browser: Markt (Stadthaus-Giebel: Fenster folgen der Dreiecksform), Altstadt-Dächer von oben,
+    Spitalgasse, Albertinum am Hang (10 m Höhenunterschied), Beiersdorf, Wohlbach, Neustadt; 60 Bilder/s, keine Fehler
+- ⚠️ Grenzen v2.6.0: LoD2-Wände mit Stufen in der Oberkante bekommen ein vorsichtiges Profil (unter der niedrigsten
+  Stelle), dort fehlen dann manche Fenster. Gauben und Dachfenster gibt es nicht. Landhaus-Erkennung nach OSM-Typ und
+  Größe, nicht nach echtem Baustil. Die Innenstadt-Fassaden bleiben beim gemeinsamen Fenstermuster.
+
+- ✅ v2.5.0 (23.10.2026): **Ländliche Gebiete wie echte Landschaft.** Neues Modul `js/landscape.js`.
+  - **Boden**: Statt flachem Luftbild mischt der Geländeshader echte Materialien nach den OSM-Flächen (Acker, Wiese,
+    Wald) mit unregelmäßigen Rändern: Gras mit Halmen und trockenen Flecken, Ackerboden mit Erdkrumen und Steinchen,
+    Waldboden mit Laub, Nadeln und Zweigen. Das Luftbild bleibt als unscharfe Farbquelle (echte Felderteppiche bleiben
+    sichtbar) und bestimmt die Ackerart: grün = Saat in Reihen, braun = gepflügt mit Furchen, gelb = Stoppeln.
+    Reihenrichtung je Feld entlang der längsten Feldkante, Fahrgassen alle 20 m, Feldraine an den Feldgrenzen.
+    Texturen werden doppelt (gedreht, anderer Maßstab) gelesen, damit keine Kachelung zu sehen ist
+  - **3D-Bewuchs** um den Spieler (bis 88 m, Instanzen in Zellen): Grasbüschel, Getreide in den Saatreihen,
+    Wiesenblumen, Farn im Wald; wiegt sich im Wind, sinkt am Rand weich in den Boden; Farbe aus dem Luftbild
+  - **Gelände**: Kleinrelief (sanfte Wellen bis ≈ ±1,8 m) im offenen Land, läuft an Straßen und zur Innenstadt aus
+  - **Wälder**: dichter (1 Baum je 115 m²), Nadelbaum-Anteil je Waldstück 15–85 %, Baumgrößen von jung bis alt,
+    Waldränder mit dichten Büschen und Jungbäumen, Unterholz. Ferne Wälder (ohne gebaute Bäume) als Kronendach-Hülle mit
+    Kronenbuckeln, dadurch bewaldete Hügel bis an den Sichtrand
+  - **Hecken und Feldgehölze aus dem Luftbild**: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser
+    werden zu Büschen (Hecken) und Bäumen (größere Flecken), genau dort, wo sie wirklich stehen
+  - **Feldwege, Hecken, Baumreihen aus OSM** (neu geladen mit `tools/fetch-region-rural.js`): Wege als Bänder mit zwei
+    Fahrspuren und Grasnarbe (Erdweg), Schotter mit grasiger Mitte oder schmalem Asphalt; Hecken als dichte Buschreihen,
+    Baumreihen alle ≈ 8 m. Bewuchs und Bäume halten die Wege frei. Stand: Teil der Gebiete geladen (siehe Grenzen)
+  - **Dörfer**: Gärten um Wohnhäuser (Zaun zur Straße mit Tor, Kieseinfahrt zum Haus, an den anderen Seiten Hecke oder
+    Lattenzaun, Zäune nur bis zur Hälfte zum Nachbarhaus), Obstbäume und Büsche im Garten, Rundballen an Scheunen;
+    **Fachwerk** (Schwelle, Rähm, Riegel, Ständer, Streben; dunkelbraun oder ochsenblutrot, weiße Gefache) an etwa einem
+    Drittel der Häuser im Umland (Erdgeschoss und erstes Obergeschoss)
+  - Detailstufen: Laubbäume, Büsche, Nadelbäume und Stämme nah detailliert, ab ≈ 230 m grob (Stämme ohne Äste, Nadelbäume
+    aus zwei Kegeln, Busch als ein Ballen); dazu weniger Dunst bei klarem Wetter
+  - Getestet im Browser: Meeder (Acker mit Furchen bis zum Horizont, Hecken am Feldrand), Wiesenfeld, Feldweg im
+    Süden, Waldrand bei Tiefenlauter, Lautertal von oben, Beiersdorf (Gärten, Zäune, Fachwerk), Fahrten nach Neustadt,
+    Rödental, Seßlach, Bad Rodach; keine Fehler. Kachelaufbau ≈ 14 ms, Bäume ≈ 4 ms je Kachel. Bei ≈ 1930 × 1310 Pixeln
+    60 Bilder/s im Lautertal, ≈ 4,3 Mio. Dreiecke und ≈ 700 Zeichenaufrufe pro Bild (vor den Detailstufen 21,8 Mio.)
+- ⚠️ Grenzen v2.5.0: Feldwege, Hecken und Baumreihen aus OSM sind seit 23.10. vollständig geladen (60 Stücke). Hecken, Zäune und Bewuchs sind keine Hindernisse. Die Gärten sind geschätzt
+  (keine Flurstücke), Fachwerk sitzt auch an manchen größeren Häusern. Die Kronendach-Hülle springt beim Bau der Bäume
+  (≈ 1,1 km) auf echte Bäume um. Die Innenstadt (Festungsberg, Hofgarten) nutzt noch den alten Boden.
+
+- ✅ v2.4.0 (23.10.2026): **Grafik realistischer, Stil GTA IV.** Baut auf dem Zwischenstand v2.2.0 vom 21.10. auf.
+  - **Nachbearbeitung** (`js/post.js`): HDR-Bild mit 4× MSAA, Umgebungsverdeckung (SSAO: Kontaktschatten unter Bänken,
+    an Hauskanten, unter Autos), Luftperspektive mit Höhennebel und warmer Streuung zur Sonne (ersetzt den linearen
+    Nebel), Bloom (Sonne, Laternen, Scheinwerfer, beleuchtete Fenster), ACES-Tonwertkurve, Farbkorrektur wie GTA IV
+    (leicht entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung gegen Farbstufen
+  - **Qualitätsstufen** mit Taste `O` (Ultra, Hoch = Standard, Mittel, Niedrig ohne Nachbearbeitung; im Browser
+    gespeichert, Schlüssel `gta-coburg-quality`) und **dynamische Auflösung**, die bei Ruckeln bis auf 60 % heruntergeht
+  - **Tageszeit**: Uhr mit wanderndem Sonnenstand (1 Spielstunde = 1 Minute), Morgen- und Abendrot mit warmem, flachem
+    Licht und langen Schatten, Dämmerung; Nacht mit Mondlicht und orangem Stadtschein am Horizont. `N` ist jetzt ein
+    Zeitraffer bis 22 bzw. 9 Uhr, Lichter und Stadtleben folgen der Uhr. Uhrzeit und Wetter oben rechts im HUD
+  - Ausgangsbasis vom 21.10.: Himmelskuppel mit Wolken, Wetter (`K`), Regen, nasse Straßen mit Pfützen, Umgebungsbild
+    für Spiegelungen, Fassaden mit Gewänden und Gesimsen, Straßen mit Asphaltstruktur und Bordsteinen, gerundete Autos
+  - **Fassaden**: Normal Map aus einem Höhenfeld (Gewände 2 cm vor, Fensterbank 4 cm, Putzstruktur), **Fenstertiefe**
+    per Parallaxe (Glas 22 cm hinter der Wand, je nach Blickwinkel sieht man die Laibung), je Haus andere Achsbreite
+    (2,9/3,2/3,6 m) und Geschosshöhe (2,9/3,1/3,45 m), nachts Widerschein der Laternen unten an den Wänden
+  - **Dächer**: Ziegelreihen im Shader über dem Luftbild (Pfannen mit Wellen, Schatten unter jeder Reihe,
+    Farbschwankung je Ziegel, Relief über die Normale), kräftigere Ziegelfarbe, Moosflecken; steile Flächen nehmen die
+    unscharfe Mittelfarbe statt des verschmierten Fotos; Flachdächer mit Kieskörnung. Gilt in Stadt und Landkreis
+  - **Bäume**: Kronen aus 26–46 Blattbüschel-Karten (Laubtextur aus der Leinwand, mit Zweigen) um einen dichten Kern,
+    runde Schattierung, weiche Kanten (Alpha-to-Coverage), wiegen sich im Wind; Stamm mit Ästen; Nadelbäume mit
+    Nadeltextur und zerzausten Zweigspitzen. **Detailstufen**: Blattkarten nur bis ≈ 230 m (Gruppen von 250 m),
+    weiter weg eine grobe Laubhülle
+  - **Figuren**: Spieler, Polizisten und alle Passanten aus abgerundeten, sich verjüngenden Teilen statt Quadern, mit
+    Schuhen, Händen, Hals, Nase, Augen und Mund
+  - **Nacht**: Laternen als Natriumdampflicht (orange, Lichthof durch Bloom), hellere Nacht (Mondlicht, Belichtung),
+    Schaufenster gedämpft
+  - **Wetter**: Nebel dichter, der Himmel verschwindet im Dunst; Regen feiner und dichter
+  - Boden: Das Detailrauschen erkennt Wiese (Grashalme, trockene Stellen) und Pflaster/Asphalt (Körnung) an der Fotofarbe
+  - Getestet im Browser: Bahnhof, Markt (Tag, 19:20 Abendrot, 22:30 Nacht, Regen, Nebel), Spitalgasse, Fassade aus
+    der Nähe (Laibung sichtbar), Dächer von oben, Bäume, Spieler aus der Nähe, Villa (Innenraum), Zeitraffer `N`,
+    alle vier Qualitätsstufen mit `O`, Rödental; keine Fehler in der Konsole. Bildrate: bei ≈ 1930 × 1310 Pixeln
+    (Stufe Hoch mit MSAA, SSAO und Bloom) weiter 60 Bilder/s, auch in Rödental; dort ≈ 3,2 Mio. Dreiecke und ≈ 800
+    Zeichenaufrufe pro Bild (ohne Baum-LOD waren es ≈ 7 Mio.)
+- ⚠️ Grenzen v2.4.0: Der Boden im Landkreis bleibt unscharf, weil dort nur Luftbilder mit 1,9 m pro Pixel vorliegen
+  (bayerischer Dienst gesperrt). Fassaden haben weiter ein gemeinsames Fenstermuster (variiert in Maß, Farbe, Rahmen,
+  Gesimsen, Vorhängen), keine Balkone, Gauben oder Dachüberstände. Gesichter sind einfach (Augen, Nase, Mund aus
+  Formen). Die Uhr steht in Innenräumen still. Gemessen nur auf diesem Rechner; auf schwachen Grafikkarten Stufe
+  Mittel oder Niedrig wählen (die dynamische Auflösung hilft automatisch).
 - ✅ v2.3.0 (22.10.2026): **Robustere Autos, Leitplanken, Brücken über Straßen.**
   - Autos halten viel mehr aus: Rempler bis ≈ 25 km/h kosten nichts, ein Frontalaufprall mit 100 km/h etwa ein
     Fünftel (vorher fast zwei Drittel). Explosionen beschädigen Autos in der Nähe weiterhin stark
@@ -264,19 +457,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
     Alle im Autohaus kaufbar und in der Garage, außerdem fahren sie im Verkehr mit (und lassen sich klauen)
   - Die Seitenansichten im Autohaus und in der Garage werden jetzt aus dem Seitenprofil der 3D-Modelle gezeichnet
   - Zu schnelles Fahren an einer Streife vorbei löst keine Fahndung mehr aus
-- 🚧 v2.2.0 (21.10.2026, Zwischenstand): **Grafik realistischer.**
-  - Filmische Tonwertkurve (ACES), Schattenkarte 4096 px (wenn die Grafikkarte es kann), Sichtweite bis ≈ 2,9 km
-  - Neues Modul `js/atmosphere.js`: Himmelskuppel mit Sonne, Wolken, Sternen; fließender Tag-Nacht-Wechsel; Wetter
-    (klar, wolkig, bedeckt, Regen, Nebel) wechselt alle paar Minuten von selbst, Taste `K` schaltet von Hand; Regen,
-    nasse Straßen mit Pfützen; Umgebungsbild für Spiegelungen in Lack, Glas und Wasser
-  - Fassaden: Fenster mit Gewände, Sims, Sprossen, Laibungsschatten, spiegelndem Glas und Vorhängen; Sockel,
-    Geschossgesimse, Verwitterung, Kontaktschatten; Schaufenster im Erdgeschoss der Altstadt (`facadeShader`)
-  - Straßen: Asphaltstruktur, Bordsteine, Randlinien auf Hauptstraßen (`roadShader`, `curb`); Wasser spiegelt
-  - Autos: gerundete Karosserie mit Radkästen, Glaskabine mit Säulen, Felgen, Kennzeichen „CO“, Klarlack, Bodenschatten
-  - Bäume: unregelmäßige, weich schattierte Kronen mit Laubstruktur (drei Formen), Nadelbäume aus drei Kegeln
-  - Leichte Vignette, Sichtfeld wird bei hohem Tempo etwas weiter
-  - Getestet im Browser: Markt, Spitalgasse, Bahnhof, Luftbild Altstadt, Auto aus der Nähe; keine Fehler.
-    Noch offen: Regen, Nebel und Nacht im Bild prüfen, Bildrate messen, `K` in Hilfe und Startbildschirm eintragen
+- ✅ v2.2.0 (21.10.2026): Zwischenstand der Grafik (Himmel, Wetter, Fassaden-, Straßen- und Autodetails); fertig in v2.4.0, siehe dort
 
 - ✅ v2.1.0 (21.10.2026): **Wasser, Talbrücken, Leben in den Orten, schärfere Luftbilder.**
   - Echtes Wasser in Stadt und Landkreis: ausgehobenes Bett, Wasseroberfläche mit Wellen, Ufer als Hindernis
@@ -480,6 +661,10 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 7. Nächste Schritte
 
+- [ ] **Mehrspieler-Ausbau:** Render-Dienst anlegen und Adresse ggf. in `js/mp-config.js` eintragen; gemeinsame Rennen
+  (alle an derselben Säule, Server misst Zeiten); gemeinsame Fahndung (Polizei jagt den Gesuchten auch bei den
+  anderen); Emotes/Winken; Sprachchat (WebRTC); Spielstand auf dem Server (Konten) gegen Geld-Schummeln
+
 - [ ] Wohnungen: Neustart nach „ERLEDIGT“/„VERHAFTET“ im eigenen Zuhause, Kleiderschrank (andere Kleidung), Wohnung wieder verkaufen, Einnahmen (Miete)
 - [ ] Garagen-Stellplatz vor jeder eigenen Wohnung (Auto dort einparken statt per Menü)
 
@@ -499,13 +684,20 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [ ] Spielziele: Taxi- oder Lieferaufträge zwischen Sehenswürdigkeiten, Sammelobjekte, Zeitrennen
 - [ ] Straßenlaternen und Ampeln (aus OSM `highway=street_lamp`, `traffic_signals`)
 - [ ] Touch-Steuerung für Smartphone und Tablet
-- [ ] Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)
+- [x] ~~Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)~~ Erledigt in v2.4.0 (Uhr, Abendrot, Wetter)
+- [ ] Grafik weiter: zweites Fenstermuster (Rundbogen-, Sprossen- und Ladenfenster) je Haus, Balkone, Gauben und
+  Dachüberstände als Geometrie, Kanaldeckel auf der Fahrbahn, Scheinwerferkegel der KI-Autos nachts,
+  Wolkenschatten auf dem Boden
+- [x] ~~Ferne Wälder als Baumkulisse (Hülle über den Waldflächen) bis an den Sichtrand~~ Erledigt in v2.5.0
+- [x] ~~Feldwege/Hecken fertig laden~~ Erledigt am 23.10.2026 (100 %)
+- [ ] Landschafts-Boden auch für die Innenstadt (Festungsberg, Hofgarten, Itzaue); Hecken und Zäune als Hindernisse;
+  Feldwege befahrbar für den KI-Verkehr; Weidetiere, Hochsitze, Feldscheunen, Strommasten
 - [x] ~~Kartenausschnitt erweitern~~ Erledigt in v2.0.0 (ganzer Landkreis, kachelweise)
 - [ ] **Scharfe Luftbilder fertig laden:** `node tools/fetch-region-ortho-hd.js` erneut starten, sobald
   geodaten.bayern.de wieder antwortet (lädt nur die fehlenden 367 Ortskacheln, eine Anfrage alle 1,5 s)
 - [ ] LoD2-Häuser für das ganze Umland (≈ 175 CityGML-Kacheln, mehrere GB; dann je Kachel als JSON nachladen)
 - [x] ~~Umland: Fußgänger, Laternen und Läden in den Orten~~ Erledigt in v2.1.0 (Wohnungen dort fehlen noch)
-- [ ] Ferne Wälder als einfache Baumkulisse; Schwimmen statt Zurückschieben am Wasser
+- [ ] Schwimmen statt Zurückschieben am Wasser
 - [ ] Polizeihubschrauber ab 4 Sternen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
 - [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)

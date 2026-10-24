@@ -65,9 +65,11 @@ class Pedestrians {
   }
 
   buildMeshes() {
-    const mat = new THREE.MeshLambertMaterial({ color: '#ffffff' });
-    const mk = (w, h, d, n, dy = 0) => {
-      const g = new THREE.BoxGeometry(w, h, d); if (dy) g.translate(0, dy, 0);
+    // abgerundete Körperteile (U.figParts) mit Schuhen, Hals, Nase und Haaransatz; Farbe je Figur als Instanzfarbe
+    const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true });
+    const F = U.figParts();
+    const mk = (g0, n, dy = 0) => {
+      const g = g0.clone(); if (dy) g.translate(0, dy, 0);
       const m = new THREE.InstancedMesh(g, mat, n);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.setColorAt(0, new THREE.Color()); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
@@ -76,11 +78,11 @@ class Pedestrians {
       return m;
     };
     const N = PEDS.maxDrawn;
-    this.mLegs = mk(0.2, 0.86, 0.24, N * 2, -0.43);
-    this.mArms = mk(0.15, 0.62, 0.17, N * 2, -0.29);
-    this.mTorso = mk(0.5, 0.62, 0.28, N);
-    this.mHead = mk(0.32, 0.34, 0.32, N);
-    this.mHair = mk(0.34, 0.1, 0.34, N);
+    this.mLegs = mk(F.leg, N * 2, -0.43);
+    this.mArms = mk(F.arm, N * 2, -0.29);
+    this.mTorso = mk(F.torso, N);
+    this.mHead = mk(F.head, N);
+    this.mHair = mk(F.hair, N);
   }
 
   look(o) {
@@ -122,7 +124,7 @@ class Pedestrians {
     if (buddy) { p.speed = buddy.speed; p.dir = buddy.dir; p.t = Math.max(0, buddy.t - 0.3); }
     this.pickLat(p); p.lat = p.latT;
     const q = this.pos(p, {});
-    p.x = q.x; p.z = q.z; p.y = this.world.heightAt(q.x, q.z); p.heading = Math.atan2(q.dx, q.dz);
+    p.x = q.x; p.z = q.z; p.y = this.world.groundAt(q.x, q.z); p.heading = Math.atan2(q.dx, q.dz);
     this.list.push(p);
     return p;
   }
@@ -157,7 +159,7 @@ class Pedestrians {
 
   // Café-Gast, Bankbesucher oder Kunde am Stand (fest an einem Ort; state 'sit' oder 'stand')
   addSitter(x, z, heading, state = 'sit') {
-    const p = this.look({ x, z, y: this.world.heightAt(x, z), heading, state, phase: this.rnd() * 6, moving: 0 });
+    const p = this.look({ x, z, y: this.world.groundAt(x, z), heading, state, phase: this.rnd() * 6, moving: 0 });
     p.scale = 0.92 + this.rnd() * 0.12;
     this.sitters.push(p);
   }
@@ -269,7 +271,7 @@ class Pedestrians {
         if (ml > 0.02) p.heading += U.wrapAngle(Math.atan2(q.dx, q.dz) - p.heading) * Math.min(1, dt * 6);
         p.phase += dt * p.speed * 2.6; p.moving = p.speed;
       }
-      p.y = this.world.heightAt(p.x, p.z);
+      p.y = this.world.groundAt(p.x, p.z, p.y);
     }
 
     // Autos: Ausweichen, Umfahren, Wegschieben

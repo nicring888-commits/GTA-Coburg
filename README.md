@@ -1,4 +1,4 @@
-# Grand Theft Coburg
+# GTA Coburg
 
 Ein Open-World-Spiel im Browser in der echten Coburger Innenstadt: Autos klauen, Straßenrennen fahren und die
 Polizei abhängen. Straßen, Gelände, Luftbilder und 3D-Gebäude stammen aus offenen Geodaten. Du startest am Bahnhof.
@@ -20,6 +20,18 @@ Auf Smartphones startet das Spiel mit angepasster Grafik (`mobil`). Die Stufe l�
 **Veröffentlichen:** Den Ordner so wie er ist als statische Seite ausliefern, zum Beispiel über Vercel
 (Repository importieren, kein Build-Befehl, Ausgabeordner = Projektwurzel) oder GitHub Pages (Branch `main`, Ordner `/`).
 
+## Online spielen
+
+`node server.js` startet auch den Mehrspieler-Server. Im Spiel „🌐 Online spielen“ wählen: Name eingeben, Lobby
+beitreten, schnell beitreten, eigene (private) Lobby erstellen oder mit Code beitreten. Bis zu 16 Spieler je Lobby
+sehen sich, fahren zusammen, fahren beieinander mit (`E`), chatten (`T`) und teilen Uhrzeit und Wetter.
+
+- Ohne eigenen Server (Vercel, GitHub Pages): automatisch Peer-to-Peer über WebRTC; der erste Spieler einer Lobby
+  ist Gastgeber, geht er, übernimmt ein anderer.
+- Heimnetz: `node server.js --lan` (Windows: `start-lan.bat`), Freunde öffnen die angezeigte Adresse.
+- Internet (kostenlos): Repository auf [Render](https://render.com) als Blueprint verbinden (`render.yaml`).
+- Test: `node tools/mp-test.js`, Testmitspieler: `node tools/mp-bot.js --x … --z … --drive`.
+
 ## Steuerung
 
 | | |
@@ -29,7 +41,8 @@ Auf Smartphones startet das Spiel mit angepasster Grafik (`mobil`). Die Stufe l�
 | `E` | einsteigen, Auto klauen, aussteigen |
 | `F` | Rennen starten/abbrechen, Auto beim Händler verkaufen, Wohnung oder Autohaus öffnen |
 | `G` | Garage: eigene Autos herholen |
-| `M` | Stadtplan · `N` Tag/Nacht · `F1` Hilfe |
+| `T` / `Tab` | online: Chat / Spielerliste mit Einladungslink |
+| `M` | Stadtplan · `N` Zeitraffer Tag/Nacht · `K` Wetter · `O` Grafikqualität · `F1` Hilfe |
 
 Blaue Säulen = Rennen, grüne = Lackiererei (Reparatur, Fahndung weg), orange = Autohändler, türkis = Autohaus
 (Neuwagen kaufen), violette Haustüren = Wohnungen zum Besichtigen und Kaufen. Wohnungen, eigene Autos und Geld

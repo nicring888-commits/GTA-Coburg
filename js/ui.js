@@ -212,6 +212,8 @@ class UI {
     const blink = Math.floor(performance.now() / 250) % 2;
     for (const c of extra.police || []) blip(c.x, c.z, blink ? '#ff3030' : '#2a6bff', 5, !!extra.wanted);
     for (const o of extra.officers || []) blip(o.x, o.z, '#2a6bff', 3, false);
+    // Mehrspieler: andere Spieler in ihrer Farbe, ferne am Rand
+    for (const p of extra.players || []) blip(p.x, p.z, p.color, 5.5, true);
 
     // Spieler-Pfeil
     ctx.save();
@@ -423,7 +425,7 @@ class UI {
       ctx.fillStyle = '#222'; ctx.fillText(label, x + 10 * devicePixelRatio * px, z + 4 * devicePixelRatio * px);
     };
     for (const r of ex.raceStarts || []) icon(r.x, r.z, '#3aa0ff', 'Rennen: ' + r.name);
-    for (const p of ex.places || []) icon(p.x, p.z, PLACE_COLOR[p.type] || '#fff', p.name);
+    for (const p of ex.places || []) icon(p.x, p.z, p.color || PLACE_COLOR[p.type] || '#fff', p.name);
     ctx.fillStyle = '#e9b949'; ctx.strokeStyle = '#111'; ctx.lineWidth = 2 * devicePixelRatio * px;
     ctx.beginPath(); ctx.arc(this.player.x, this.player.z, 8 * devicePixelRatio * px, 0, 6.283); ctx.fill(); ctx.stroke();
   }

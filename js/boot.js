@@ -30,6 +30,7 @@
       if (i >= 0 && i < LEVELS.length - 1 && LEVELS.indexOf(level) <= i) {
         level = LEVELS[i + 1];
         store.set(QKEY, level);
+        store.del('gta-coburg-quality'); // Nachbearbeitung (Taste O) wieder auf den Standard der Stufe
         crashNote = `Der letzte Start ist abgebrochen (vermutlich zu wenig Speicher). Grafik jetzt: ${level}.`;
       }
     }
@@ -37,10 +38,10 @@
 
   // Was die Stufen ändern (gelesen von game.js, region.js, atmosphere.js und world.js)
   const Q = {
-    voll: { level: 'voll', pixelRatio: 1.5, antialias: true, shadow: 0, lod2: true, hd: true, ensure: 1400, fogFar: 0, region: null },
-    mobil: { level: 'mobil', pixelRatio: 1.25, antialias: false, shadow: 1024, lod2: true, hd: false, ensure: 900, fogFar: 1500,
+    voll: { level: 'voll', pixelRatio: 0, antialias: true, shadow: 0, lod2: true, hd: true, ensure: 1400, fogFar: 0, region: null },
+    mobil: { level: 'mobil', pixelRatio: 1.25, antialias: false, post: 'niedrig', shadow: 1024, lod2: true, hd: false, ensure: 900, fogFar: 1500,
       region: { load: 1200, drop: 1700, trees: 700, treesDrop: 1000, life: 500, lifeDrop: 750 } },
-    leicht: { level: 'leicht', pixelRatio: 1, antialias: false, shadow: 1024, lod2: false, hd: false, ensure: 600, fogFar: 1000,
+    leicht: { level: 'leicht', pixelRatio: 1, antialias: false, post: 'niedrig', postForce: true, shadow: 1024, lod2: false, hd: false, ensure: 600, fogFar: 1000,
       region: { load: 800, drop: 1200, trees: 450, treesDrop: 700, life: 400, lifeDrop: 600 } },
   }[level];
   Q.phone = phone; Q.ios = ios;
@@ -138,6 +139,8 @@
   // ---------- Daten und Skripte laden ----------
   // Pflichtteile brechen bei Fehlern ab, optionale Daten fehlen dann nur (das Spiel hat für alle einen Ersatz)
   const THREE_URLS = ['https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js', 'https://unpkg.com/three@0.160.0/build/three.min.js'];
+  // PeerJS nur für „Online spielen“ ohne eigenen Server; fehlt es, geht der Rest trotzdem
+  const PEER_URLS = ['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];
   const DATA = [
     { src: 'data/coburg.js', need: true, what: 'Stadtplan' },
     { src: 'data/ortho/tiles.js', what: 'Luftbilder' },
@@ -145,10 +148,12 @@
     { src: 'data/shops.js', what: 'Läden' },
     { src: 'data/region.js', what: 'Landkreis' },
     { src: 'data/region/ortho.js', what: 'Luftbilder Landkreis' },
+    { src: 'data/region-rural.js', what: 'Feldwege und Hecken' },
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
-  const CODE = ['util', 'atmosphere', 'water', 'world', 'region', 'vehicle', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props',
-    'townlife', 'driver', 'police', 'race', 'places', 'interiors', 'property', 'venues', 'game', 'touch'].map(n => `js/${n}.js`);
+  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'post', 'atmosphere', 'water', 'landscape', 'world', 'region',
+    'vehicle', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'interiors',
+    'property', 'venues', 'net-p2p', 'net', 'game', 'touch'].map(n => `js/${n}.js`));
 
   const TIMEOUT = 90000;  // ohne jeden Fortschritt; große Dateien bei langsamer Mobilverbindung
   function loadScript(src) {
@@ -202,14 +207,18 @@
     })
     : loadScript(src);
 
+  // erste erreichbare Adresse nehmen
+  async function loadFirst(urls, check) {
+    for (const u of urls) {
+      try { await loadScript(u); if (check()) return true; } catch (e) { console.warn(u, 'nicht geladen:', e.message); }
+    }
+    return false;
+  }
+
   async function start() {
     mark('laden');
     setText('Lade 3D-Grafik (three.js) …', 0.01);
-    let ok = false;
-    for (const u of THREE_URLS) {
-      try { await loadScript(u); ok = !!window.THREE; } catch (e) { console.warn('three.js nicht geladen von', u, e.message); }
-      if (ok) break;
-    }
+    const ok = await loadFirst(THREE_URLS, () => !!window.THREE);
     if (!ok) return fail('three.js konnte nicht geladen werden.', 'Bitte Internetverbindung prüfen und neu laden.');
     mark('aufbau'); // ab hier wird viel Speicher gebraucht (Daten auspacken, Welt bauen)
 
@@ -228,8 +237,9 @@
       else console.warn(`${it.src} fehlt (${r.message}), Spiel läuft ohne`);
     };
     let shown = 0;
+    const peer = loadFirst(PEER_URLS, () => typeof window.Peer === 'function').then(ok => { if (!ok) console.warn('PeerJS fehlt: Online nur mit eigenem Server'); });
     await Promise.all(DATA.map(it => loadData(it.src, n => { bytes += n; if (bytes - shown > 2e5) { shown = bytes; show(); } })
-      .then(() => true, e => e).then(settle(it))));
+      .then(() => true, e => e).then(settle(it))).concat(peer));
     if (failed) return;
     // dann die Spielskripte (gleichzeitig geladen, in Reihenfolge ausgeführt; game.js beginnt sofort mit dem Aufbau)
     await Promise.all(CODE.map(src => loadScript(src).then(() => true, e => e).then(settle({ src, need: true, what: 'Spiel' }))));

@@ -1,6 +1,7 @@
-// Himmel, Wetter und Licht: Himmelskuppel mit Sonne, Wolken und Sternen, fließender Tag-Nacht-Wechsel,
-// Wetter (klar, wolkig, bedeckt, Regen, Nebel) mit weichen Übergängen, Regentropfen, nasse Straßen und ein
-// Umgebungsbild (PMREM) für Spiegelungen in Autolack, Glas und Wasser.
+// Himmel, Wetter und Licht: Himmelskuppel mit Sonne, Wolken und Sternen, Tageszeit mit wanderndem Sonnenstand
+// (Morgen, Mittag, Abendrot, Nacht; 1 Spielstunde = 1 Minute), Wetter (klar, wolkig, bedeckt, Regen, Nebel) mit
+// weichen Übergängen, Regentropfen, nasse Straßen und ein Umgebungsbild (PMREM) für Spiegelungen in Autolack, Glas
+// und Wasser. Mit Nachbearbeitung (js/post.js) wird der Nebel dort als Luftperspektive aus der Tiefe gerechnet.
 'use strict';
 
 // Gemeinsame Werte für die Shader der Welt (Fassaden, Straßen, Boden), einmal pro Bild gesetzt
@@ -20,21 +21,31 @@ const WEATHER = {
   cloudy: { name: 'Wolkig', cloud: 0.5, dark: 0.12, vis: 0.85, rain: 0, sun: 0.85 },
   overcast: { name: 'Bedeckt', cloud: 0.92, dark: 0.5, vis: 0.6, rain: 0, sun: 0.28 },
   rain: { name: 'Regen', cloud: 1, dark: 0.72, vis: 0.4, rain: 1, sun: 0.12 },
-  fog: { name: 'Nebel', cloud: 0.7, dark: 0.35, vis: 0.14, rain: 0, sun: 0.35 },
+  fog: { name: 'Nebel', cloud: 0.7, dark: 0.35, vis: 0.08, rain: 0, sun: 0.35 },
 };
 const WEATHER_ORDER = ['clear', 'cloudy', 'overcast', 'rain', 'fog'];
 const WEATHER_ODDS = { clear: 0.38, cloudy: 0.3, overcast: 0.12, rain: 0.13, fog: 0.07 };
+// Tageslauf: Aufgang 6 Uhr, Untergang 20 Uhr, Mittag mit 54° Sonnenhöhe; 1 Spielstunde = 1 Minute
+const CLOCK = { rise: 6.0, set: 20.0, maxElev: 54, hoursPerSec: 1 / 60 };
+const DEG = Math.PI / 180;
 
 // Farben und Lichtstärken für Tag und Nacht (Tag bei klarem Wetter; Bewölkung mischt Grau hinein)
 const SKY_DAY = { top: '#3d74c0', horizon: '#c8dbec', ground: '#6b6a5e', sun: '#fff1dc', sunI: 2.8, hemiSky: '#cfe2ff', hemiGround: '#7f7a68', hemiI: 1.7 };
 const SKY_GREY = { top: '#8792a0', horizon: '#b4bcc4', ground: '#5f5f5a', hemiSky: '#c4ccd6' };
-const SKY_NIGHT = { top: '#02040b', horizon: '#141c30', ground: '#0b0d12', sun: '#8fa6ff', sunI: 0.22, hemiSky: '#4a5a8a', hemiGround: '#151515', hemiI: 0.26 };
+const SKY_DUSK = { top: '#3b5287', horizon: '#f2a46e', ground: '#5a4a44', sun: '#ffa660', sunI: 2.1, hemiSky: '#d6b9b0', hemiGround: '#6b5546', hemiI: 1.15 };
+// Nacht: Mondlicht bläulich, am Horizont der orange Schein der Stadtbeleuchtung
+const SKY_NIGHT = { top: '#03060f', horizon: '#2a2530', ground: '#0d0e12', sun: '#8fa6ff', sunI: 0.3, hemiSky: '#5a6a9a', hemiGround: '#2a2218', hemiI: 0.48 };
 
 class Atmosphere {
   // ctx: { scene, renderer, sun, hemi, sunDir (Vector3, zur Sonne) }
   constructor(ctx) {
     Object.assign(this, ctx);
-    this.night = 0; this.nightTarget = 0;
+    this.night = 0;
+    this.clock = 12.5;                   // Uhrzeit in Stunden
+    this.skipTarget = null;              // Zeitraffer bis zu dieser Uhrzeit (Taste N, Schlafen)
+    this.golden = 0;                     // Abend-/Morgenlicht 0..1
+    this.sunTrue = new THREE.Vector3();  // echte Sonnenrichtung (Himmel); this.sunDir ist die Lichtrichtung
+    this.post = null;                    // PostFX, wenn vorhanden
     this.kind = 'clear';
     this.w = { ...WEATHER.clear };       // aktuelle (gemischte) Wetterwerte
     this.wet = 0;
@@ -67,6 +78,7 @@ class Atmosphere {
       uSunDir: { value: this.sunDir.clone() }, uSunCol: { value: new THREE.Color() },
       uCloudCol: { value: new THREE.Color() }, uCloudShade: { value: new THREE.Color() },
       uCover: { value: 0.2 }, uDark: { value: 0 }, uNight: { value: 0 }, uTime: { value: 0 },
+      uFogCol: { value: new THREE.Color() }, uHaze: { value: 0 },
     };
     return new THREE.ShaderMaterial({
       uniforms: u, side: THREE.BackSide, depthWrite: false, fog: false,
@@ -79,7 +91,8 @@ class Atmosphere {
         }`,
       fragmentShader: `
         uniform vec3 uTop, uHorizon, uGround, uSunDir, uSunCol, uCloudCol, uCloudShade;
-        uniform float uCover, uDark, uNight, uTime;
+        uniform float uCover, uDark, uNight, uTime, uHaze;
+        uniform vec3 uFogCol;
         varying vec3 vDir;
         float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         float noise(vec2 p) {
@@ -123,6 +136,8 @@ class Atmosphere {
           // Sonne bzw. Mond
           float disk = smoothstep(0.99955, 0.99975, dot(d, uSunDir)) * (1.0 - cover) * clearSky;
           col = mix(col, mix(vec3(14.0, 12.5, 10.5), vec3(1.6, 1.65, 1.8), uNight), disk);
+          // Dunst und Nebel verschlucken den Himmel, am Horizont am stärksten
+          col = mix(col, uFogCol, uHaze * (1.0 - 0.55 * smoothstep(0.0, 0.8, h)));
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -132,7 +147,7 @@ class Atmosphere {
 
   // Regen: Striche in einem Würfel um die Kamera, im Shader bewegt (keine Arbeit auf der CPU)
   makeRain() {
-    const N = 7000, seed = new Float32Array(N * 2 * 3), end = new Float32Array(N * 2), rnd = U.rng(313);
+    const N = 14000, seed = new Float32Array(N * 2 * 3), end = new Float32Array(N * 2), rnd = U.rng(313);
     for (let i = 0; i < N; i++) {
       const x = rnd(), y = rnd(), z = rnd();
       for (let k = 0; k < 2; k++) { seed.set([x, y, z], (i * 2 + k) * 3); end[i * 2 + k] = k; }
@@ -153,7 +168,7 @@ class Atmosphere {
           p.y -= uTime * 13.0 * (0.85 + position.x * 0.3);
           p.x += uTime * 1.2;
           p = mod(p - uCam + B * 0.5, B) - B * 0.5 + uCam;
-          p.y -= aEnd * 0.55; p.x -= aEnd * 0.05;
+          p.y -= aEnd * 0.42; p.x -= aEnd * 0.04;
           vA = 1.0 - aEnd * 0.6;
           // in der Ferne ausblenden
           vA *= 1.0 - smoothstep(10.0, 18.0, length(p - uCam));
@@ -162,16 +177,32 @@ class Atmosphere {
       fragmentShader: `
         uniform float uAmount; uniform vec3 uColor;
         varying float vA;
-        void main() { gl_FragColor = vec4(uColor, 0.32 * uAmount * vA); }`,
+        void main() { gl_FragColor = vec4(uColor, 0.2 * uAmount * vA); }`,
     });
     const rain = new THREE.LineSegments(g, m);
     rain.frustumCulled = false; rain.visible = false; rain.renderOrder = 10;
     return rain;
   }
 
+  // Nacht ein/aus: Zeitraffer (instant: Sprung) auf 22 bzw. 9 Uhr, wenn es nicht schon passt
   setNight(on, instant) {
-    this.nightTarget = on ? 1 : 0;
-    if (instant) this.night = this.nightTarget;
+    if (on === this.isNight && this.skipTarget === null) return;
+    const t = on ? 22 : 9;
+    if (instant) { this.clock = t; this.skipTarget = null; } else this.skipTarget = t;
+  }
+  get isNight() { return this.night > 0.5; }
+  get timeText() { const h = Math.floor(this.clock), m = Math.floor((this.clock - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+
+  // Sonnenstand aus der Uhrzeit: Aufgang im Osten, Mittag im Süden (etwas östlich wie in den Luftbildern),
+  // Untergang im Westen; nachts sinkt sie bis 25° unter den Horizont. Gibt die Höhe in Grad zurück.
+  sunFromClock() {
+    const C = CLOCK, t = this.clock;
+    const day = (t - C.rise) / (C.set - C.rise);
+    const e = day >= 0 && day <= 1 ? Math.sin(Math.PI * day) * C.maxElev * DEG
+      : -Math.min((day < 0 ? -day : day - 1) * 90, 25) * DEG;
+    const az = (95 + day * 170) * DEG;   // 95° (Ost) … 265° (West), um 12:30 etwa 171° wie die Fotoschatten
+    this.sunTrue.set(Math.sin(az) * Math.cos(e), Math.sin(e), -Math.cos(az) * Math.cos(e));
+    return e / DEG;
   }
   setWeather(kind, instant) {
     if (!WEATHER[kind]) return;
@@ -200,31 +231,44 @@ class Atmosphere {
     // nass wird es schnell, trocken langsam
     this.wet += (w.rain > 0.3 ? 1 : 0) * dt / 40 - (w.rain > 0.3 ? 0 : dt / 150);
     this.wet = U.clamp(this.wet, 0, 1);
-    this.night += U.clamp(this.nightTarget - this.night, -dt / 3, dt / 3);
-    if (force) this.night = this.nightTarget;
-    const n = this.night, g = w.dark, C = this.c;
+    // Uhr: normal 1 Stunde pro Minute, im Zeitraffer 2 Stunden pro Sekunde
+    if (this.skipTarget !== null) {
+      const left = (this.skipTarget - this.clock + 24) % 24;
+      const step = Math.min(left, dt * 2);
+      this.clock = (this.clock + step) % 24;
+      if (left - step < 1e-3) this.skipTarget = null;
+    } else this.clock = (this.clock + dt * CLOCK.hoursPerSec) % 24;
+    const elev = this.sunFromClock();
+    this.night = 1 - U.smoothstep(-7, 2, elev);
+    this.golden = (1 - U.smoothstep(2, 20, elev)) * (1 - this.night);
+    // Licht kommt tagsüber von der Sonne (nicht flacher als 9°, sonst flimmern die Schatten), nachts vom Mond
+    if (elev > -2) this.sunDir.set(this.sunTrue.x, Math.max(this.sunTrue.y, 0.16), this.sunTrue.z).normalize();
+    else this.sunDir.set(-0.35, 0.82, -0.45).normalize();
+    const n = this.night, g = w.dark, C = this.c, gd = this.golden * (1 - g * 0.7);
 
     // Himmelsfarben: Tag (klar → grau), dann zur Nacht
-    const mix3 = (out, a, b, c2, tb, tc) => out.set(a).lerp(C.tmp.set(b), tb).lerp(C.tmp.set(c2), tc);
-    mix3(C.top, SKY_DAY.top, SKY_GREY.top, SKY_NIGHT.top, g, n);
-    mix3(C.horizon, SKY_DAY.horizon, SKY_GREY.horizon, SKY_NIGHT.horizon, g, n);
-    mix3(C.ground, SKY_DAY.ground, SKY_GREY.ground, SKY_NIGHT.ground, g * 0.5, n);
-    mix3(C.hemiSky, SKY_DAY.hemiSky, SKY_GREY.hemiSky, SKY_NIGHT.hemiSky, g, n);
-    C.hemiGround.set(SKY_DAY.hemiGround).lerp(C.tmp.set(SKY_NIGHT.hemiGround), n);
-    C.sun.set(SKY_DAY.sun).lerp(C.tmp.set(SKY_NIGHT.sun), n);
-    C.cloud.set('#ffffff').lerp(C.tmp.set('#9aa1aa'), g).lerp(C.tmp.set('#1c2232'), n);
-    C.shade.set('#a9b3c0').lerp(C.tmp.set('#5d636c'), g).lerp(C.tmp.set('#0b0e16'), n);
+    // Tag → Abendrot → Bewölkung (grau) → Nacht
+    const mix4 = (out, key, tg) => out.set(SKY_DAY[key]).lerp(C.tmp.set(SKY_DUSK[key]), gd)
+      .lerp(C.tmp.set(SKY_GREY[key] || SKY_DAY[key]), tg).lerp(C.tmp.set(SKY_NIGHT[key]), n);
+    mix4(C.top, 'top', g);
+    mix4(C.horizon, 'horizon', g);
+    mix4(C.ground, 'ground', g * 0.5);
+    mix4(C.hemiSky, 'hemiSky', g);
+    C.hemiGround.set(SKY_DAY.hemiGround).lerp(C.tmp.set(SKY_DUSK.hemiGround), gd).lerp(C.tmp.set(SKY_NIGHT.hemiGround), n);
+    C.sun.set(SKY_DAY.sun).lerp(C.tmp.set(SKY_DUSK.sun), this.golden).lerp(C.tmp.set(SKY_NIGHT.sun), n);
+    C.cloud.set('#ffffff').lerp(C.tmp.set('#ffc59a'), gd).lerp(C.tmp.set('#9aa1aa'), g).lerp(C.tmp.set('#1c2232'), n);
+    C.shade.set('#a9b3c0').lerp(C.tmp.set('#8a6f80'), gd).lerp(C.tmp.set('#5d636c'), g).lerp(C.tmp.set('#0b0e16'), n);
 
     const su = this.skyMat.uniforms;
     su.uTop.value.copy(C.top); su.uHorizon.value.copy(C.horizon); su.uGround.value.copy(C.ground);
-    su.uSunCol.value.copy(C.sun); su.uCloudCol.value.copy(C.cloud); su.uCloudShade.value.copy(C.shade);
+    su.uSunCol.value.copy(C.sun); su.uSunDir.value.copy(n > 0.5 ? this.sunDir : this.sunTrue); su.uCloudCol.value.copy(C.cloud); su.uCloudShade.value.copy(C.shade);
     su.uCover.value = w.cloud; su.uDark.value = g; su.uNight.value = n; su.uTime.value = this.time;
 
     // Licht: Bewölkung schwächt die Sonne (weichere Schatten), das Himmelslicht nimmt etwas zu
-    const dayI = SKY_DAY.sunI * w.sun;
-    this.sun.intensity = U.lerp(dayI, SKY_NIGHT.sunI * (1 - g * 0.6), n);
+    const dayI = U.lerp(SKY_DAY.sunI, SKY_DUSK.sunI, this.golden) * w.sun * U.smoothstep(-4, 5, elev);
+    this.sun.intensity = U.lerp(dayI, SKY_NIGHT.sunI * (1 - g * 0.6), U.smoothstep(0.6, 1, n));
     this.sun.color.copy(C.sun);
-    this.hemi.intensity = U.lerp(SKY_DAY.hemiI * (1 + (1 - w.sun) * 0.35), SKY_NIGHT.hemiI, n);
+    this.hemi.intensity = U.lerp(U.lerp(SKY_DAY.hemiI, SKY_DUSK.hemiI, this.golden) * (1 + (1 - w.sun) * 0.35), SKY_NIGHT.hemiI, n);
     this.hemi.color.copy(C.hemiSky); this.hemi.groundColor.copy(C.hemiGround);
 
     // Nebel und Sichtweite: klarer Tag weit, Regen und Nebel nah
@@ -235,6 +279,17 @@ class Atmosphere {
     fog.far = far; fog.near = Math.min(far * 0.12, 320);
     fog.color.copy(C.horizon).lerp(C.tmp.set('#9aa2aa'), (1 - w.vis) * 0.5 * (1 - n));
     this.scene.background.copy(fog.color);
+    su.uFogCol.value.copy(fog.color); su.uHaze.value = U.clamp((1 - w.vis) * 1.1, 0, 0.97);
+    // Mit Nachbearbeitung: Nebel dort (Höhennebel, Sonnenstreuung), in den Materialien aus
+    const post = this.post;
+    if (post && post.enabled) {
+      const P = post.params;
+      P.fogCol.copy(fog.color); P.fogDensity = 2.1 / far;
+      P.sunDir.copy(this.sunTrue); P.sunCol.copy(C.sun).multiplyScalar(1 + this.golden * 1.5);
+      P.sunVis = w.sun * (1 - n) * (1 - g * 0.6); P.night = n; P.wet = this.wet;
+      post.exposure = U.lerp(U.lerp(1.08, 1.2, this.golden), 1.85, n) * (1 + g * 0.12);
+      fog.near = 1e7; fog.far = 2e7;
+    }
 
     const A = ATMO.uniforms;
     A.uWet.value = this.wet; A.uNight.value = n; A.uTime.value = this.time;
@@ -254,7 +309,7 @@ class Atmosphere {
   // Umgebungsbild nur neu rechnen, wenn sich der Himmel sichtbar geändert hat (höchstens alle 2 s)
   updateEnv(dt, force) {
     this.envTimer -= dt;
-    const key = [this.night, this.w.cloud, this.w.dark].map(v => Math.round(v * 12)).join(',');
+    const key = [this.night, this.w.cloud, this.w.dark, this.golden].map(v => Math.round(v * 12)).join(',');
     if (!force && (key === this.envKey || this.envTimer > 0)) return;
     this.envKey = key; this.envTimer = 2;
     const old = this.envRT;

@@ -77,6 +77,16 @@ class CityProps {
   }
   mark(x, z, tag) { this.placed.insert({ x, z, tag }, x, z, x, z); }
   free(x, z, r) { return !this.world.insideBuilding(x, z, r) && !this.world.collideCircle(x, z, r, {}).hit; }
+  // liegt (x, z) auf einer Fahrbahn (oder näher als m an ihr)? living: Spielstraßen und Zufahrten zählen nicht
+  // (dort dürfen Café-Terrassen stehen)
+  onCarriageway(x, z, m, living) {
+    for (const s of this.world.roadGrid.query(x, z, 12, this._q || (this._q = []))) {
+      if (s.k !== 'road' || (living && /living_street|service/.test(s.h || ''))) continue;
+      const c = U.closestOnSeg(x, z, s.ax, s.az, s.bx, s.bz);
+      if (Math.hypot(c[0] - x, c[1] - z) < s.w / 2 + m) return true;
+    }
+    return false;
+  }
   solid(x, z, r) { // als Hindernis für Autos und Fußgänger-Kollision (wie Baumstämme)
     const W = this.world;
     W.trees.push(x, z, r);
@@ -111,7 +121,8 @@ class CityProps {
       const side = (Math.floor(mx / 9) + Math.floor(mz / 13)) % 2 ? 1 : -1;
       const off = plaza ? Math.max(1.2, s.w / 2 - 0.7) : s.w / 2 + 0.7;
       const x = mx - dz * off * side, z = mz + dx * off * side;
-      if (!this.free(x, z, 0.4)) continue;
+      // nicht auf einer anderen Fahrbahn (Kreuzungen, Einmündungen, enge Gassen)
+      if (!this.free(x, z, 0.4) || this.onCarriageway(x, z, road ? 0.5 : 0.3)) continue;
       this.mark(mx, mz, 'lamp');
       const y = this.world.heightAt(x, z);
       // Arm zeigt zur Straßenmitte
@@ -131,7 +142,8 @@ class CityProps {
       let dx = s.bx - s.ax, dz = s.bz - s.az; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
       const side = R() < 0.5 ? 1 : -1, off = Math.max(1.2, s.w / 2 - 1.3);
       const x = mx - dz * off * side, z = mz + dx * off * side;
-      if (!this.free(x, z, 0.9)) continue;
+      // nicht auf eine querende Fahrbahn
+      if (!this.free(x, z, 0.9) || this.onCarriageway(x, z, 0.5)) continue;
       this.mark(mx, mz, 'furn');
       const y = this.world.heightAt(x, z);
       const facing = Math.atan2(dz * side, -dx * side); // zur Wegmitte
@@ -461,7 +473,7 @@ class CityProps {
       const n = 2 + Math.floor(R() * 3);
       for (let k = 0; k < n; k++) {
         const x = cx + dx * (k - (n - 1) / 2) * 2.7, z = cz + dz * (k - (n - 1) / 2) * 2.7;
-        if (!this.free(x, z, 1.1)) continue;
+        if (!this.free(x, z, 1.1) || this.onCarriageway(x, z, 0.9, true)) continue;
         const y = W.heightAt(x, z);
         this.add('table', { x, y, z, ry: 0 });
         this.add('parasol', { x, y, z, ry: R() * 3, c: col });
@@ -554,13 +566,14 @@ class CityProps {
     })();
     const striped = new THREE.MeshLambertMaterial({ color: '#ffffff', map: stripe });
     const white = lam('#ffffff');
-    this.lampMat = new THREE.MeshLambertMaterial({ color: '#fff4d6', emissive: '#ffd890', emissiveIntensity: 0.05 });
+    this.lampMat = new THREE.MeshLambertMaterial({ color: '#fff4d6', emissive: '#ffc070', emissiveIntensity: 0.05 });
     this.signMat = lam('#ffffff');
     this.signNightMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
     const glowTex = (() => {
       const cv = document.createElement('canvas'); cv.width = cv.height = 64;
       const c = cv.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
-      g.addColorStop(0, 'rgba(255,214,140,0.55)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+      // Natriumdampf-Licht: warmes Orange, zur Mitte heller
+      g.addColorStop(0, 'rgba(255,196,120,0.62)'); g.addColorStop(0.45, 'rgba(255,160,80,0.26)'); g.addColorStop(1, 'rgba(255,150,70,0)');
       c.fillStyle = g; c.fillRect(0, 0, 64, 64);
       return new THREE.CanvasTexture(cv);
     })();
@@ -649,7 +662,7 @@ class CityProps {
 
   setNight(n) {
     this.night = n;
-    this.lampMat.emissiveIntensity = n ? 2.2 : 0.05;
+    this.lampMat.emissiveIntensity = n ? 5 : 0.05;  // hell genug für den Bloom der Nachbearbeitung
     if (this.glowMesh) this.glowMesh.visible = n;
     if (this.signMesh) this.signMesh.material = n ? this.signNightMat : this.signMat;
     for (const m of this.signMats || []) m.emissiveIntensity = n ? 0.85 : 0;
