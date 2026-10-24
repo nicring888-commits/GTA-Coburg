@@ -35,6 +35,8 @@
       <button data-key="KeyM">🗺</button>
       <button data-key="KeyN">☾</button>
       <button id="t-help">?</button>
+      <button id="t-chat" class="mp">💬</button>
+      <button id="t-list" class="mp">👥</button>
     </div>`;
   document.body.appendChild(root);
 
@@ -56,6 +58,10 @@
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
   });
   $('t-help').addEventListener('pointerdown', e => { e.preventDefault(); press('F1', true); setTimeout(() => press('F1', false), 50); });
+  // Mehrspieler: Chat und Spielerliste (nur sichtbar, wenn online)
+  $('t-chat').addEventListener('pointerdown', e => { e.preventDefault(); if (window.game.net) window.game.net.openChat(); });
+  $('t-list').addEventListener('pointerdown', e => { e.preventDefault(); if (window.game.net) window.game.net.toggleList(); });
+  setInterval(() => { const on = !!(window.game && window.game.net && window.game.net.online); for (const id of ['t-chat', 't-list']) $(id).classList.toggle('hidden', !on); }, 1000);
 
   // Hilfe schließt per Tippen auf "Weiter" (vorhandener Button)
 

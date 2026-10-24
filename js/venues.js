@@ -741,6 +741,7 @@ Object.assign(Property.prototype, {
       if (it.outfit) {
         this.save.outfit = Object.assign({}, this.save.outfit, it.outfit);
         p.setOutfit(this.save.outfit);
+        if (window.game && window.game.net) window.game.net.lookChanged(); // online: andere sehen die neue Kleidung
         this.persist();
         this.ui.toast(`${it.n} gekauft und angezogen`, 2);
       } else if (it.hp) {

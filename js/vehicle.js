@@ -524,7 +524,7 @@ function collideCars(a, b) {
     const d2 = dx * dx + dz * dz;
     if (d2 >= R * R) continue;
     const d = Math.sqrt(d2) || 1e-3, nx = dx / d, nz = dz / d, push = R - d;
-    const movable = !b.ai;
+    const movable = !b.ai && !b.remote; // KI-Verkehr und Autos anderer Spieler (Mehrspieler) weichen nicht aus
     const share = movable ? 0.5 : 1;
     a.x += nx * push * share; a.z += nz * push * share;
     if (movable) { b.x -= nx * push * 0.5; b.z -= nz * push * 0.5; }

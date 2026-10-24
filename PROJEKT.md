@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 2.6.1 „Grand Theft Coburg – Brücken“ · **Letzte Aktualisierung:** 23.10.2026
+**Version:** 3.0.0 „Grand Theft Coburg – Online“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -35,6 +35,19 @@ Der Nullpunkt der Welt ist der Marktplatz.
 
 Für three.js (r160, über das CDN jsDelivr) wird eine Internetverbindung gebraucht.
 
+**Online spielen (seit v3.0.0):** Der Server (`server.js`) betreibt neben dem Spiel den Mehrspieler-Server
+(WebSocket unter `/mp`, ohne Fremdpakete). Auf dem Startbildschirm „🌐 Online spielen“ → Name, Lobby wählen,
+„Schnell beitreten“, eigene (auch private) Lobby erstellen oder mit Code beitreten. Einladungslink: `?lobby=CODE`.
+- **Nur dieser Rechner:** `start.bat` bzw. `node server.js` (mehrere Browserfenster zum Ausprobieren).
+- **Heimnetz (LAN):** `start-lan.bat` bzw. `node server.js --lan`; die Konsole zeigt die Adresse
+  (`http://192.168.x.x:8175`), die Freunde im selben WLAN öffnen. Windows fragt einmal nach der Firewall-Freigabe.
+- **Internet, kostenlos:** auf Render (render.com, Free-Plan) das GitHub-Repository als „Blueprint“ verbinden;
+  `render.yaml` startet `node server.js --public` (Spiel und Server zusammen, WebSocket über `wss://`). Free-Dienste
+  schlafen nach 15 min ohne Besucher ein, der erste Aufruf dauert dann ≈ 1 min. Liegt das Spiel woanders (Vercel,
+  GitHub Pages), in `js/mp-config.js` `window.MP_SERVER = 'wss://….onrender.com'` eintragen (oder `?server=…`).
+- Grenzen per Umgebungsvariable: `MP_MAX_PER_IP` (Standard 8), `MP_MAX_CONN` (256), `MP_ORIGINS` (erlaubte Seiten,
+  kommagetrennt; leer = alle).
+
 **Repository:** https://github.com/nicring888-commits/GTA-Coburg (Branch `main`, öffentlich). Die Rohdaten
 `data/raw/` (≈ 430 MB) sind per `.gitignore` ausgeschlossen. Das Spiel ist eine statische Seite und lässt sich ohne
 Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befehl; oder GitHub Pages: `main`, Ordner `/`).
@@ -45,6 +58,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 |---|---|---|
 | Bewegen | `W A S D` (relativ zur Kamera) | `W`/`S` Gas, Bremse, rückwärts · `A`/`D` lenken |
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
+| Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
 | Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
@@ -74,6 +88,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Interaktionen drinnen | `E`: Schlafen (Leben voll, Tag/Nacht wechselt, Spiel gespeichert), Fernseher (Coburg TV mit Laufband, Fußball, Stadtansicht), Licht an/aus, Radio/Musik (kleine Akkordschleife), Snack/Espresso/Drink (+30 Leben), Whirlpool (Leben voll), Klavier spielen, Kamin. `F`: Kaufen bzw. Infos. Bei Besichtigung gehen Schlafen und Essen erst nach dem Kauf. Mit Fahndung kommt man nicht hinein |
 | Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Kleinwagen € 1.100, Pkw € 1.800, Taxi € 2.400, Kombi € 2.900, Kleinbus € 3.400, Pick-up € 4.200, Geländewagen € 5.600, Cabrio € 6.900, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
 | Garage (`G`) | Eigene Autos (bis 8): Zustand, Farbe und Ort werden gespeichert. **Rausfahren/Herholen** stellt das Auto an den nächsten Straßenrand (immer nur eins draußen, das andere fährt zurück), **Einparken**, zerstörte Autos **reparieren** (20 % des Kaufpreises). Lackiererei ändert die gespeicherte Farbe, Verkauf beim Händler entfernt das Auto aus der Garage. Eigenes Auto: gelber Punkt auf Minikarte und Stadtplan, Einsteigen ohne Fahndung |
+| Online (seit v3.0.0) | Bis 16 Spieler je Lobby in derselben Welt. Man sieht die anderen als Figuren mit Namensschild (Farbe, Sterne), ihre Autos mit Lenkung, Neigung, Schaden, Feuer, Blaulicht und Hupe, auf Minikarte und Stadtplan als farbige Punkte (Stadtplan: „Spieler: Name“ = Schnellreise hin). Wer in ein Auto steigt, macht es für alle sichtbar; nach dem Aussteigen bleibt es stehen und andere können es nehmen (Garagenautos sind abgeschlossen, dort nur mitfahren). Bis zu 3 Mitfahrer. Autos anderer sind Hindernisse, fahren einen um und explodieren für alle. Uhrzeit und Wetter gelten für die Lobby. Geld, Wohnungen, Garage, Bestzeiten bleiben im eigenen Spielstand; Verkehr, Fußgänger, Polizei und Rennen rechnet jedes Spiel für sich |
 | Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
 
 ## 4. Inhalt der Welt
@@ -149,7 +164,13 @@ und müssen dort bleiben.
 | `tools/fetch-lod2.js` | Lädt die LoD2-Kacheln für den Ausschnitt von `download1/2.bayernwolke.de` und prüft sie mit den SHA-256-Summen aus der Metalink-Datei `geodaten.bayern.de/odd/a/lod2/citygml/meta/metalink/09.meta4` |
 | `tools/convert-lod2.js` | CityGML → `data/lod2.js`: Wand-, Dach- und Bodenflächen, UTM → Länge/Breite → Spielmeter (`projX`/`projZ` wie in `convert.js`), Höhen relativ zu `terrain.base`, Wände nach außen und Dächer nach oben gedreht, Namen und Typen aus OSM |
 | `tools/convert.js` | Rohdaten → `data/coburg.js` (Projektion in Meter, Gebäudehöhen, Straßenbreiten, Multipolygone, Straßennetz, Gelände) |
-| `server.js`, `start.bat` | Statischer Webserver ohne Abhängigkeiten auf Port 8175 |
+| `server.js`, `start.bat`, `start-lan.bat` | Webserver ohne Abhängigkeiten auf Port 8175 (`--lan` Heimnetz, `--public` Hosting), hängt den Mehrspieler-Server an; `/api/rooms` (Lobby-Liste), `/api/health` |
+| `mp/protocol.js` | Gemeinsame Werte für Server und Spiel (Node `require` und Browser `<script>`): Protokollversion, Takt (20 Hz), Interpolation 110 ms, Sichtbereich 1,6 km, Tempo-Grenzen je Autotyp, Sitze, Farben |
+| `mp/ws.js` | WebSocket nach RFC 6455 ohne Fremdpaket: Handshake, maskierte Rahmen, Fragmente, Ping/Pong, Größenlimit 8 KB, `setNoDelay` |
+| `mp/game-server.js` | Lobbys (zwei feste: „Coburg Altstadt“ `COBURG`, „Landkreis-Tour“ `LANDKR`; eigene öffentlich/privat mit 5-stelligem Code, leer nach 2 min gelöscht), Spieler, Netz-Autos (`vid`, Besitzer, Fahrer, Mitfahrer, abgeschlossen), Uhr und Wetter je Lobby, Momentaufnahmen 20 Hz nur im Umkreis und nur Geändertes (jede Sekunde alles), grobe Orte aller für die Karte. **Schutz:** Bewegungsprüfung mit Weg-Guthaben (Lauf 12 m/s, Auto Höchsttempo × 1,3 + 6), Teleport nur über `tp` alle 2 s, Unplausibles wird verworfen und zurückgesetzt (`fix`), ab 8 Verstößen Rauswurf; Server entscheidet Einsteigen (Abstand, freier Sitz, Besitz), Explosion nur durch den Besitzer; Nachrichten-Rate (60/s), Größe, Namen/Chat bereinigt, Verbindungen je IP, Gegendruck bei langsamen Spielern |
+| `js/net.js` | `NetClient`: Verbindung, Wiederverbinden (5 Versuche), Uhrabgleich per Ping, Zustand senden (20 Hz, in Ruhe 2 Hz), andere Spieler (`Player`-Figuren, Namensschild-Sprite) und Autos (`Vehicle` mit `remote`) zwischen zwei Aufnahmen gleitend darstellen (≤ 250 ms vorausrechnen), Einsteigen/Mitfahren/Besitzwechsel, Chat, Spielerliste; `NetLobby`: Lobby-Fenster |
+| `js/mp-config.js` | Adresse eines entfernten Mehrspieler-Servers (leer = gleicher Server) |
+| `tools/mp-test.js`, `tools/mp-bot.js`, `tools/mp-load.js` | Protokolltest (27 Prüfungen), Test-Mitspieler (läuft/fährt im Kreis, `--drive`), Lasttest mit N Bots |
 
 **Koordinaten:** Meter, x = Osten, z = Süden, Höhe relativ zum Marktplatz.
 
@@ -214,6 +235,29 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.0.0 (24.10.2026): **Online-Mehrspieler.** Eigener Server ohne Abhängigkeiten (WebSocket in `server.js`),
+  Lobby auf dem Startbildschirm, bis 16 Spieler je Lobby (Details: 3a „Online“, 5 `mp/…`, `js/net.js`).
+  - Eigene Figur und eigenes Auto rechnet weiter das eigene Spiel (keine Eingabeverzögerung), der Server prüft und
+    verteilt; andere werden 110 ms verzögert gleitend dargestellt
+  - Eingebaut in `game.js`: `net`-Schnittstelle, Mitfahrer-Modus (`ride`: Kamera, Tacho, Aussteigen mit E auf der
+    Beifahrerseite), fremde Autos in `allCars`/`enterable`/Verkehrs- und Fußgänger-Hindernissen, `collideCars`
+    schiebt fremde Autos nicht, Explosion fremder Autos (Druckwelle auf eigene Figur/Auto), Teleport-Meldung bei
+    Schnellreise/Neustart/Zurücksetzen, `N`/`K` gehen an die Lobby, Schlafen ohne Zeitraffer, Eingaben in Textfeldern
+    sind keine Spieltasten mehr; Touch: 💬 und 👥
+  - Getestet: `node tools/mp-test.js` 27/27 (Beitritt, Code, Doppelname, Sichtbarkeit, Autos, Mitfahren, Besitzwechsel,
+    Garagenauto abgeschlossen, Explosion, Chat ohne HTML, Wetter, Speedhack → 7 Korrekturen + Rauswurf, Flutbremse,
+    Verlassen); im Browser zwei echte Spieler + zwei Bots: Lobby, Einladungslink, Schnell beitreten, gegenseitig
+    sehen, Mitfahren in beide Richtungen, Auto des anderen übernehmen, Explosion, Chat, Wetter-Sync, Spielerliste,
+    Teleport-Schummeln zurückgesetzt, Server-Neustart → automatisch wieder verbunden; Lasttest 15 Bots: ≈ 21 KB/s je
+    Spieler, Momentaufnahmen alle 50 ms (95 % ≤ 66 ms), Darstellung der Mitspieler < 0,01 ms pro Bild, keine Fehler
+  - Beim Testen behoben: doppelte Wiederverbindungs-Kette (doppelter Beitritt), Server lauschte unter der Vorschau auf
+    allen Adressen (jetzt nur mit `--lan`/`--public`), zu kleine Namensschilder, Wracks fremder Autos ohne Kollision
+- ⚠️ Grenzen v3.0.0: Verkehr, Fußgänger, Polizei und Rennen sind je Spiel eigen (andere sehen deine Sterne, aber
+  nicht deine Streifenwagen; KI-Autos stehen bei jedem anders). Bewegung ist „Client rechnet, Server prüft“: Tempo
+  und Teleports sind geschützt, Geld/Leben nicht (betrifft nur den eigenen Spielstand, es gibt keinen Handel und
+  keinen PvP-Schaden außer Anfahren). Wer angefahren wird, entscheidet sein eigenes Spiel. Kein öffentlicher Server
+  vorkonfiguriert: Der Render-Dienst muss einmal mit dem eigenen Konto angelegt werden.
 
 - ✅ v2.6.1 (23.10.2026): **Brücken über Wasser, nichts mehr auf der Fahrbahn** (vor dem Multiplayer-Einbau).
   - Ursache Wasser auf der Straße (Viktoriastraße/Alexandrinenbrücke der Lossaustraße): Fahrbahnen lagen auf dem
@@ -553,6 +597,10 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   - Der Verkehr fährt weiter auf Schienen: er weicht nicht aus und bleibt bei Unfällen nur kurz stehen.
 
 ## 7. Nächste Schritte
+
+- [ ] **Mehrspieler-Ausbau:** Render-Dienst anlegen und Adresse ggf. in `js/mp-config.js` eintragen; gemeinsame Rennen
+  (alle an derselben Säule, Server misst Zeiten); gemeinsame Fahndung (Polizei jagt den Gesuchten auch bei den
+  anderen); Emotes/Winken; Sprachchat (WebRTC); Spielstand auf dem Server (Konten) gegen Geld-Schummeln
 
 - [ ] Wohnungen: Neustart nach „ERLEDIGT“/„VERHAFTET“ im eigenen Zuhause, Kleiderschrank (andere Kleidung), Wohnung wieder verkaufen, Einnahmen (Miete)
 - [ ] Garagen-Stellplatz vor jeder eigenen Wohnung (Auto dort einparken statt per Menü)

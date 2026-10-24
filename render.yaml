@@ -1,0 +1,11 @@
+# Kostenloses Hosting auf Render (render.com): Repository verbinden, „Blueprint“ wählen, fertig.
+# Ein Dienst liefert Spiel und Mehrspieler-Server (WebSocket /mp) zusammen aus.
+services:
+  - type: web
+    name: gta-coburg
+    runtime: node
+    plan: free
+    buildCommand: echo "kein Build-Schritt"
+    startCommand: node server.js --public
+    healthCheckPath: /api/health
+    autoDeploy: true

@@ -65,7 +65,8 @@
 
   // ---------- Welt laden ----------
   const world = new World(window.COBURG, scene, renderer);
-  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property, life;
+  let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property, life, net, lobby;
+  let ride = null;         // Mehrspieler: Auto eines anderen Spielers, in dem man mitfährt
   let lastBoom = null;     // letzte Explosion (scheucht Tauben auf)
   const parked = [];       // Autos ohne KI (auch das eigene)
   const wrecks = [];       // ausgebrannte oder brennende Autos
@@ -119,9 +120,23 @@
       setTimeout(() => world.region.paintMap((canvas, scale) => { world.regionMap = { canvas, scale }; }), 1500);
     }
     respawn(true);
+    // Mehrspieler (js/net.js): Schnittstelle zum Spiel
+    net = new NetClient({ scene, ui, atmo, audio, camera, parked, lockPointer,
+      car: () => car, stars: () => police.stars,
+      pos: () => (mode === 'drive' ? { x: car.x, y: car.y, z: car.z } : { x: player.x, y: player.y, z: player.z }),
+      look: () => ({ shirt: (save.outfit || {}).shirt, pants: (save.outfit || {}).pants }),
+      enterCar, startRide, endRide, remoteBoom, correct,
+      forceExit: () => { if (car) { ui.toast('Jemand anderes sitzt schon am Steuer', 2); exitCar(); } },
+    });
+    lobby = new NetLobby(net, w => {
+      begin();
+      ui.bigMessage('ONLINE', 3, '#3aa0ff', `${w.room.name} · ${w.players.length + 1} Spieler · Code ${w.room.code}`);
+      net.sys(`Willkommen, ${w.name}! T = Chat, Tab = Spielerliste und Einladungslink`);
+    });
     progress('Fertig', 1);
     $('loading').classList.add('hidden');
     $('start').classList.remove('hidden');
+    lobby.ready();
     renderer.compile(scene, camera);
     requestAnimationFrame(loop);
   }).catch(err => {
@@ -172,7 +187,8 @@
   function respawn(first) {
     if (races.active) races.stop();
     police.reset();
-    if (car) { car.isPlayer = false; car = null; }
+    if (ride) { ride = null; net.endedRide(); }
+    if (car) { car.isPlayer = false; car = null; net.exited(); }
     mode = 'walk';
     player.health = 100;
     player.visible = true;
@@ -183,7 +199,7 @@
     if (!parked.some(c => !c.wrecked && Math.hypot(c.x - spawn.x, c.z - spawn.z) < 40)) parkCarNear(spawn.roadX, spawn.roadZ, '#c0392b');
     over = null;
     $('fade').classList.add('hidden');
-    if (!first) ui.toast('Zurück am Bahnhof', 2);
+    if (!first) { ui.toast('Zurück am Bahnhof', 2); net.teleported(); }
   }
 
   // ---------- Eingabe ----------
@@ -191,7 +207,8 @@
   const pressed = {};
   let started = false;
   addEventListener('keydown', e => {
-    if (e.code === 'F1') e.preventDefault();
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // Namen, Lobby-Code, Chat tippen
+    if (e.code === 'F1' || e.code === 'Tab') e.preventDefault();
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (!keys[e.code]) pressed[e.code] = true;
     keys[e.code] = true;
@@ -223,12 +240,15 @@
     cam.dist = U.clamp(cam.dist * (e.deltaY > 0 ? 1.12 : 1 / 1.12), 2.2, 40);
   }, { passive: true });
 
-  $('start-btn').onclick = () => {
+  function begin() {
     $('start').classList.add('hidden');
     $('hud').classList.remove('hidden');
     started = true;
     audio.init();
     lockPointer();
+  }
+  $('start-btn').onclick = () => {
+    begin();
     ui.bigMessage('GRAND THEFT COBURG', 2.5, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
   };
   $('help-close').onclick = () => { $('help').classList.add('hidden'); };
@@ -324,16 +344,18 @@
 
   // ---------- Autos ----------
   // alle Autos außer dem, in dem der Spieler gerade fährt (Polizei und Rennen kümmern sich um ihre eigenen)
+  // (Mehrspieler: dazu die sichtbaren Autos der anderen Spieler, net.remoteCars)
   function nonPlayerCars() {
-    const list = traffic.cars.concat(parked, wrecks);
+    const list = traffic.cars.concat(parked, wrecks, net.remoteCars);
     return mode === 'drive' ? list.filter(c => c !== car) : list;
   }
-  function allCars() { return traffic.cars.concat(parked, wrecks, police.cars(), races.cars()); }
+  function allCars() { return traffic.cars.concat(parked, wrecks, police.cars(), races.cars(), net.remoteCars); }
 
   // Autos, in die der Spieler einsteigen kann
   function enterable() {
     const list = traffic.cars.filter(c => !c.burning).concat(parked.filter(c => !c.wrecked && !c.burning));
     for (const u of police.units) if ((u.officer || u.mode === 'block') && !u.car.burning) list.push(u.car);
+    for (const c of net.remoteCars) if (!c.burning && net.canEnter(c)) list.push(c);
     return list;
   }
 
@@ -361,6 +383,54 @@
     mode = 'drive';
     player.visible = false;
     cam.yaw = car.heading;
+    net.entered(c);
+  }
+
+  // ---------- Mehrspieler ----------
+  // Mitfahren im Auto eines anderen Spielers (der Server hat den Platz bestätigt)
+  function startRide(c, driver) {
+    ride = c;
+    player.visible = false;
+    cam.yaw = c.heading; cam.init = false;
+    ui.toast(`Du fährst bei ${driver} mit · E aussteigen`, 2.5);
+  }
+  // Aussteigen auf der Beifahrerseite (byPlayer: mit E; sonst hat der Server die Fahrt beendet)
+  function endRide(byPlayer) {
+    if (!ride) return;
+    const c = ride;
+    ride = null;
+    const lx = Math.cos(c.heading), lz = -Math.sin(c.heading);
+    let x = c.x - lx * 2.1, z = c.z - lz * 2.1;
+    if (world.insideBuilding(x, z, 0.4)) { x = c.x + lx * 2.1; z = c.z + lz * 2.1; }
+    player.place(x, z, world);
+    player.heading = c.heading;
+    player.visible = true;
+    cam.init = false;
+    net.endedRide();
+    if (!byPlayer) ui.toast('Fahrt beendet', 1.5);
+  }
+  // Explosion eines fremden Autos: Bild, Ton, Druckwelle auf die eigene Figur bzw. das eigene Auto
+  function remoteBoom(c, inside) {
+    fx.explosion(c.x, c.y, c.z);
+    peds.panic(c.x, c.z, 45);
+    lastBoom = { x: c.x, z: c.z, t: 0.5 };
+    const p = net.G.pos();
+    audio.boom(Math.hypot(c.x - p.x, c.z - p.z));
+    if (inside) { endRide(false); wasted('Im Auto verbrannt'); return; }
+    if (car) {
+      const d = Math.hypot(car.x - c.x, car.z - c.z);
+      if (d < 9) { car.damage((9 - d) * 9); const k = (9 - d) * 1.5 / (d || 1); car.vx += (car.x - c.x) * k; car.vz += (car.z - c.z) * k; }
+    } else if (!property.inside) {
+      const d = Math.hypot(player.x - c.x, player.z - c.z);
+      if (d < 9) hurtPlayer((9 - d) * 14, c.x, c.z);
+    }
+  }
+  // Server hat eine unplausible Bewegung verworfen: zurück an die letzte gültige Stelle
+  function correct(m) {
+    if (m.car && car) {
+      car.x = m.x; car.z = m.z; car.heading = m.h; car.vx = car.vz = 0;
+      car.updateGround(world, 1, true); car.sync();
+    } else if (!car && !ride && !property.inside) player.place(m.x, m.z, world);
   }
 
   function exitCar() {
@@ -375,6 +445,7 @@
     car = null;
     mode = 'walk';
     audio.engine(false, 0, 0);
+    net.exited();
     // nicht zu viele abgestellte Autos behalten
     while (parked.length > 8) {
       const far = parked.reduce((a, b) => Math.hypot(b.x - player.x, b.z - player.z) > Math.hypot(a.x - player.x, a.z - player.z) ? b : a);
@@ -390,6 +461,7 @@
     if (Math.cos(U.wrapAngle(h - car.heading)) < 0) h += Math.PI;
     car.place(r.x, r.z, h, world);
     ui.toast('Auto zurückgesetzt', 1.5);
+    net.teleported();
   }
 
   // Auto beim Händler verkaufen
@@ -446,10 +518,12 @@
     }
     cam.init = false;
     ui.toast(name ? 'Willkommen: ' + name : 'Schnellreise', 2);
+    net.teleported();
   }
 
-  // Taste N: Zeitraffer bis 22 bzw. 9 Uhr (drinnen sofort)
+  // Taste N: Zeitraffer bis 22 bzw. 9 Uhr (drinnen sofort); online gilt die Uhr der Lobby für alle
   function toggleNight() {
+    if (net.online) { net.sky('night'); return; }
     const toNight = !night;
     atmo.setNight(toNight, !!property.inside);
     if (property.inside) { atmo.update(0, null, true); syncNight(); }
@@ -462,6 +536,7 @@
     applySky();
   }
   function cycleWeather() {
+    if (net.online) { net.sky('weather'); return; }
     atmo.auto = false; // von Hand gewählt: bleibt, bis man wieder wechselt
     ui.toast('Wetter: ' + atmo.cycleWeather(), 1.6);
   }
@@ -499,7 +574,8 @@
 
   // im eigenen Bett schlafen: Leben voll, Tag/Nacht wechseln, speichern
   function sleep() {
-    toggleNight();
+    if (net.online) ui.toast('Online läuft die Uhr für alle weiter (N: Zeitraffer für die Lobby)', 2.5);
+    else toggleNight();
     player.health = 100;
     persist();
   }
@@ -513,6 +589,10 @@
     for (const c of allCars()) {
       if (c.disposed) continue;
       const near = Math.abs(c.x - px) < 180 && Math.abs(c.z - pz) < 180;
+      if (c.remote) { // Auto eines anderen Spielers: sein Spiel entscheidet über die Explosion, hier nur Feuer und Rauch
+        if (puff && near && c.burning) { fx.fire(c.x, c.y + 1.1, c.z); fx.smoke(c.x, c.y + 1.8, c.z, 0.9); }
+        continue;
+      }
       if (c.burning > 0) {
         c.burning -= dt;
         if (puff && near) { fx.fire(c.x, c.y + 1.1, c.z); fx.smoke(c.x, c.y + 1.8, c.z, 0.9); }
@@ -538,6 +618,7 @@
     const px = mode === 'drive' ? car.x : player.x, pz = mode === 'drive' ? car.z : player.z;
     audio.boom(Math.hypot(c.x - px, c.z - pz));
     c.wreck(); c.smokeT = 12;
+    net.boom(c);
     if (c.ai) traffic.release(c);
     const pi = parked.indexOf(c);
     if (pi >= 0 && c !== car) parked.splice(pi, 1);
@@ -545,7 +626,7 @@
     if (c.kind === 'police' && police.stars > 0) police.crime(0.5, 'Streifenwagen zerstört!', 2);
     // Druckwelle
     for (const o of allCars()) {
-      if (o === c || o.disposed) continue;
+      if (o === c || o.disposed || o.remote) continue;
       const d = Math.hypot(o.x - c.x, o.z - c.z);
       if (d > 9) continue;
       o.damage((9 - d) * 9);
@@ -554,7 +635,7 @@
     if (car === c) {
       parked.splice(parked.indexOf(c), 1); wrecks.push(c);
       wasted('Im Auto verbrannt');
-    } else if (mode === 'walk') {
+    } else if (mode === 'walk' && !ride) {
       const d = Math.hypot(player.x - c.x, player.z - c.z);
       if (d < 9) hurtPlayer((9 - d) * 14, c.x, c.z);
     }
@@ -574,7 +655,7 @@
   // Autos, die den Spieler zu Fuß erwischen
   function carHits(dt) {
     hurtCool -= dt;
-    if (mode !== 'walk' || hurtCool > 0) return;
+    if (mode !== 'walk' || hurtCool > 0 || ride) return;
     for (const c of allCars()) {
       const sp = c.ai ? c.ai.speed : Math.hypot(c.vx, c.vz);
       if (sp < 5) continue;
@@ -605,7 +686,8 @@
     if (over) return;
     const fee = Math.min(save.money, 100);
     addMoney(-fee);
-    if (car) { car.isPlayer = false; car = null; mode = 'walk'; player.visible = true; }
+    if (car) { car.isPlayer = false; car = null; mode = 'walk'; player.visible = true; net.exited(); }
+    if (ride) { ride = null; player.visible = true; net.endedRide(); }
     over = { t: 0 };
     ui.bigMessage('ERLEDIGT', 4, '#e2463f', `${reason} · Krankenhaus: € ${fee}`);
     audio.sting(); audio.engine(false, 0, 0); audio.siren(0);
@@ -676,8 +758,9 @@
     }
     if (property.inside) { indoorCamera(dt); return; }
     let tx, ty, tz, follow = false, heading = 0;
-    if (mode === 'drive') {
-      tx = car.x; ty = car.y + 1.3; tz = car.z; follow = true; heading = car.heading;
+    const vc = mode === 'drive' ? car : ride; // eigenes Auto oder (Mehrspieler) das Auto, in dem man mitfährt
+    if (vc) {
+      tx = vc.x; ty = vc.y + 1.3; tz = vc.z; follow = true; heading = vc.heading;
       // Blickrichtung folgt dem Auto, wenn die Maus ruht
       const idle = performance.now() / 1000 - cam.lastMouse > 1.2;
       if (idle) {
@@ -687,17 +770,17 @@
     } else {
       tx = player.x; ty = player.y + 1.6; tz = player.z;
     }
-    if (mode === 'drive' && camMode === 1) {
+    if (vc && camMode === 1) {
       // Motorhaubenkamera
-      const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
-      camera.position.set(car.x + fx * 0.6, car.y + 1.55, car.z + fz * 0.6);
-      const lookYaw = car.heading + U.wrapAngle(cam.yaw - car.heading);
+      const fx = Math.sin(vc.heading), fz = Math.cos(vc.heading);
+      camera.position.set(vc.x + fx * 0.6, vc.y + 1.55, vc.z + fz * 0.6);
+      const lookYaw = vc.heading + U.wrapAngle(cam.yaw - vc.heading);
       tmpV.set(camera.position.x + Math.sin(lookYaw) * 10, camera.position.y - Math.sin(cam.pitch - 0.22) * 10 - 0.3, camera.position.z + Math.cos(lookYaw) * 10);
       camera.lookAt(tmpV);
       cam.init = false;
       return;
     }
-    const dist = mode === 'drive' ? Math.max(cam.dist, 6.5) + Math.min(Math.abs(car.speed), 40) * 0.06 : cam.dist;
+    const dist = vc ? Math.max(cam.dist, 6.5) + Math.min(Math.abs(vc.speed), 40) * 0.06 : cam.dist;
     const cp = Math.cos(cam.pitch), spch = Math.sin(cam.pitch);
     let wx = tx - Math.sin(cam.yaw) * dist * cp, wy = ty + dist * spch + 0.4, wz = tz - Math.cos(cam.yaw) * dist * cp;
     // Kamera nicht in Gebäuden verschwinden lassen
@@ -717,7 +800,7 @@
     const lam = follow ? 12 : 30;
     cam.x = U.damp(cam.x, wx, lam, dt); cam.y = U.damp(cam.y, wy, lam, dt); cam.z = U.damp(cam.z, wz, lam, dt);
     // bei hohem Tempo etwas weiteres Sichtfeld (Geschwindigkeitsgefühl, ohne Verzerrung)
-    const fov = BASE_FOV + (mode === 'drive' ? Math.min(Math.abs(car.speed), 45) * 0.16 : 0);
+    const fov = BASE_FOV + (vc ? Math.min(Math.abs(vc.speed), 45) * 0.16 : 0);
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = U.damp(camera.fov, fov, 3, dt); camera.updateProjectionMatrix(); }
     camera.position.set(cam.x, cam.y, cam.z);
     camera.lookAt(tx, ty, tz);
@@ -737,13 +820,25 @@
     if (started && ui.mapOpen && (pressed.KeyM || pressed.Escape)) ui.closeMap();
     else if (started && property.menuOpen) { if (pressed.Escape || pressed.KeyF || pressed.KeyG) property.closeMenu(); }
     else if (started && !ui.mapOpen) step(dt);
+    if (started) netStep(dt);
     render(dt);
     for (const k in pressed) delete pressed[k];
   }
 
+  // Mehrspieler-Takt: Zustand senden, andere Spieler darstellen, Chat und Spielerliste
+  function netStep(dt) {
+    if (!net.online) return;
+    if (!net.typing && (pressed.KeyT || pressed.Enter)) { for (const k in keys) keys[k] = false; net.openChat(); }
+    if (!net.typing && pressed.Tab) net.toggleList();
+    net.update(dt, { player, car: mode === 'drive' ? car : null, indoor: !!property.inside, stars: police.stars,
+      horn: mode === 'drive' && !!keys.KeyH, walking: mode === 'walk' && !ride && !property.inside && !over });
+  }
+
   function mapExtra() {
-    const locked = police.stars > 0 ? 'Schnellreise gesperrt: Die Polizei sucht dich!' : races.active ? 'Schnellreise gesperrt: Rennen läuft' : null;
-    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces()) };
+    const locked = police.stars > 0 ? 'Schnellreise gesperrt: Die Polizei sucht dich!' : races.active ? 'Schnellreise gesperrt: Rennen läuft'
+      : ride ? 'Schnellreise gesperrt: Du fährst mit' : null;
+    const players = net.blips().map(b => ({ name: 'Spieler: ' + b.name, x: b.x, z: b.z, type: 'player', color: b.color }));
+    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces(), players) };
   }
 
   function step(dt) {
@@ -762,21 +857,22 @@
     if (pressed.KeyN) toggleNight();
     if (pressed.KeyK) cycleWeather();
     if (pressed.KeyO) ui.toast('Grafik: ' + post.cycle(), 1.6);
-    if (pressed.KeyC && mode === 'drive') camMode = 1 - camMode;
+    if (pressed.KeyC && (mode === 'drive' || ride)) camMode = 1 - camMode;
     const freeze = !!(races.active && races.active.t < 0);
     if (pressed.KeyE && !freeze) {
-      if (mode === 'drive') {
+      if (ride) endRide(true);
+      else if (mode === 'drive') {
         if (Math.abs(car.speed) < 6 || car.burning) { exitCar(); if (races.active) races.stop('Rennen abgebrochen'); }
         else ui.toast('Erst langsamer fahren', 1.2);
-      } else { const c = nearestCar(player.x, player.z, 4.2); if (c) enterCar(c); }
+      } else { const c = nearestCar(player.x, player.z, 4.2); if (c && c.remote) net.requestEnter(c); else if (c) enterCar(c); }
     }
     if (pressed.KeyR && mode === 'drive' && !freeze) resetCar();
-    if (pressed.KeyG && !freeze) { property.openGarage(); return; }
+    if (pressed.KeyG && !freeze && !ride) { property.openGarage(); return; }
 
     const pl = mode === 'drive' ? places.at(car.x, car.z) : null;
-    const door = mode === 'walk' ? property.doorAt(player.x, player.z) : null;
-    const shop = property.shopAt(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z);
-    if (pressed.KeyF) {
+    const door = mode === 'walk' && !ride ? property.doorAt(player.x, player.z) : null;
+    const shop = ride ? null : property.shopAt(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z);
+    if (pressed.KeyF && !ride) {
       if (races.active) races.stop('Rennen abgebrochen');
       else if (door) { property.openHome(door); return; }
       else if (shop && (mode === 'walk' || Math.abs(car.speed) < 4)) { property.openShop(shop); return; }
@@ -821,6 +917,10 @@
       if (pressed.KeyH) peds.panic(car.x + Math.sin(car.heading) * 7, car.z + Math.cos(car.heading) * 7, 8, 0.5); // Hupe: aus dem Weg!
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
       if (car.siren) car.flash(performance.now() / 1000);
+    } else if (ride) {
+      // Mitfahrer: Figur sitzt unsichtbar im Auto des anderen Spielers
+      player.x = ride.x; player.y = ride.y; player.z = ride.z; player.heading = ride.heading; player.moveSpeed = 0;
+      audio.horn(false);
     } else {
       player.update(dt, walkInput(), world, allCars());
       audio.horn(false);
@@ -845,7 +945,7 @@
       if (world.region.lifeChanged) { world.region.lifeChanged = false; peds.setExtra(world.region.lifeSegments()); }
       peds.cap = world.inCoreRect(px, pz) ? 0 : 45;
     }
-    const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars());
+    const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars(), net.remoteCars, net.walkers);
     traffic.update(dt, px, pz, obstacles);
     police.update(dt, T, cam.yaw);
     if (over) return;
@@ -854,8 +954,8 @@
     property.update(dt);
 
     // Fußgänger: laufen, ausweichen, angefahren werden
-    const physCars = (mode === 'drive' ? [car] : []).concat(police.cars(), races.cars());
-    for (const h of peds.update(dt, px, pz, physCars, traffic.cars, mode === 'walk')) {
+    const physCars = (mode === 'drive' ? [car] : []).concat(police.cars(), races.cars(), net.remoteCars);
+    for (const h of peds.update(dt, px, pz, physCars, traffic.cars, mode === 'walk' && !ride)) {
       audio.thump(Math.min(14, h.speed));
       peds.panic(h.ped.x, h.ped.z, 18);
       if (h.car === car && mode === 'drive') {
@@ -890,7 +990,7 @@
       $('clock').textContent = atmo.timeText + ' · ' + atmo.weatherName;
       const r = world.nearestRoad(px, pz, 35, s => !!s.n);
       const b = world.insideBuilding(px, pz, 0);
-      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : 'zu Fuß';
+      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : ride ? 'Mitfahrer bei ' + net.nameOf(ride.net.driver) : 'zu Fuß';
       // im Landkreis: Ort zur Straße, beim Ankommen ein Ortsschild
       const place = world.region && !world.inCoreRect(px, pz) ? world.region.placeAt(px, pz) : null;
       const town = place ? place.n : 'Coburg';
@@ -910,19 +1010,25 @@
       else if (shop && Math.abs(sp) < 6) prompt = property.prompt(car.x, car.z, false);
       else if (r) prompt = police.stars > 0 ? 'Rennen: erst die Polizei abhängen' : `<kbd>F</kbd> Rennen starten: ${r.name}`;
       else if (Math.abs(sp) < 6 || car.burning) prompt = '<kbd>E</kbd> Aussteigen';
+    } else if (ride) {
+      ui.setSpeed(Math.abs(ride.speed) * 3.6, 'D', true);
+      prompt = '<kbd>E</kbd> Aussteigen';
     } else {
       ui.setSpeed(0, '', false);
       const c = nearestCar(player.x, player.z, 4.2);
-      if (c) prompt = c.kind === 'police' && (c.ai || police.units.some(u => u.car === c)) ? '<kbd>E</kbd> Streifenwagen klauen'
+      if (c && c.remote) prompt = net.prompt(c);
+      else if (c) prompt = c.kind === 'police' && (c.ai || police.units.some(u => u.car === c)) ? '<kbd>E</kbd> Streifenwagen klauen'
         : c.ai ? `<kbd>E</kbd> ${c.spec.name} klauen` : c.ownedId ? `<kbd>E</kbd> Einsteigen: dein ${c.spec.name}` : '<kbd>E</kbd> Einsteigen';
       const pp = property.prompt(player.x, player.z, true);
       if (pp) prompt = prompt ? prompt + ' · ' + pp : pp;
     }
     ui.setPrompt(prompt);
     const ri = races.mapInfo();
-    ui.drawMinimap(px, pz, mode === 'drive' ? car.heading : player.heading, cam.yaw, traffic.cars, mode === 'drive' ? car.speed : 0, {
+    const vc = mode === 'drive' ? car : ride;
+    ui.drawMinimap(px, pz, vc ? vc.heading : player.heading, cam.yaw, traffic.cars, vc ? vc.speed : 0, {
       police: police.cars(), officers: police.officers.filter(o => o.state === 'run').map(o => o.fig),
       race: ri, places: places.list.concat(property.mapPlaces()), raceStarts: races.list, wanted: police.stars > 0,
+      players: net.blips(),
     });
   }
 
@@ -960,8 +1066,8 @@
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
-    simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
+    simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); netStep(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
 })();
