@@ -102,8 +102,22 @@ class Bucket {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     if (this.uv.length) g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.computeBoundingSphere();
+    // Smartphones: feste Geometrie liegt nach dem Hochladen auf der Grafikkarte, die Kopie im Speicher wird frei
+    if (window.QUALITY && window.QUALITY.freeGeometry) for (const k in g.attributes) g.attributes[k].onUpload(releaseArray);
     return g;
   }
+}
+function releaseArray() { this.array = null; }
+// Smartphones: Luftbild nach dem Hochladen nicht mehr im Speicher halten (Leinwände sofort leeren, Safari zählt sie extra)
+function releaseAfterUpload(tex) {
+  if (!window.QUALITY || !window.QUALITY.freeGeometry) return tex;
+  tex.onUpdate = () => {
+    const im = tex.image;
+    tex.onUpdate = null;
+    if (im && im.getContext) im.width = im.height = 0;
+    tex.image = null;
+  };
+  return tex;
 }
 
 class Chunks {
@@ -339,12 +353,14 @@ class World {
     const aniso = this.renderer.capabilities.getMaxAnisotropy();
     let done = 0;
     try {
-      const tex = await Promise.all(O.tiles.map(t => loader.loadAsync('data/ortho/' + t.file).then(tx => {
+      // Zeitlimit je Bild: hängt die Verbindung, gibt es statt Luftbildern die gemalte Bodentextur
+      const timed = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), ms))]);
+      const tex = await Promise.all(O.tiles.map(t => timed(loader.loadAsync('data/ortho/' + t.file), 40000).then(tx => {
         tx.colorSpace = THREE.SRGBColorSpace;
         tx.anisotropy = aniso;
         tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping;
         onProgress(++done / O.tiles.length);
-        return tx;
+        return releaseAfterUpload(tx);
       })));
       const detail = this.makeDetailTexture();
       this.ortho = O.tiles.map((t, i) => {

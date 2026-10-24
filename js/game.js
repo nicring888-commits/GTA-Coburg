@@ -4,12 +4,23 @@
 
 (function () {
   const $ = id => document.getElementById(id);
-  if (!window.THREE) { $('load-text').textContent = 'three.js konnte nicht geladen werden. Bitte Internetverbindung prüfen.'; return; }
-  if (!window.COBURG) { $('load-text').textContent = 'Kartendaten fehlen (data/coburg.js). Bitte tools/convert.js ausführen.'; return; }
+  // Lader aus js/boot.js (Fortschritt, Fehlermeldung); ohne ihn nur den Ladetext setzen
+  const boot = window.Boot || { progress: (t, f) => { $('load-text').textContent = t; $('load-bar').style.width = Math.round(f * 100) + '%'; },
+    fail: (t, d) => { $('load-text').textContent = t + (d ? ' ' + d : ''); }, done() {} };
+  const Q = window.QUALITY || { pixelRatio: 1.5, antialias: true, shadow: 0, ensure: 1400 };
+  if (!window.THREE) { boot.fail('three.js konnte nicht geladen werden.', 'Bitte Internetverbindung prüfen.'); return; }
+  if (!window.COBURG) { boot.fail('Kartendaten fehlen (data/coburg.js).', 'Bitte tools/convert.js ausführen.'); return; }
 
   // ---------- Renderer und Szene ----------
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: Q.phone ? 'default' : 'high-performance' });
+  } catch (e) {
+    boot.fail('3D-Grafik (WebGL) ist auf diesem Gerät nicht verfügbar.',
+      'Auf dem iPhone: Blockierungsmodus für diese Seite ausschalten (Safari: aA → Website-Einstellungen) oder andere Tabs schließen und neu laden.');
+    return;
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.pixelRatio));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -17,6 +28,15 @@
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
   $('app').appendChild(renderer.domElement);
+  // Grafikspeicher voll (häufig auf dem iPhone): verständlich melden statt schwarzes Bild
+  renderer.domElement.addEventListener('webglcontextlost', e => {
+    e.preventDefault();
+    const msg = 'Die 3D-Grafik wurde vom Gerät beendet (zu wenig Grafikspeicher).';
+    if (!boot.finished) { boot.fail(msg, 'Bitte die leichte Grafik laden.'); return; }
+    $('loading').classList.remove('hidden'); $('loading').classList.add('error');
+    $('load-text').textContent = msg; $('load-detail').textContent = 'Neu laden oder die leichte Grafik wählen.';
+    $('load-actions').classList.remove('hidden');
+  });
 
   const scene = new THREE.Scene();
   const BASE_FOV = 65;
@@ -30,12 +50,12 @@
   const SUN_DIR = new THREE.Vector3(0.15, 1.3, 0.95).normalize();
   sun.castShadow = true;
   // große Schattenkarte, wenn die Grafikkarte sie kann (schärfere Schatten bei gleicher Reichweite)
-  const SHADOW_PX = renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048;
+  const SHADOW_PX = Q.shadow || (renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048);
   sun.shadow.mapSize.set(SHADOW_PX, SHADOW_PX);
-  const SC = SHADOW_PX > 2048 ? 135 : 110;
+  const SC = SHADOW_PX > 2048 ? 135 : SHADOW_PX < 2048 ? 85 : 110;
   Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 1, far: 700 });
   sun.shadow.bias = -0.0005;
-  sun.shadow.normalBias = SHADOW_PX > 2048 ? 0.4 : 0.6;
+  sun.shadow.normalBias = SHADOW_PX > 2048 ? 0.4 : SHADOW_PX < 2048 ? 0.8 : 0.6;
   scene.add(sun, sun.target);
   // Himmel, Wolken, Wetter und Spiegelungen (js/atmosphere.js) steuern ab jetzt Sonne, Himmelslicht und Nebel
   const atmo = new Atmosphere({ scene, renderer, sun, hemi, sunDir: SUN_DIR });
@@ -65,7 +85,7 @@
   let camMode = 0;         // 0 Verfolger, 1 Motorhaube
   let over = null;         // Verhaftet/Erledigt-Sequenz
 
-  const progress = (text, f) => { $('load-text').textContent = text; $('load-bar').style.width = Math.round(f * 100) + '%'; };
+  const progress = (text, f) => boot.progress(text, f);
   world.build(progress).then(() => {
     progress('Polizei und Rennstrecken …', 0.98);
     $('attr-ortho').classList.toggle('hidden', !world.ortho);
@@ -104,19 +124,20 @@
       // Laternen, Ladenschilder und Lokale in den Orten nutzen dieselben Bausteine wie die Innenstadt
       world.region.props = props; world.region.property = property;
       progress('Landkreis um den Bahnhof aufbauen …', 0.995);
-      world.region.ensure(spawn.x, spawn.z, 1400);
+      world.region.ensure(spawn.x, spawn.z, Q.ensure);
       // Übersichtskarte des Landkreises nebenbei malen
       setTimeout(() => world.region.paintMap((canvas, scale) => { world.regionMap = { canvas, scale }; }), 1500);
     }
     respawn(true);
     progress('Fertig', 1);
+    boot.done();
     $('loading').classList.add('hidden');
     $('start').classList.remove('hidden');
     renderer.compile(scene, camera);
     requestAnimationFrame(loop);
   }).catch(err => {
     console.error(err);
-    progress('Fehler beim Aufbau: ' + err.message, 1);
+    boot.fail('Fehler beim Aufbau der Welt.', err && err.message);
   });
 
   const drivable = s => s.k === 'road' && !/motorway|trunk/.test(s.h || '');

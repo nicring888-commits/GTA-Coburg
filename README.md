@@ -14,6 +14,9 @@ node server.js
 Dann http://127.0.0.1:8175 öffnen (unter Windows geht auch ein Doppelklick auf `start.bat`).
 three.js wird über das CDN jsDelivr geladen, dafür braucht es eine Internetverbindung.
 
+Auf Smartphones startet das Spiel mit angepasster Grafik (`mobil`). Die Stufe lässt sich auf dem Startbildschirm oder mit
+`?grafik=voll`, `?grafik=mobil` bzw. `?grafik=leicht` in der Adresse wechseln.
+
 **Veröffentlichen:** Den Ordner so wie er ist als statische Seite ausliefern, zum Beispiel über Vercel
 (Repository importieren, kein Build-Befehl, Ausgabeordner = Projektwurzel) oder GitHub Pages (Branch `main`, Ordner `/`).
 

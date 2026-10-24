@@ -18,6 +18,11 @@
     <h1 class="logo">Grand Theft <span>Coburg</span></h1>
     <p id="load-text">Lade Kartendaten …</p>
     <div class="bar"><div id="load-bar"></div></div>
+    <p id="load-detail"></p>
+    <div id="load-actions" class="hidden">
+      <button id="load-retry">Neu laden</button>
+      <button id="load-light">Leichte Grafik laden</button>
+    </div>
   </div>
 </div>
 
@@ -52,6 +57,7 @@
     </div>
     <button id="start-btn">Los geht's</button>
     <p class="hint">Klick ins Bild fängt die Maus ein, <kbd>Esc</kbd> gibt sie wieder frei.</p>
+    <p class="hint hidden" id="grafik-line"></p>
   </div>
 </div>
 
@@ -138,35 +144,11 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="data/coburg.js"></script>
-<script src="data/ortho/tiles.js"></script>
-<script src="data/lod2.js"></script>
-<script src="data/shops.js"></script>
-<script src="data/region.js"></script>
-<script src="data/region/ortho.js"></script>
-<script src="data/region/ortho-hd.js"></script>
-<script src="js/util.js"></script>
-<script src="js/atmosphere.js"></script>
-<script src="js/water.js"></script>
-<script src="js/world.js"></script>
-<script src="js/region.js"></script>
-<script src="js/vehicle.js"></script>
-<script src="js/traffic.js"></script>
-<script src="js/player.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/fx.js"></script>
-<script src="js/pedestrians.js"></script>
-<script src="js/props.js"></script>
-<script src="js/townlife.js"></script>
-<script src="js/driver.js"></script>
-<script src="js/police.js"></script>
-<script src="js/race.js"></script>
-<script src="js/places.js"></script>
-<script src="js/interiors.js"></script>
-<script src="js/property.js"></script>
-<script src="js/venues.js"></script>
-<script src="js/game.js"></script>
-<script src="js/touch.js"></script>
+<!-- Lädt three.js, Kartendaten und Spiel (mit Fortschritt, Zeitlimit und Fehlermeldung) -->
+<script src="js/boot.js"></script>
+<script>
+  // Fehlt sogar der Lader, nicht endlos „Lade …“ zeigen
+  if (!window.Boot) document.getElementById('load-text').textContent = 'Das Spiel konnte nicht geladen werden (js/boot.js fehlt). Bitte neu laden.';
+</script>
 </body>
 </html>

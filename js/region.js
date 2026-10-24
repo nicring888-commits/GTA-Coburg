@@ -17,6 +17,8 @@ const REGION = {
   lifeDrop: 950,
   townBuildings: 12,  // ab so vielen Häusern gilt eine Kachel als Ort
 };
+// Smartphones (js/boot.js): kleinerer Umkreis, damit der Speicher reicht
+if (window.QUALITY && window.QUALITY.region) Object.assign(REGION, window.QUALITY.region);
 // Brücken über Straßen: Fahrbahn so hoch über der unteren Straße (m), Rampen höchstens so steil
 const BRIDGE = { lift: 6.2, slope: 0.07, step: 4 };
 // große Straßen (Bundesstraßen, Autobahn): Randlinien, Mittelstreifen, Leitplanken
@@ -499,7 +501,7 @@ class Region {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    t.tex = tex;
+    t.tex = releaseAfterUpload(tex);
     if (t.hd === 'an') return; // schärferes Bild liegt schon
     t.terrainMat.map = tex; t.roofMat.map = tex;
   }
@@ -532,7 +534,7 @@ class Region {
         const tx = new THREE.Texture(im);
         tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
         tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; tx.needsUpdate = true;
-        t.texHd = tx; t.hd = 'an';
+        t.texHd = releaseAfterUpload(tx); t.hd = 'an';
         t.terrainMat.map = tx; t.roofMat.map = tx;
       };
       im.onerror = () => { t.hd = 'fehlt'; };
