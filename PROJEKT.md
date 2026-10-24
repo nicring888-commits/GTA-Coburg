@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.0.0 „Grand Theft Coburg – Online“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.1.0 „Grand Theft Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
 
 ---
 
@@ -38,6 +38,12 @@ Für three.js (r160, über das CDN jsDelivr) wird eine Internetverbindung gebrau
 **Online spielen (seit v3.0.0):** Der Server (`server.js`) betreibt neben dem Spiel den Mehrspieler-Server
 (WebSocket unter `/mp`, ohne Fremdpakete). Auf dem Startbildschirm „🌐 Online spielen“ → Name, Lobby wählen,
 „Schnell beitreten“, eigene (auch private) Lobby erstellen oder mit Code beitreten. Einladungslink: `?lobby=CODE`.
+- **Auf Vercel, GitHub Pages & Co. (seit v3.1.0, ohne eigenen Server):** Das Spiel merkt, dass die Seite keinen
+  Mehrspieler-Server hat (`/api/health` fehlt), und spielt **Peer-to-Peer** über WebRTC: Wer eine leere Lobby betritt,
+  wird Gastgeber; der Mehrspieler-Kern mit allen Prüfungen läuft dann in seinem Browser. Verbindungsaufbau über den
+  kostenlosen PeerJS-Dienst (inkl. TURN-Relais für schwierige Router), Spieldaten direkt zwischen den Browsern.
+  Verlässt der Gastgeber das Spiel, übernimmt ein anderer Spieler in ≈ 1 s (Autos werden neu angemeldet).
+  Erzwingen mit `?server=p2p`.
 - **Nur dieser Rechner:** `start.bat` bzw. `node server.js` (mehrere Browserfenster zum Ausprobieren).
 - **Heimnetz (LAN):** `start-lan.bat` bzw. `node server.js --lan`; die Konsole zeigt die Adresse
   (`http://192.168.x.x:8175`), die Freunde im selben WLAN öffnen. Windows fragt einmal nach der Firewall-Freigabe.
@@ -167,8 +173,11 @@ und müssen dort bleiben.
 | `server.js`, `start.bat`, `start-lan.bat` | Webserver ohne Abhängigkeiten auf Port 8175 (`--lan` Heimnetz, `--public` Hosting), hängt den Mehrspieler-Server an; `/api/rooms` (Lobby-Liste), `/api/health` |
 | `mp/protocol.js` | Gemeinsame Werte für Server und Spiel (Node `require` und Browser `<script>`): Protokollversion, Takt (20 Hz), Interpolation 110 ms, Sichtbereich 1,6 km, Tempo-Grenzen je Autotyp, Sitze, Farben |
 | `mp/ws.js` | WebSocket nach RFC 6455 ohne Fremdpaket: Handshake, maskierte Rahmen, Fragmente, Ping/Pong, Größenlimit 8 KB, `setNoDelay` |
-| `mp/game-server.js` | Lobbys (zwei feste: „Coburg Altstadt“ `COBURG`, „Landkreis-Tour“ `LANDKR`; eigene öffentlich/privat mit 5-stelligem Code, leer nach 2 min gelöscht), Spieler, Netz-Autos (`vid`, Besitzer, Fahrer, Mitfahrer, abgeschlossen), Uhr und Wetter je Lobby, Momentaufnahmen 20 Hz nur im Umkreis und nur Geändertes (jede Sekunde alles), grobe Orte aller für die Karte. **Schutz:** Bewegungsprüfung mit Weg-Guthaben (Lauf 12 m/s, Auto Höchsttempo × 1,3 + 6), Teleport nur über `tp` alle 2 s, Unplausibles wird verworfen und zurückgesetzt (`fix`), ab 8 Verstößen Rauswurf; Server entscheidet Einsteigen (Abstand, freier Sitz, Besitz), Explosion nur durch den Besitzer; Nachrichten-Rate (60/s), Größe, Namen/Chat bereinigt, Verbindungen je IP, Gegendruck bei langsamen Spielern |
+| `mp/core.js` | **Kern** (seit v3.1.0 aus `game-server.js` herausgelöst, läuft in Node und im Browser): siehe nächste Zeile; `createCore(MP, { rooms, single })`, Transport von außen (`accept`, `message`, `closed`, `tick`) |
+| `mp/game-server.js` | Node-Anbindung des Kerns (WebSocket, Verbindungen je IP, `/api/rooms`, `/api/health`). Kern: Lobbys (zwei feste: „Coburg Altstadt“ `COBURG`, „Landkreis-Tour“ `LANDKR`; eigene öffentlich/privat mit 5-stelligem Code, leer nach 2 min gelöscht), Spieler, Netz-Autos (`vid`, Besitzer, Fahrer, Mitfahrer, abgeschlossen), Uhr und Wetter je Lobby, Momentaufnahmen 20 Hz nur im Umkreis und nur Geändertes (jede Sekunde alles), grobe Orte aller für die Karte. **Schutz:** Bewegungsprüfung mit Weg-Guthaben (Lauf 12 m/s, Auto Höchsttempo × 1,3 + 6), Teleport nur über `tp` alle 2 s, Unplausibles wird verworfen und zurückgesetzt (`fix`), ab 8 Verstößen Rauswurf; Server entscheidet Einsteigen (Abstand, freier Sitz, Besitz), Explosion nur durch den Besitzer; Nachrichten-Rate (60/s), Größe, Namen/Chat bereinigt, Verbindungen je IP, Gegendruck bei langsamen Spielern |
 | `js/net.js` | `NetClient`: Verbindung, Wiederverbinden (5 Versuche), Uhrabgleich per Ping, Zustand senden (20 Hz, in Ruhe 2 Hz), andere Spieler (`Player`-Figuren, Namensschild-Sprite) und Autos (`Vehicle` mit `remote`) zwischen zwei Aufnahmen gleitend darstellen (≤ 250 ms vorausrechnen), Einsteigen/Mitfahren/Besitzwechsel, Chat, Spielerliste; `NetLobby`: Lobby-Fenster |
+| `js/net-p2p.js` | Peer-to-Peer (seit v3.1.0): `P2PSocket` verhält sich wie ein WebSocket; Lobby = feste Peer-Kennung `gtcoburg-v1-CODE`, erst verbinden, sonst Gastgeber werden (gleichzeitige Versuche klärt die Kennungs-Vergabe), Lobby-Liste durch Abfrage der festen Lobbys, Gegendruck über `bufferedAmount`, Kennung beim Schließen des Tabs freigeben |
+| `js/mp-host-worker.js` | Gastgeber: Kern in einem Worker-Thread (taktet auch bei verdecktem Tab mit 20 Hz) |
 | `js/mp-config.js` | Adresse eines entfernten Mehrspieler-Servers (leer = gleicher Server) |
 | `tools/mp-test.js`, `tools/mp-bot.js`, `tools/mp-load.js` | Protokolltest (27 Prüfungen), Test-Mitspieler (läuft/fährt im Kreis, `--drive`), Lasttest mit N Bots |
 
@@ -235,6 +244,18 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.1.0 (24.10.2026): **Online auch auf Vercel.** Auf `gta-coburg.vercel.app` kam „Keine Verbindung zum Server“,
+  weil Vercel keine dauerhaften WebSocket-Verbindungen kann. Jetzt automatisch Peer-to-Peer (siehe 2), lokal bzw.
+  auf Render weiter der Node-Server. Kern nach `mp/core.js` verschoben; Verbindungs-Wächter (6 s still → neu
+  verbinden); Namensschild „(du bist Gastgeber)“.
+  - Getestet: Node-Server weiter 27/27; im Browser mit `?server=p2p` zwei Spieler: Lobby-Liste mit Belegung,
+    Gastgeber in 0,7 s, Beitritt per WebRTC in 1,2 s, Ping ≈ 10 ms, Fahren und Mitfahren, Teleport-Schummeln vom
+    Browser-Gastgeber zurückgesetzt, Gastgeber schließt den Tab → anderer Spieler übernimmt in 0,9 s, Neuankömmling
+    tritt beim neuen Gastgeber bei; ohne Parameter lokal weiter der Node-Server
+- ⚠️ Grenzen v3.1.0: Im Peer-to-Peer-Modus prüft der Browser des Gastgebers; ihm selbst muss man vertrauen. Eigene
+  (nicht feste) Lobbys sind nur per Code/Einladungslink auffindbar. Beim Gastgeber-Wechsel verschwinden abgestellte
+  Netz-Autos (gefahrene werden neu angemeldet). Abhängig vom kostenlosen PeerJS-Vermittlungsdienst.
 
 - ✅ v3.0.0 (24.10.2026): **Online-Mehrspieler.** Eigener Server ohne Abhängigkeiten (WebSocket in `server.js`),
   Lobby auf dem Startbildschirm, bis 16 Spieler je Lobby (Details: 3a „Online“, 5 `mp/…`, `js/net.js`).

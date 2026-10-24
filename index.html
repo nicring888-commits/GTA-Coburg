@@ -80,8 +80,8 @@
         <div class="lb-row"><input id="lobby-new-name" maxlength="28" placeholder="Name der Lobby"><button id="lobby-create">Erstellen</button></div>
         <label class="lb-check"><input type="checkbox" id="lobby-new-priv"> privat (nur mit Code oder Einladungslink)</label>
         <details><summary>Server</summary>
-          <div class="lb-row"><input id="lobby-server" placeholder="wss://…/mp"><button id="lobby-server-save">Übernehmen</button></div>
-          <p class="hint">Leer = derselbe Server wie diese Seite. Für Freunde im Heimnetz: <code>start-lan.bat</code>.</p>
+          <div class="lb-row"><input id="lobby-server" placeholder="automatisch"><button id="lobby-server-save">Übernehmen</button></div>
+          <p class="hint">Leer = automatisch: eigener Server dieser Seite, sonst Peer-to-Peer. Oder <code>wss://…</code> bzw. <code>p2p</code>.</p>
         </details>
       </div>
     </div>
@@ -177,6 +177,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="mp/protocol.js"></script>
 <script src="js/mp-config.js"></script>
 <script src="data/coburg.js"></script>
@@ -209,6 +210,7 @@
 <script src="js/interiors.js"></script>
 <script src="js/property.js"></script>
 <script src="js/venues.js"></script>
+<script src="js/net-p2p.js"></script>
 <script src="js/net.js"></script>
 <script src="js/game.js"></script>
 <script src="js/touch.js"></script>

@@ -32,13 +32,30 @@ class NetClient {
   }
 
   // ---------- Server-Adresse ----------
+  // ausdrücklich gesetzte Server-Adresse (?server=…, Lobby-Fenster, js/mp-config.js) oder '' (dann automatisch)
   static serverUrl() {
     const q = new URLSearchParams(location.search).get('server');
     let s = q || (() => { try { return localStorage.getItem(NET_SERVER_KEY); } catch (e) { return null; } })() || window.MP_SERVER || '';
-    if (!s) {
-      if (!/^https?:$/.test(location.protocol)) return '';
-      s = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+    if (!s) return '';
+    if (s.trim().toLowerCase() === 'p2p') return 'p2p';
+    return NetClient.wsUrl(s);
+  }
+  // Verbindungsweg wählen: gesetzte Adresse; sonst der Server dieser Seite, wenn er Mehrspieler kann (node server.js);
+  // sonst (statisches Hosting wie Vercel, GitHub Pages) Peer-to-Peer
+  static async resolveUrl() {
+    const set = NetClient.serverUrl();
+    if (set) return set;
+    if (/^https?:$/.test(location.protocol)) {
+      try {
+        const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 2000);
+        const r = await fetch('/api/health', { cache: 'no-store', signal: ctl.signal });
+        clearTimeout(t);
+        if (r.ok && (await r.text()).trim() === 'ok') return NetClient.wsUrl(location.host);
+      } catch (e) { /* kein eigener Server */ }
     }
+    return 'p2p';
+  }
+  static wsUrl(s) {
     s = s.trim().replace(/\/+$/, '');
     if (/^https?:\/\//.test(s)) s = s.replace(/^http/, 'ws');
     if (!/^wss?:\/\//.test(s)) s = (location.protocol === 'https:' ? 'wss://' : 'ws://') + s;
@@ -48,6 +65,7 @@ class NetClient {
   static httpUrl(wsUrl, path) { return wsUrl.replace(/^ws/, 'http').replace(new RegExp(MP.PATH + '$'), path); }
 
   async listRooms(url) {
+    if (url === 'p2p') return P2P.listRooms();
     const r = await fetch(NetClient.httpUrl(url, '/api/rooms'), { cache: 'no-store' });
     if (!r.ok) throw new Error('Server antwortet nicht');
     return r.json();
@@ -59,21 +77,23 @@ class NetClient {
     this.url = url; this.joinReq = join; this.wantOnline = true;
     return new Promise((resolve, reject) => {
       let done = false, joined = false; // done: Versprechen erledigt, joined: in der Lobby angekommen
-      const ws = new WebSocket(url);
+      // Peer-to-Peer: Lobby-Code bestimmt den Gastgeber (neue Lobby: neuer Code)
+      const ws = url === 'p2p' ? new P2PSocket(join.code || (join.create ? P2P.newCode() : 'COBURG')) : new WebSocket(url);
       this.ws = ws;
       const fail = msg => { if (!done) { done = true; reject(new Error(msg)); try { ws.close(); } catch (e) { /* zu */ } } };
-      const timer = setTimeout(() => fail('Zeitüberschreitung beim Verbinden'), 8000);
+      const timer = setTimeout(() => fail('Zeitüberschreitung beim Verbinden'), url === 'p2p' ? 45000 : 8000);
       ws.onopen = () => {
         const p = this.G.pos();
         ws.send(JSON.stringify(Object.assign({ t: 'join', v: MP.PROTOCOL, look: this.G.look(), x: p.x, y: p.y, z: p.z }, join)));
       };
-      ws.onerror = () => fail('Keine Verbindung zum Server (' + url + ')');
+      ws.onerror = e => fail(url === 'p2p' ? 'Peer-to-Peer: ' + ((e && e.message) || 'keine Verbindung') : 'Keine Verbindung zum Server (' + url + ')');
       ws.onclose = e => {
         clearTimeout(timer);
         if (!joined) { fail(e.reason || 'Verbindung abgelehnt'); return; }
         if (this.ws === ws) this.lost(e.code === 4000 ? null : 'Verbindung verloren');
       };
       ws.onmessage = e => {
+        this.lastMsg = performance.now();
         let m; try { m = JSON.parse(e.data); } catch (err) { return; }
         if (!done) {
           if (m.t === 'error') { fail(m.msg); return; }
@@ -90,6 +110,8 @@ class NetClient {
     this.id = m.id; this.name = m.name; this.color = m.color; this.room = m.room; this.max = m.max;
     this.offset = m.n - performance.now();
     this.retries = 0;
+    this.lastMsg = performance.now();
+    this.isHost = !!(this.ws && this.ws.isHost);
     for (const p of m.players) this.addPlayer(p);
     for (const v of m.vehicles) this.addVehicle(v);
     this.applySky(m.sky, true);
@@ -127,7 +149,7 @@ class NetClient {
     if (!why || !this.wantOnline) { this.$hud.classList.add('hidden'); return; }
     // automatisch wieder verbinden (bis zu 5 Versuche, dieselbe Lobby)
     this.retries = (this.retries || 0) + 1;
-    if (this.retries > 5) {
+    if (this.retries > (this.url === 'p2p' ? 8 : 5)) {
       this.wantOnline = false;
       this.G.ui.bigMessage('OFFLINE', 3, '#e2463f', why + ' · Du spielst allein weiter');
       this.$hud.classList.add('hidden');
@@ -139,7 +161,7 @@ class NetClient {
       if (this.online || !this.wantOnline) return;
       this.connect(this.url, { name: this.joinReq.name, code }).then(() => this.G.ui.toast('Wieder verbunden', 2))
         .catch(() => this.lost('Server nicht erreichbar'));
-    }, 1000 * this.retries);
+    }, this.url === 'p2p' ? 300 + Math.random() * 1200 * this.retries : 1000 * this.retries);
   }
 
   send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); }
@@ -415,6 +437,7 @@ class NetClient {
   update(dt, L) {
     if (!this.online) return;
     const t = performance.now();
+    if (this.ws && this.lastMsg && t - this.lastMsg > 6000) { const ws = this.ws; this.ws = null; this.lastMsg = 0; try { ws.close(4003, 'stumm'); } catch (e) { /* zu */ } this.lost('Verbindung verloren'); return; }
     // eigener Zustand
     this.sendT -= dt * 1000;
     const st = this.stateMsg(L);
@@ -655,7 +678,7 @@ class NetClient {
 
   updateBadge() {
     if (!this.online) { this.$badge.textContent = ''; return; }
-    this.$badge.innerHTML = `<i></i>${this.room.name.replace(/[&<>]/g, '')} · ${this.players.size + 1}/${this.max} · <span id="mp-ping">${Math.round(this.rtt)} ms</span> · <kbd>T</kbd> Chat · <kbd>Tab</kbd> Spieler`;
+    this.$badge.innerHTML = `<i></i>${this.room.name.replace(/[&<>]/g, '')}${this.isHost ? ' (du bist Gastgeber)' : ''} · ${this.players.size + 1}/${this.max} · <span id="mp-ping">${Math.round(this.rtt)} ms</span> · <kbd>T</kbd> Chat · <kbd>Tab</kbd> Spieler`;
   }
   tickHud() {
     if (!this.online) return;
@@ -674,7 +697,7 @@ class NetLobby {
     this.net = net; this.onJoined = onJoined;
     const $ = id => document.getElementById(id);
     this.$ = $;
-    this.url = NetClient.serverUrl();
+    this.url = '';
     $('mp-btn').onclick = () => this.open();
     $('lobby-back').onclick = () => this.close();
     $('lobby-refresh').onclick = () => this.refresh();
@@ -684,7 +707,7 @@ class NetLobby {
     $('lobby-server-save').onclick = () => {
       const v = $('lobby-server').value.trim();
       try { if (v) localStorage.setItem(NET_SERVER_KEY, v); else localStorage.removeItem(NET_SERVER_KEY); } catch (e) { /* ohne Speicher */ }
-      this.url = NetClient.serverUrl(); this.refresh();
+      this.url = ''; this.refresh();
     };
     let name = '';
     try { name = localStorage.getItem(NET_NAME_KEY) || ''; } catch (e) { /* ohne Speicher */ }
@@ -700,8 +723,9 @@ class NetLobby {
   open() {
     this.$('start').classList.add('hidden');
     this.$('lobby').classList.remove('hidden');
-    this.$('lobby-server').value = this.url || '';
-    if (!this.url) { this.status('Online spielen geht nur über den Server: <code>node server.js</code> starten und http://127.0.0.1:8175 öffnen.', true); return; }
+    let set = '';
+    try { set = localStorage.getItem(NET_SERVER_KEY) || ''; } catch (e) { /* ohne Speicher */ }
+    this.$('lobby-server').value = set;
     this.refresh();
     if (!this.$('lobby-name').value) this.$('lobby-name').focus();
   }
@@ -712,6 +736,7 @@ class NetLobby {
   async refresh() {
     const ul = this.$('lobby-rooms');
     ul.innerHTML = '<li class="muted">Suche Lobbys …</li>';
+    if (!this.url) this.url = await NetClient.resolveUrl();
     try {
       const r = await this.net.listRooms(this.url);
       if (r.protocol !== MP.PROTOCOL) { this.status('Der Server hat eine andere Spielversion. Bitte die Seite neu laden.', true); return; }
@@ -727,17 +752,19 @@ class NetLobby {
         li.appendChild(b); ul.appendChild(li);
       }
       if (!r.rooms.length) ul.innerHTML = '<li class="muted">Keine öffentlichen Lobbys</li>';
-      this.status(`Server verbunden · ${r.online} online`);
+      this.status(r.p2p ? `Peer-to-Peer (ohne eigenen Server) · ${r.online} online · Wer eine leere Lobby betritt, wird Gastgeber`
+        : `Server verbunden · ${r.online} online`);
     } catch (e) {
       ul.innerHTML = '';
-      this.status('Kein Mehrspieler-Server erreichbar (' + this.url.replace(/[<>]/g, '') + '). Läuft <code>node server.js</code>?', true);
+      this.status(this.url === 'p2p' ? 'Peer-to-Peer nicht verfügbar: ' + String(e.message).replace(/[<>]/g, '')
+        : 'Kein Mehrspieler-Server erreichbar (' + this.url.replace(/[<>]/g, '') + '). Läuft <code>node server.js</code>?', true);
     }
   }
 
   async join(how) {
     const name = this.$('lobby-name').value.trim();
     if (name.length < 2) { this.status('Bitte zuerst einen Namen eingeben (mindestens 2 Zeichen).', true); this.$('lobby-name').focus(); return; }
-    this.status('Verbinde …');
+    this.status(this.url === 'p2p' ? 'Verbinde (Peer-to-Peer) …' : 'Verbinde …');
     for (const b of this.$('lobby').querySelectorAll('button')) b.disabled = true;
     try {
       const w = await this.net.connect(this.url, Object.assign({ name }, how));

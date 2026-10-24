@@ -23,6 +23,8 @@ three.js wird über das CDN jsDelivr geladen, dafür braucht es eine Internetver
 beitreten, schnell beitreten, eigene (private) Lobby erstellen oder mit Code beitreten. Bis zu 16 Spieler je Lobby
 sehen sich, fahren zusammen, fahren beieinander mit (`E`), chatten (`T`) und teilen Uhrzeit und Wetter.
 
+- Ohne eigenen Server (Vercel, GitHub Pages): automatisch Peer-to-Peer über WebRTC; der erste Spieler einer Lobby
+  ist Gastgeber, geht er, übernimmt ein anderer.
 - Heimnetz: `node server.js --lan` (Windows: `start-lan.bat`), Freunde öffnen die angezeigte Adresse.
 - Internet (kostenlos): Repository auf [Render](https://render.com) als Blueprint verbinden (`render.yaml`).
 - Test: `node tools/mp-test.js`, Testmitspieler: `node tools/mp-bot.js --x … --z … --drive`.
