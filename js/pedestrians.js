@@ -198,6 +198,33 @@ class Pedestrians {
     }
   }
 
+  // Treffer (Kugel, Schlag): Leben abziehen, bei 0 umfallen, sonst weglaufen. dx, dz: Schussrichtung.
+  // Gibt true zurück, wenn die Person dabei umgefallen ist.
+  hurt(p, dmg, dx = 0, dz = 0) {
+    if (p.state === 'down') return false;
+    p.hp = (p.hp ?? 100) - dmg;
+    if (p.hp > 0) {
+      p.state = 'flee'; p.timer = 3 + this.rnd() * 3; p.vx = dx; p.vz = dz;
+      const l = Math.hypot(p.vx, p.vz) || 1; p.vx /= l; p.vz /= l;
+      return false;
+    }
+    p.state = 'down'; p.timer = 0; p.buddy = null;
+    p.vx = dx * 1.5; p.vz = dz * 1.5;
+    p.heading = Math.atan2(-dx, -dz);
+    for (const o of this.list) if (o.buddy === p) o.buddy = null;
+    return true;
+  }
+
+  // Druckwelle: alle im Umkreis r umwerfen, Anzahl zurückgeben
+  knockDown(x, z, r) {
+    let n = 0;
+    for (const p of this.list) {
+      const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz);
+      if (d < r && this.hurt(p, 200, dx / (d || 1) * 3, dz / (d || 1) * 3)) n++;
+    }
+    return n;
+  }
+
   // nach der Flucht wieder auf den nächsten Weg
   reattach(p) {
     const list = this.segGrid.query(p.x, p.z, 25, this._q);

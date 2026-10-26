@@ -21,6 +21,7 @@ class Player {
     part(F.leg, pants, 0, -0.43, 0, this.legL); part(F.leg, pants, 0, -0.43, 0, this.legR);
     part(F.torso, shirt, 0, 1.23, 0);
     this.armL = joint(0.33, 1.5, 0); this.armR = joint(-0.33, 1.5, 0);
+    this.armL.rotation.order = this.armR.rotation.order = 'YXZ'; // erst nach vorn heben, dann zur Mitte drehen (Zielen)
     part(F.arm, shirt, 0, -0.27, 0, this.armL); part(F.arm, shirt, 0, -0.27, 0, this.armR);
     part(F.head, skin, 0, 1.73, 0);
     part(F.hair, hair, 0, 1.92, 0);
@@ -35,6 +36,18 @@ class Player {
     this.x = 0; this.z = 0; this.y = 0; this.vy = 0;
     this.heading = 0; this.walkPhase = 0; this.onGround = true; this.moveSpeed = 0;
     this._col = {};
+    // Waffenhaltung (js/weapons.js): aim 0 = Arme frei, 1 = einhändig, 2 = beidhändig; pitch hebt die Arme; swing = Schlag 1 → 0
+    this.pose = { aim: 0, pitch: 0, swing: 0 };
+    this.weapon = null; this.gun = null;
+  }
+
+  // Waffe in die rechte Hand (Modell aus weaponModel in js/weapons.js), null = keine
+  setWeapon(id) {
+    if (id === this.weapon) return;
+    this.weapon = id;
+    if (this.gun) { this.armR.remove(this.gun); this.gun = null; }
+    const m = id && typeof weaponModel === 'function' ? weaponModel(id) : null;
+    if (m) { m.position.set(0, -0.56, 0.04); m.rotation.x = Math.PI / 2; this.armR.add(m); this.gun = m; }
   }
 
   set visible(v) { this.group.visible = v; }
@@ -107,6 +120,12 @@ class Player {
     const air = this.onGround ? 0 : 0.5;
     this.legL.rotation.x = sw - air; this.legR.rotation.x = -sw + air * 0.3;
     this.armL.rotation.x = -sw * 0.9; this.armR.rotation.x = sw * 0.9;
+    this.armL.rotation.y = this.armR.rotation.y = 0;
+    const P = this.pose;
+    if (P.aim) {
+      this.armR.rotation.x = -Math.PI / 2 - P.pitch; this.armR.rotation.y = 0.12;
+      if (P.aim === 2) { this.armL.rotation.x = -Math.PI / 2 - P.pitch + 0.15; this.armL.rotation.y = -0.62; }
+    } else if (P.swing > 0) this.armR.rotation.x = -2.3 * Math.sin(P.swing * Math.PI) - 0.2;
     g.position.y += Math.abs(Math.cos(this.walkPhase)) * 0.05 * Math.min(1, this.moveSpeed / 4);
   }
 }

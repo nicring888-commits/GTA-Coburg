@@ -2,7 +2,7 @@
 'use strict';
 
 // Farben der Orte auf Minikarte und Stadtplan
-const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066', food: '#ff8a3d', store: '#ff5fa2' };
+const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066', food: '#ff8a3d', store: '#ff5fa2', guns: '#e2463f' };
 
 class UI {
   constructor(world) {

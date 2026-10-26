@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.2.0 „GTA Coburg – Online überall“ · **Letzte Aktualisierung:** 24.10.2026
+**Version:** 3.3.0 „GTA Coburg – Waffen“ · **Letzte Aktualisierung:** 26.10.2026
 
 ---
 
@@ -69,6 +69,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 |---|---|---|
 | Bewegen | `W A S D` (relativ zur Kamera) | `W`/`S` Gas, Bremse, rückwärts · `A`/`D` lenken |
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
+| Waffen | `Linke Maustaste` schießen, schlagen, Granate werfen · `Rechte Maustaste` zielen (Schulterkamera, Fadenkreuz, Zoom) · `1`–`7` oder `Q` Waffe wechseln · `R` nachladen | `Linke Maustaste` Drive-by (Pistole, Maschinenpistole) |
 | Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
 | Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
@@ -80,6 +81,10 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Autos | Kleinwagen (144 km/h), Pkw (158 km/h), Kombi (166 km/h), Kleinbus (144 km/h, sehr robust), Pick-up (162 km/h), Geländewagen (169 km/h, fast so robust wie ein Streifenwagen), Cabrio (194 km/h, offen), Sportwagen (216 km/h, schnell beschleunigend), Taxi (elfenbein mit Dachschild), Streifenwagen (silber-blau, Blaulicht, „POLIZEI“). Jedes Auto im Verkehr lässt sich mit `E` klauen. Autos nehmen Schaden: erst Rauch, unter 25 % weniger Leistung, bei 0 % brennt das Auto und explodiert nach 4,5 s (Druckwelle beschädigt Autos und verletzt Fußgänger). Wracks qualmen und bleiben eine Weile liegen |
 | Fahndung (★ 1–5) | Autodiebstahl, wenn ein Polizist oder ein Zeuge (30 %) es sieht · Unfall vor den Augen der Polizei · Polizeiauto rammen · Streifenwagen klauen (mind. 2 ★) · Polizist anfahren (mind. 2 ★) · Streifenwagen zerstören. Je länger die Polizei dich sieht, desto mehr Sterne |
 | Polizei | 2/3/4/5/7 Streifenwagen je Sternzahl; zuerst werden Streifen aus dem Verkehr alarmiert, sonst kommen neue außer Sicht hinzu. Sie fahren mit der normalen Fahrphysik über das Straßennetz (kürzester Weg), rammen aus der Nähe, halten neben einem langsamen Spieler an. Tempo wächst mit den Sternen (1 ★ ≈ 135 km/h, 5 ★ ≈ 175 km/h). Ab 3 ★ Straßensperren vor dem Spieler. Martinshorn (Tatü-tata), Blaulicht, blinkende Punkte auf der Minikarte |
+| Waffen (seit v3.3.0) | Faust, Baseballschläger, Pistole, Maschinenpistole, Schrotflinte (8 Schrotkugeln), Sturmgewehr (Zoom beim Zielen), Granaten (fliegen im Bogen, prallen ab, explodieren nach 2,1 s). Magazin und Vorrat, Nachladen, leer → Klicken und Wechsel auf die nächste Waffe mit Munition. Ohne Zielen rastet der Schuss auf das nächste Ziel im Kegel von ≈ 30° ein (grüner Pfeil über Passanten, roter über Polizisten; auf Touch-Geräten immer). Treffer: Passanten (Leben 100, fallen um, lassen € 5–40 fallen), Polizisten (fallen um, lassen eine Pistole mit 12 Schuss fallen), Autos (Schaden je Kugel bis zum Brand und zur Explosion), Wände und Boden (Funken, Staub). Mündungsfeuer mit Licht, Leuchtspuren, Blut, Knall je Waffe. Schüsse scheuchen Passanten im Umkreis von 35 m auf. Drive-by mit Pistole und MP aus dem eigenen Auto und als Mitfahrer. Waffen und Munition bleiben im Spielstand (`weapons`, `weapon`, `armor`) |
+| Waffenladen (rot, seit v3.3.0) | Hindenburgstraße, Ketschendorfer Straße, im Landkreis Neustadt. Zu Fuß `F`: Baseballschläger € 150, Pistole € 600 (36 Schuss), Maschinenpistole € 1.800 (90), Schrotflinte € 2.500 (18), Sturmgewehr € 4.500 (90), 3 Granaten € 450; Munition nachkaufen; Schutzweste € 500 (fängt Schaden ab, blauer Balken) |
+| Straftaten mit Waffen | Schüsse vor der Polizei (1 ★), Passant niedergeschossen (vor der Polizei sicher, sonst 50 %), Polizist getroffen (mind. 2 ★), Polizist niedergeschossen (mind. 3 ★), auf Streifenwagen geschossen (mind. 2 ★), Granate mit Opfern (mind. 2 ★). **Verhaftet:** alle Waffen und die Weste werden beschlagnahmt; **Erledigt:** Waffen bleiben, Weste ist weg |
+| Polizei schießt (seit v3.3.0) | Polizisten zu Fuß tragen Pistolen. Ab 3 ★, oder ab 2 ★ wenn der Spieler eine Schusswaffe zieht bzw. in den letzten 30 s auf die Polizei geschossen hat, bleiben sie unter 24 m mit freier Sicht stehen und schießen alle 0,75–1,45 s (Trefferchance sinkt mit Entfernung und Tempo, 6 Leben zu Fuß bzw. Schaden am Auto). Nah genug und der Spieler steht still: Festnahme wie bisher |
 | Festnahme | Steht man still, steigt ein Polizist aus und rennt hinterher (etwas langsamer als der rennende Spieler). Erwischt er dich, füllt sich der Balken „Festnahme“ → **VERHAFTET**, Strafe € 100 + 100 je Stern, Neustart am Bahnhof |
 | Entkommen | Außer Sicht der Polizei bleiben und sich von der Stelle entfernen, an der sie dich zuletzt gesehen hat (Sterne blinken). Nach 8 s + 3,5 s je Stern ist die Fahndung vorbei: **ENTKOMMEN**, Belohnung € 150 je Stern |
 | Leben | Zu Fuß verletzen dich Autos (ab 18 km/h) und Explosionen; nach 8 s ohne Treffer heilt man langsam. Bei 0 oder im explodierenden Auto: **ERLEDIGT**, Krankenhaus € 100, Neustart am Bahnhof |
@@ -156,6 +161,7 @@ und müssen dort bleiben.
 | `js/places.js` | Lackierereien und Autohändler (Lage, Säulen, Schilder) |
 | `js/property.js` | Besitz (seit v1.2.0): Wohnungsliste, Haustür an der nächsten Fassade (`placeHome`/`facade`), Autohäuser, Garage mit eigenen Autos (`deliver`/`stow`/`carSold`), gemeinsames Menü (`#menu`), Betreten/Verlassen, Interaktionen und Licht drinnen, Speicherstand |
 | `js/interiors.js` | Innenräume (`Room`): Raumhülle, Fenster mit Ausblick, Möbel aus Quadern mit gemalten Texturen, Kollision als Rechtecke (`collide`, `walker` ersetzt die Welt-Abfragen für die Spielfigur), Kamera innerhalb der Wände (`clampCam`), Stellen zum Benutzen; drei Grundrisse `buildSmallRoom`/`buildModernRoom`/`buildLuxuryRoom` |
+| `js/weapons.js` | Waffen (seit v3.3.0): `WEAPONS` (Werte je Waffe), `WEAPON_SHOPS`, Umrisse fürs HUD, 3D-Modelle (`weaponModel`, in der rechten Hand über `Player.setWeapon`), `Weapons`: Auswahl, Nachladen, Schießen (freies Zielen aus der Kamera oder Zielhilfe `pickTarget`), Strahltest `ray` gegen Passanten und Polizisten (Zylinder), Autos (Quader) und Häuser/Boden (`wallHit`, Schritte von 0,5 m), Wirkung `applyHit`, Nahkampf, Granaten, Pickups (Geld, Waffen), Leuchtspuren, Mündungsfeuer, Schüsse der Polizei (`npcShot`), Waffenladen-Menü, Waffenanzeige, Fadenkreuz und Zielmarkierung |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
@@ -250,6 +256,22 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.3.0 (26.10.2026): **Waffensystem wie in GTA** (`js/weapons.js`, siehe 3 und 3a).
+  - Sieben Waffen mit Magazin, Vorrat und Nachladen; Waffenanzeige mit Umriss, Name und Munition unter dem Lebensbalken,
+    Schutzweste als blauer Balken. Zielen mit der rechten Maustaste: Kamera über der rechten Schulter, Fadenkreuz
+    (wird bei Treffern rot), beim Sturmgewehr Zoom; die Figur hebt die Waffe (ein- bzw. beidhändig) und schaut in
+    Zielrichtung. Ohne Zielen: Zielhilfe auf das nächste Ziel vor dem Spieler. Touch: Knöpfe „Schuss“ und „Waffe“.
+  - Die Polizei schießt zurück (`Police`: `shootRange`, `shotDamage`, `hostileT`, `shootOfficer`, `downOfficer`,
+    `knockDown`). Polizisten und Passanten haben Leben (`Pedestrians.hurt`, `knockDown`). `Vehicle.hit` zieht Schaden
+    direkt ab (Kugeln, Schläger); `damage` nutzt es weiter für Aufpralle.
+  - `game.js`: Maustasten als `keys.Mouse0`/`keys.Mouse2` (erster Klick fängt nur die Maus ein, nachgemachte Klicks
+    nach Fingertipps zählen nicht), `aimCamera`, gemeinsame Druckwelle `blast` für explodierende Autos und Granaten (wirft
+    jetzt auch Passanten und Polizisten um), `hurtPlayer` mit Grund, ohne Stoß und mit Schutzweste.
+  - Getestet (Chromium, Konsole): Laden kaufen (alle Waffen, Weste), Pistole fällt einen Passanten nach 3 Treffern
+    (Geld fällt), Sturmgewehr bringt ein Auto in 17 Schuss zum Brennen und Explodieren, Granate fliegt und explodiert,
+    bei 3 ★ steigen Polizisten aus und schießen (13 Schüsse, 8 Treffer), erschossener Polizist → 4 ★ und eine Pistole
+    am Boden, Verhaftung nimmt die Waffen. Spiellogik beim Zielen ≈ 0,2 ms pro Bild zusätzlich.
 
 - ✅ v3.2.0 (24.10.2026): **Fahrphysik im Arcade-Stil: kein Wegrutschen mehr.** Bisher brach das Heck schon bei
   Vollgas in der Kurve aus (Power-Slide) und die Reifen griffen danach nur langsam wieder. Jetzt (`Vehicle.update`):
@@ -715,6 +737,10 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [x] ~~Umland: Fußgänger, Laternen und Läden in den Orten~~ Erledigt in v2.1.0 (Wohnungen dort fehlen noch)
 - [ ] Schwimmen statt Zurückschieben am Wasser
 - [ ] Polizeihubschrauber ab 4 Sternen
+- [ ] Waffen online: Schüsse, Treffer und Waffe in der Hand an die Mitspieler senden (heute sieht jeder nur seine eigenen),
+  Spieler gegen Spieler wahlweise je Lobby
+- [ ] Waffen weiter: Polizei schießt aus fahrenden Streifenwagen (ab 4 ★), Scharfschützengewehr, Raketenwerfer,
+  Waffen-Pickups an versteckten Orten, Gangs, die zurückschießen
 - [ ] Fußgänger: an Zebrastreifen/Ampeln über die Straße, einander ausweichen, Verkehr hält für sie an
 - [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)
 - [ ] Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge

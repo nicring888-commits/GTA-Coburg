@@ -7,11 +7,13 @@ const WANTED = {
   lose: s => 8 + s * 3.5,                    // so lange ungesehen, dann ist die Fahndung vorbei
   seeRange: 110,                             // Sichtweite der Polizei (mit freier Sicht)
   officerSpeed: 7.6,                         // zu Fuß etwas langsamer als der rennende Spieler (8,5)
+  shootRange: 24,                            // Polizisten schießen ab 3 Sternen (ab 2, wenn der Spieler bewaffnet ist)
+  shotDamage: 6, shotCarDamage: 3,           // je Treffer: Leben zu Fuß bzw. Schaden am Auto
 };
 const OFFICER_LOOK = { shirt: '#24467e', pants: '#17202f', cap: '#1a2b4d', hair: '#2a2018' };
 
 class Police {
-  // ctx: { world, scene, nav, traffic, fx, ui, onBusted(), others() }
+  // ctx: { world, scene, nav, traffic, fx, ui, onBusted(), others(), armed(), onShot(treffer, polizist), onDown(polizist) }
   constructor(ctx) {
     Object.assign(this, ctx);
     this.heat = 0;            // Fahndungswert; Sterne = ganzzahliger Anteil
@@ -24,6 +26,7 @@ class Police {
     this.costs = null;
     this.time = 0;
     this.sirenDist = Infinity;
+    this.hostileT = 0;        // so lange nach Schüssen auf die Polizei wird ab 2 Sternen zurückgeschossen
   }
 
   get stars() { return Math.min(5, Math.floor(this.heat)); }
@@ -81,7 +84,7 @@ class Police {
 
   // Fahndung beenden; Einheiten fahren ohne Blaulicht weg
   clear() {
-    this.heat = 0; this.unseen = 0; this.bust = 0;
+    this.heat = 0; this.unseen = 0; this.bust = 0; this.hostileT = 0;
     for (const u of this.units) { u.mode = 'leave'; u.car.setSiren(false); u.driver.path = null; u.t = 0; }
     for (const o of this.officers) o.giveUp = true;
   }
@@ -91,7 +94,7 @@ class Police {
     for (const u of this.units.slice()) this.removeUnit(u);
     for (const o of this.officers) this.disposeFigure(o.fig);
     this.officers.length = 0;
-    this.heat = 0; this.unseen = 0; this.bust = 0;
+    this.heat = 0; this.unseen = 0; this.bust = 0; this.hostileT = 0;
   }
 
   disposeFigure(fig) {
@@ -234,17 +237,20 @@ class Police {
       if (wanted && u.mode === 'chase' && !u.officer && u.cool <= 0 && d < 24 && Math.abs(c.speed) < 2.5 && (!T.inCar || T.speed < 3)) {
         const fig = new Player(this.scene, OFFICER_LOOK);
         fig.runSpeed = WANTED.officerSpeed;
+        fig.setWeapon('pistol');
         const lx = Math.cos(c.heading), lz = -Math.sin(c.heading);
         let ox = c.x + lx * 1.8, oz = c.z + lz * 1.8;
         if (this.world.insideBuilding(ox, oz, 0.3)) { ox = c.x - lx * 1.8; oz = c.z - lz * 1.8; }
         fig.place(ox, oz, this.world);
-        const o = { fig, unit: u, state: 'run', t: 0, giveUp: false };
+        const o = { fig, unit: u, state: 'run', t: 0, giveUp: false, hp: 100, fireT: 0.6 + Math.random() * 0.6 };
         u.officer = o;
         this.officers.push(o);
       }
     }
 
-    // Polizisten zu Fuß
+    // Polizisten zu Fuß (bewaffnet: bleiben in Schussweite stehen und schießen)
+    this.hostileT -= dt;
+    const armed = stars >= 3 || (stars >= 2 && (this.hostileT > 0 || !!(this.armed && this.armed())));
     let near = false;
     const cars = others.concat(this.cars());
     for (let i = this.officers.length - 1; i >= 0; i--) {
@@ -263,8 +269,18 @@ class Police {
       if (d < 30) this.seen = true;
       let mx = T.x - f.x, mz = T.z - f.z;
       const reach = T.inCar ? 2.6 : 1.3;
-      if (d > reach * 0.8) { mx /= d; mz /= d; } else { mx = 0; mz = 0; }
+      const shoot = armed && d > reach && d < WANTED.shootRange && this.sees(f.x, f.z, T.x, T.z);
+      if (d > reach * 0.8 && !shoot) { mx /= d; mz /= d; } else { mx = 0; mz = 0; }
+      if (shoot) f.heading = Math.atan2(T.x - f.x, T.z - f.z);
+      f.pose.aim = shoot ? 1 : 0;
       f.update(dt, { x: mx, z: mz, run: true, jump: false }, this.world, T.inCar ? cars.filter(c => c !== T.car) : cars);
+      o.fireT -= dt;
+      if (shoot && o.fireT <= 0) {
+        o.fireT = 0.75 + Math.random() * 0.7;
+        // trifft seltener auf Entfernung und bei schnellem Ziel
+        const hit = Math.random() < U.clamp(0.62 - d * 0.017 - T.speed * 0.03, 0.12, 0.6);
+        this.onShot && this.onShot(hit, f);
+      }
       if (d < reach && (!T.inCar || T.speed < 2.5)) near = true;
     }
     this.bust = U.clamp(this.bust + (near ? dt / 2.2 : -dt / 1.2), 0, 1);
@@ -289,6 +305,33 @@ class Police {
     }
   }
 
+  // Polizist liegt (angefahren, erschossen, Explosion)
+  downOfficer(o) {
+    o.state = 'down'; o.t = 0; o.fig.pose.aim = 0;
+    o.fig.group.rotation.x = -Math.PI / 2; o.fig.group.position.y += 0.2;
+    if (o.unit) { o.unit.officer = null; o.unit.cool = 8; }
+    this.onDown && this.onDown(o);
+  }
+
+  // Treffer durch den Spieler; gibt true zurück, wenn der Polizist umfällt
+  shootOfficer(o, dmg, label = 'Auf die Polizei geschossen!') {
+    if (o.state !== 'run') return false;
+    o.hp -= dmg;
+    this.hostileT = 30;
+    if (o.hp > 0) { this.crime(0.35, label, 2); return false; }
+    this.downOfficer(o);
+    this.crime(1, 'Polizist niedergeschossen!', 3);
+    return true;
+  }
+
+  // Druckwelle: Polizisten im Umkreis umwerfen
+  knockDown(x, z, r) {
+    let n = 0;
+    for (const o of this.officers) if (o.state === 'run' && Math.hypot(o.fig.x - x, o.fig.z - z) < r) { this.downOfficer(o); n++; }
+    if (n) { this.hostileT = 30; this.crime(1, 'Polizist verletzt!', 3); }
+    return n;
+  }
+
   // Spieler fährt mit dem Auto in einen Polizisten
   hitOfficers(car) {
     if (Math.abs(car.speed) < 5) return;
@@ -298,9 +341,7 @@ class Police {
       const dx = o.fig.x - car.x, dz = o.fig.z - car.z;
       const lf = dx * fx + dz * fz, ll = dx * fz - dz * fx;
       if (Math.abs(lf) < CAR.length / 2 + 0.5 && Math.abs(ll) < CAR.width / 2 + 0.5) {
-        o.state = 'down'; o.t = 0;
-        o.fig.group.rotation.x = -Math.PI / 2; o.fig.group.position.y += 0.2;
-        if (o.unit) { o.unit.officer = null; o.unit.cool = 8; }
+        this.downOfficer(o);
         this.crime(1, 'Polizist angefahren!', 2);
       }
     }
