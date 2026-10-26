@@ -469,8 +469,14 @@ class Vehicle {
   // Schaden aus einer Aufprallgeschwindigkeit (m/s): Rempler bis ≈ 25 km/h kosten nichts, ein Frontalaufprall
   // mit 100 km/h etwa ein Fünftel
   damage(v) {
-    if (v < 7 || this.wrecked) return;
-    this.health -= (v - 7) * 1.0 / this.spec.armor;
+    if (v < 7) return;
+    this.hit(v - 7);
+  }
+
+  // Schaden direkt in Prozentpunkten (Kugeln, Schläge), geteilt durch die Robustheit
+  hit(amount) {
+    if (this.wrecked) return;
+    this.health -= amount / this.spec.armor;
     if (this.health <= 0 && !this.burning) { this.health = 0; this.burning = 4.5; }
     // Lack wird mit dem Schaden dunkler und matter
     const f = 0.45 + 0.55 * U.clamp(this.health / 100, 0, 1);

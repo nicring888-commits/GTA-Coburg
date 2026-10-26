@@ -30,6 +30,8 @@
       <button data-key="KeyH" hold class="drive" id="t-horn">♪<small>Hupe</small></button>
       <button data-key="KeyC" class="drive" id="t-cam">◎<small>Kamera</small></button>
       <button data-key="KeyR" class="drive" id="t-flip">⟳<small>Aufricht.</small></button>
+      <button data-key="Mouse0" hold id="t-fire">✸<small>Schuss</small></button>
+      <button data-key="KeyQ" id="t-wpn">⇄<small>Waffe</small></button>
     </div>
     <div id="t-top">
       <button data-key="KeyM">🗺</button>

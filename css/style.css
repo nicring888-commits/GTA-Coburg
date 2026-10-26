@@ -378,3 +378,43 @@ body.touch #bust { bottom: 290px; }
   #mp-badge { top: auto; bottom: 6px; font-size: 11px; }
   #mp-badge kbd { display: none; }
 }
+
+/* ---------- Waffen (js/weapons.js) ---------- */
+#weapon { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+#weapon.pop { animation: wppop .25s ease-out; }
+@keyframes wppop { from { transform: scale(1.18); } to { transform: none; } }
+#wp-icon { width: 58px; height: 29px; fill: #f2efe6; filter: drop-shadow(0 1px 1px #000) drop-shadow(0 0 3px rgba(0,0,0,0.7)); }
+#wp-text { text-align: right; line-height: 1.1; }
+#wp-name { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #d9dce2; text-shadow: 0 1px 2px #000; }
+#wp-ammo { font: 400 19px/1.05 Impact, "Arial Black", sans-serif; color: #fff; letter-spacing: 0.5px; text-shadow: 0 1px 0 #000, 0 0 5px rgba(0,0,0,0.8);
+  font-variant-numeric: tabular-nums; min-height: 4px; }
+#weapon.empty #wp-ammo { color: #ff6b6b; }
+#armor-bar { background: #4aa3ff !important; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none; }
+#crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000, 0 0 1px #000; }
+#crosshair::before { left: 12px; top: 0; width: 2px; height: 26px; }
+#crosshair::after { top: 12px; left: 0; height: 2px; width: 26px; }
+#crosshair.hit::before, #crosshair.hit::after { background: #ff4040; }
+#crosshair.hit { transform: rotate(45deg) scale(0.8); }
+#aimlock { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+#aimlock::before { content: ''; position: absolute; left: -8px; top: -14px; border: 8px solid transparent; border-top: 12px solid #7ee36f;
+  filter: drop-shadow(0 0 2px #000); }
+#aimlock.cop::before { border-top-color: #ff4040; }
+.menu-panel.theme-guns { --acc: #e2463f; }
+.mn-badge.t-guns { background: #e2463f; color: #fff; }
+.gn-row { display: grid; grid-template-columns: 70px 1fr 170px auto; gap: 14px; align-items: center; background: rgba(255,255,255,0.05);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.gn-ico { width: 64px; height: 32px; fill: #e9e4d8; }
+.gn-stats .mn-stat { margin: 2px 0; }
+.gn-buy .mn-btn { white-space: nowrap; }
+#landmarks button.guns { border-left: 4px solid #e2463f; }
+@media (max-width: 760px) {
+  .gn-row { grid-template-columns: 54px 1fr; }
+  .gn-stats { display: none; }
+  .gn-buy { grid-column: 1 / -1; }
+  #wp-icon { width: 46px; height: 23px; }
+}
+/* links neben der Knopfgruppe, damit nichts über Sternen, Lebensbalken und Minikarte liegt */
+#t-fire { right: 292px; bottom: 6px; width: 82px !important; height: 82px !important; border-color: #e2463f !important; }
+#t-wpn { right: 306px; bottom: 104px; width: 54px !important; height: 54px !important; font-size: 20px !important; }
+body.touch #crosshair { display: none; }
