@@ -910,6 +910,17 @@
   function aimCamera(dt) {
     const yaw = cam.yaw, p = U.clamp(cam.pitch, -0.9, 0.9);
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -fz, rz = fx; // rechts von der Blickrichtung
+    if (weapons.sighting) {
+      // über das Visier (V): Augen der Figur, enges Sichtfeld je Waffe
+      const ex = player.x + fx * 0.12, ey = player.y + 1.6, ez = player.z + fz * 0.12;
+      cam.x = U.damp(cam.x, ex, 30, dt); cam.y = U.damp(cam.y, ey, 30, dt); cam.z = U.damp(cam.z, ez, 30, dt);
+      camera.position.set(cam.x, cam.y, cam.z);
+      tmpV.set(cam.x + fx * Math.cos(p) * 30, cam.y - Math.sin(p) * 30, cam.z + fz * Math.cos(p) * 30);
+      camera.lookAt(tmpV);
+      const sf = weapons.def.sightFov || 45;
+      if (Math.abs(camera.fov - sf) > 0.01) { camera.fov = U.damp(camera.fov, sf, 14, dt); camera.updateProjectionMatrix(); }
+      return;
+    }
     const hx = player.x, hy = player.y + 1.62, hz = player.z;
     let back = 2.3;
     let wx = hx + rx * 0.62 - fx * back * Math.cos(p), wy = hy + back * Math.sin(p) + 0.1, wz = hz + rz * 0.62 - fz * back * Math.cos(p);
@@ -1194,7 +1205,7 @@
   // für Tests in der Konsole
   window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); netStep(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };

@@ -390,12 +390,35 @@ body.touch #bust { bottom: 290px; }
   font-variant-numeric: tabular-nums; min-height: 4px; }
 #weapon.empty #wp-ammo { color: #ff6b6b; }
 #armor-bar { background: #4aa3ff !important; }
-#crosshair { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none; }
-#crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000, 0 0 1px #000; }
-#crosshair::before { left: 12px; top: 0; width: 2px; height: 26px; }
-#crosshair::after { top: 12px; left: 0; height: 2px; width: 26px; }
-#crosshair.hit::before, #crosshair.hit::after { background: #ff4040; }
-#crosshair.hit { transform: rotate(45deg) scale(0.8); }
+#crosshair { --g: 6px; --c: #fff; position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+#crosshair .t, #crosshair .dot { position: absolute; background: var(--c); box-shadow: 0 0 2px #000, 0 0 1px #000; }
+#crosshair .n, #crosshair .s { left: -1px; width: 2px; height: 9px; }
+#crosshair .w, #crosshair .e { top: -1px; height: 2px; width: 9px; }
+#crosshair .n { top: calc(-1 * var(--g) - 9px); } #crosshair .s { top: var(--g); }
+#crosshair .w { left: calc(-1 * var(--g) - 9px); } #crosshair .e { left: var(--g); }
+#crosshair .dot { left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; }
+#crosshair .ring { display: none; position: absolute; left: calc(-1 * var(--g)); top: calc(-1 * var(--g)); width: calc(2 * var(--g)); height: calc(2 * var(--g));
+  border: 2px solid var(--c); border-radius: 50%; box-sizing: border-box; box-shadow: 0 0 2px #000, inset 0 0 2px #000; text-decoration: none; }
+/* je Waffe: Pistole/MP Striche und Punkt, Schrotflinte Streukreis, Sturmgewehr Leuchtpunkt mit kurzen Strichen, Granate Kreis */
+#crosshair.w-perle .t { display: none; } #crosshair.w-perle .ring { display: block; }
+#crosshair.w-rotpunkt .dot { background: #ff3b30; box-shadow: 0 0 5px #ff3b30, 0 0 1px #000; }
+#crosshair.w-rotpunkt .n, #crosshair.w-rotpunkt .s { height: 6px; } #crosshair.w-rotpunkt .w, #crosshair.w-rotpunkt .e { width: 6px; }
+#crosshair.w-rotpunkt .n { top: calc(-1 * var(--g) - 6px); } #crosshair.w-rotpunkt .w { left: calc(-1 * var(--g) - 6px); }
+#crosshair.w-bogen .t { display: none; } #crosshair.w-bogen .ring { display: block; border-width: 1.5px; }
+#crosshair.enemy { --c: #ff4b4b; } #crosshair.car { --c: #ffb347; }
+#hitmark { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
+#hitmark::before, #hitmark::after { content: ''; position: absolute; left: -12px; top: -1px; width: 24px; height: 2px;
+  background: linear-gradient(90deg, #fff 0 35%, transparent 35% 65%, #fff 65%); filter: drop-shadow(0 0 1px #000); }
+#hitmark::before { transform: rotate(45deg); } #hitmark::after { transform: rotate(-45deg); }
+#hitmark.kill::before, #hitmark.kill::after { left: -17px; width: 34px; background: linear-gradient(90deg, #ff3030 0 38%, transparent 38% 62%, #ff3030 62%); }
+#hitmark.on { animation: hitmk .25s ease-out; }
+@keyframes hitmk { 0% { opacity: 1; transform: scale(1.35); } 60% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+#sight { position: absolute; inset: 0; pointer-events: none; }
+#sight svg { width: 100%; height: 100%; display: block; }
+#sight .sg-dot { fill: #f3ffb8; filter: drop-shadow(0 0 2px #c9ff5a); }
+#sight .sg-red { stroke: #ff3b30; filter: drop-shadow(0 0 3px #ff3b30); } #sight .sg-fill { fill: #ff3b30; }
+#sight.on-enemy .sg-dot { fill: #ff8080; filter: drop-shadow(0 0 3px #ff3030); }
+body.touch #sight { display: none; }
 #aimlock { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
 #aimlock::before { content: ''; position: absolute; left: -8px; top: -14px; border: 8px solid transparent; border-top: 12px solid #7ee36f;
   filter: drop-shadow(0 0 2px #000); }
