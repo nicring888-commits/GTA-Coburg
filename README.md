@@ -39,7 +39,7 @@ sehen sich, fahren zusammen, fahren beieinander mit (`E`), chatten (`T`) und tei
 | `W A S D` | laufen bzw. Gas, Bremse, lenken |
 | `Shift` / `Leertaste` | rennen, springen bzw. Handbremse |
 | Linke / rechte Maustaste | schießen, schlagen, werfen / zielen (im Auto: Drive-by) |
-| `1`–`7`, `Q` / `R` | Waffe wechseln / nachladen |
+| `1`–`7`, `Q` / `R` / `V` | Waffe wechseln / nachladen / über das Visier zielen |
 | `E` | einsteigen, Auto klauen, aussteigen |
 | `F` | Rennen starten/abbrechen, Auto beim Händler verkaufen, Wohnung oder Autohaus öffnen |
 | `G` | Garage: eigene Autos herholen |

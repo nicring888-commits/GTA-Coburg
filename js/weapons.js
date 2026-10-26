@@ -10,17 +10,34 @@ const WEAPONS = {
   fist:    { name: 'Faust', melee: true, dmg: 25, range: 1.7, rate: 0.42 },
   bat:     { name: 'Baseballschläger', melee: true, dmg: 55, range: 2.2, rate: 0.62, price: 150, tag: 'Leise und zuverlässig' },
   pistol:  { name: 'Pistole', dmg: 34, range: 75, rate: 0.3, mag: 12, reload: 1.2, spread: 0.012, carDmg: 6, price: 600, pack: 36, ammoPrice: 60,
-    driveBy: true, hands: 1, snd: [0.22, 2400, 0.7], tag: 'Handlich, auch aus dem Auto' },
+    driveBy: true, hands: 1, snd: [0.22, 2400, 0.7], sight: 'kimme', sightFov: 48, bloom: 0.35, tag: 'Handlich, auch aus dem Auto' },
   smg:     { name: 'Maschinenpistole', dmg: 18, range: 55, rate: 0.085, mag: 30, reload: 1.6, spread: 0.04, carDmg: 3.5, auto: true, price: 1800, pack: 90, ammoPrice: 150,
-    driveBy: true, hands: 1, snd: [0.12, 2800, 0.45], tag: 'Dauerfeuer, auch aus dem Auto' },
+    driveBy: true, hands: 1, snd: [0.12, 2800, 0.45], sight: 'kimme', sightFov: 46, bloom: 0.12, tag: 'Dauerfeuer, auch aus dem Auto' },
   shotgun: { name: 'Schrotflinte', dmg: 16, pellets: 8, range: 30, rate: 0.95, mag: 6, reload: 2.2, spread: 0.075, carDmg: 3, price: 2500, pack: 18, ammoPrice: 120,
-    hands: 2, snd: [0.5, 1400, 1.0], tag: 'Verheerend auf kurze Distanz' },
+    hands: 2, snd: [0.5, 1400, 1.0], sight: 'perle', sightFov: 52, bloom: 0.5, tag: 'Verheerend auf kurze Distanz' },
   rifle:   { name: 'Sturmgewehr', dmg: 32, range: 120, rate: 0.12, mag: 30, reload: 2, spread: 0.016, carDmg: 6, auto: true, price: 4500, pack: 90, ammoPrice: 250,
-    hands: 2, zoom: 38, snd: [0.2, 2600, 0.65], tag: 'Weit und präzise' },
-  grenade: { name: 'Granate', throw: true, rate: 1.1, price: 450, pack: 3, ammoPrice: 450, tag: 'Explodiert nach 2 Sekunden' },
+    hands: 2, zoom: 38, snd: [0.2, 2600, 0.65], sight: 'rotpunkt', sightFov: 26, bloom: 0.1, tag: 'Weit und präzise, mit Leuchtpunktvisier' },
+  grenade: { name: 'Granate', throw: true, sight: 'bogen', rate: 1.1, price: 450, pack: 3, ammoPrice: 450, tag: 'Explodiert nach 2 Sekunden' },
 };
 const WEAPON_ORDER = ['fist', 'bat', 'pistol', 'smg', 'shotgun', 'rifle', 'grenade'];
 const ARMOR_PRICE = 500;
+
+// Visier-Ansicht (Taste V beim Zielen): Blick über die Waffe, Bildmitte (0, 0) = Treffpunkt
+const SIGHT_SVG = {
+  kimme: `<defs><linearGradient id="sg-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34373d"/><stop offset="1" stop-color="#0b0c0e"/></linearGradient></defs>
+    <path d="M-200 360 L-95 170 H95 L200 360 Z" fill="#141518"/>
+    <rect x="-7" y="0" width="14" height="150" fill="url(#sg-m)"/><circle cx="0" cy="7" r="4" class="sg-dot"/>
+    <path d="M-120 0 H-19 V62 H19 V0 H120 L140 120 L170 360 H-170 L-140 120 Z" fill="url(#sg-m)"/>
+    <circle cx="-38" cy="14" r="5" class="sg-dot"/><circle cx="38" cy="14" r="5" class="sg-dot"/>`,
+  perle: `<path d="M-260 360 L-16 6 H16 L260 360 Z" fill="#17181b"/><path d="M-60 360 L-3 6 H3 L60 360 Z" fill="#2c2e33"/>
+    <path d="M-420 360 L-200 200 H200 L420 360 Z" fill="#5a3a1e"/>
+    <circle cx="0" cy="0" r="8" fill="#e8cf7a" stroke="#3a2a10" stroke-width="2"/>`,
+  rotpunkt: `<path fill-rule="evenodd" fill="rgba(6,7,9,0.94)" d="M-3000 -3000 H3000 V3000 H-3000 Z M250 0 A250 250 0 1 0 -250 0 A250 250 0 1 0 250 0 Z"/>
+    <circle r="250" fill="rgba(120,170,220,0.07)" stroke="#1d1f23" stroke-width="30"/>
+    <circle r="236" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+    <path d="M-120 360 L-60 252 H60 L120 360 Z" fill="#1d1f23"/>
+    <circle r="42" class="sg-red" fill="none" stroke-width="2.5"/><circle r="3.5" class="sg-red sg-fill"/>`,
+};
 
 // Waffenläden (Hindenburgstraße, Ketschendorfer Straße; Neustadt mit Landkreis)
 const WEAPON_SHOPS = [
@@ -47,21 +64,27 @@ function weaponModel(id) {
   if (id === 'fist' || !WEAPONS[id]) return null;
   if (!_wm.mats) {
     _wm.mats = { metal: new THREE.MeshLambertMaterial({ color: '#2b2d31' }), dark: new THREE.MeshLambertMaterial({ color: '#141518' }),
-      wood: new THREE.MeshLambertMaterial({ color: '#7a4b26' }), green: new THREE.MeshLambertMaterial({ color: '#3d4a2c' }) };
+      wood: new THREE.MeshLambertMaterial({ color: '#7a4b26' }),
+      green: new THREE.MeshLambertMaterial({ color: '#3d4a2c' }), brass: new THREE.MeshLambertMaterial({ color: '#d9b45a' }),
+      red: new THREE.MeshBasicMaterial({ color: '#ff3030', toneMapped: false }) };
   }
   const M = _wm.mats;
   if (!_wm[id]) {
     const box = (w, h, l, x, y, z, rx = 0) => { const g = new THREE.BoxGeometry(w, h, l); if (rx) g.rotateX(rx); g.translate(x, y, z); return g; };
-    const cyl = (r1, r2, l, z) => { const g = new THREE.CylinderGeometry(r1, r2, l, 10); g.rotateX(Math.PI / 2); g.translate(0, 0, z); return g; };
+    const cyl = (r1, r2, l, z, y = 0) => { const g = new THREE.CylinderGeometry(r1, r2, l, 10); g.rotateX(Math.PI / 2); g.translate(0, y, z); return g; };
+    const lens = (r, y, z) => { const g = new THREE.CircleGeometry(r, 14); g.rotateY(Math.PI); g.translate(0, y, z); return g; };
+    // Kimme (zwei Backen) und Korn
+    const irons = (y, zf, zr) => [[box(0.008, 0.016, 0.012, 0, y, zf), M.dark], [box(0.012, 0.016, 0.014, 0.013, y, zr), M.dark], [box(0.012, 0.016, 0.014, -0.013, y, zr), M.dark]];
     const parts = {
       bat: [[cyl(0.038, 0.017, 0.82, 0.3), M.wood]],
-      pistol: [[box(0.04, 0.05, 0.2, 0, 0.035, 0.06), M.metal], [box(0.034, 0.1, 0.05, 0, -0.02, -0.01, -0.25), M.dark]],
+      pistol: [[box(0.04, 0.05, 0.2, 0, 0.035, 0.06), M.metal], [box(0.034, 0.1, 0.05, 0, -0.02, -0.01, -0.25), M.dark], ...irons(0.067, 0.15, -0.03)],
       smg: [[box(0.05, 0.07, 0.3, 0, 0.04, 0.08), M.metal], [box(0.03, 0.15, 0.04, 0, -0.06, 0.12), M.dark], [box(0.034, 0.09, 0.045, 0, -0.03, -0.02, -0.2), M.dark],
-        [cyl(0.012, 0.012, 0.12, 0.28), M.dark]],
+        [cyl(0.012, 0.012, 0.12, 0.28), M.dark], ...irons(0.082, 0.21, -0.05)],
       shotgun: [[cyl(0.018, 0.018, 0.55, 0.42), M.metal], [box(0.05, 0.07, 0.26, 0, -0.01, 0.06), M.dark], [box(0.045, 0.085, 0.26, 0, -0.04, -0.19, 0.12), M.wood],
-        [box(0.04, 0.04, 0.16, 0, -0.035, 0.32), M.wood]],
+        [box(0.04, 0.04, 0.16, 0, -0.035, 0.32), M.wood], [new THREE.SphereGeometry(0.009, 8, 6).translate(0, 0.022, 0.69), M.brass]],
       rifle: [[cyl(0.013, 0.013, 0.32, 0.5), M.dark], [box(0.05, 0.08, 0.42, 0, 0.01, 0.15), M.metal], [box(0.034, 0.15, 0.055, 0, -0.1, 0.2, 0.3), M.dark],
-        [box(0.045, 0.085, 0.22, 0, -0.02, -0.17), M.dark], [box(0.03, 0.03, 0.12, 0, 0.07, 0.15), M.dark]],
+        [box(0.045, 0.085, 0.22, 0, -0.02, -0.17), M.dark], [box(0.026, 0.022, 0.07, 0, 0.06, 0.13), M.dark],
+        [cyl(0.026, 0.026, 0.085, 0.13, 0.095), M.dark], [lens(0.019, 0.095, 0.0865), M.red]],
       grenade: [[new THREE.SphereGeometry(0.065, 10, 8), M.green]],
     };
     _wm[id] = parts[id];
@@ -82,7 +105,10 @@ class Weapons {
     if (!WEAPONS[S.weapon] || !S.weapons[S.weapon]) S.weapon = 'fist';
     S.armor = S.armor || 0;
     this.cool = 0; this.reloadT = 0; this.aimHold = 0; this.aimYaw = 0; this.aimPitch = 0;
-    this.aiming = false; this.lock = null; this.lockT = 0; this.reportT = 0; this.hitT = 0; this.hintT = 0;
+    this.aiming = false; this.lock = null; this.lockT = 0; this.reportT = 0; this.hintT = 0;
+    this.bloom = 0; this.sinceShot = 9; // Aufblühen der Streuung durch Rückstoß, 0..1
+    this.sightMode = false;   // V: über das Visier zielen statt über die Schulter
+    this.sighting = false; this.onTarget = null; this.targetT = 0;
     this.grenades = []; this.pickups = []; this.shops = [];
     this._v = new THREE.Vector3();
     // Leuchtspuren: ein Linienbündel, kurze Lebensdauer
@@ -101,6 +127,17 @@ class Weapons {
     this.scene.add(this.flash);
     this.flashT = 0;
     this.grenadeGeo = new THREE.SphereGeometry(0.08, 10, 8);
+    // Wurfbahn der Granate beim Zielen: Linie und Ring an der Landestelle
+    this.arcPts = new Float32Array(60 * 3);
+    const ag = new THREE.BufferGeometry();
+    ag.setAttribute('position', new THREE.BufferAttribute(this.arcPts, 3).setUsage(THREE.DynamicDrawUsage));
+    const arcMat = new THREE.LineBasicMaterial({ color: '#ffd23a', transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false });
+    this.arc = new THREE.Line(ag, arcMat);
+    this.arc.frustumCulled = false; this.arc.visible = false;
+    const rg = new THREE.RingGeometry(0.55, 0.75, 28); rg.rotateX(-Math.PI / 2);
+    this.arcRing = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: '#ffd23a', transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
+    this.arcRing.visible = false;
+    this.scene.add(this.arc, this.arcRing);
     this.buildHud();
     for (const def of WEAPON_SHOPS) this.placeShop(def);
   }
@@ -124,7 +161,13 @@ class Weapons {
     ar.innerHTML = '<span class="ico">⛨</span><div class="hbar"><div id="armor-bar"></div></div>';
     st.insertBefore(ar, document.getElementById('car-row'));
     const hud = document.getElementById('hud');
-    this.$cross = document.createElement('div'); this.$cross.id = 'crosshair'; this.$cross.className = 'hidden'; hud.appendChild(this.$cross);
+    this.$cross = document.createElement('div'); this.$cross.id = 'crosshair'; this.$cross.className = 'hidden';
+    this.$cross.innerHTML = '<i class="t n"></i><i class="t s"></i><i class="t w"></i><i class="t e"></i><b class="dot"></b><s class="ring"></s>';
+    this.$sight = document.createElement('div'); this.$sight.id = 'sight'; this.$sight.className = 'hidden';
+    this.$hit = document.createElement('div'); this.$hit.id = 'hitmark';
+    hud.prepend(this.$sight); // unter Geld, Sternen und Minikarte
+    hud.append(this.$cross, this.$hit);
+    this.crossKey = ''; this.sightKey = '';
     this.$lock = document.createElement('div'); this.$lock.id = 'aimlock'; this.$lock.className = 'hidden'; hud.appendChild(this.$lock);
     this.$w = w; this.hudKey = '';
   }
@@ -175,8 +218,9 @@ class Weapons {
   // drinnen: Waffe wegstecken
   holster() {
     const p = this.player();
-    p.setWeapon(null); p.pose.aim = 0; p.pose.swing = 0;
-    this.aiming = false; this.$cross.classList.add('hidden'); this.$lock.classList.add('hidden');
+    p.setWeapon(null); p.pose.aim = 0; p.pose.swing = 0; p.group.visible = true;
+    this.aiming = this.sighting = false; this.arc.visible = this.arcRing.visible = false;
+    for (const el of [this.$cross, this.$lock, this.$sight]) el.classList.add('hidden');
   }
 
   // ---------- Hauptschritt (draußen) ----------
@@ -190,6 +234,12 @@ class Weapons {
     // Auswahl: 1–7 direkt, Q weiter
     WEAPON_ORDER.forEach((id, i) => { if (pressed['Digit' + (i + 1)]) { if (this.save.weapons[id]) this.select(id); else this.ui.toast(`${WEAPONS[id].name}: gibt es im Waffenladen`, 1.6); } });
     if (pressed.KeyQ) this.cycle(1);
+    if (pressed.KeyV && onFoot) {
+      this.sightMode = !this.sightMode;
+      this.ui.toast(this.sightMode ? 'Zielen über das Visier (V)' : 'Zielen über die Schulter (V)', 1.4);
+    }
+    this.sinceShot += dt;
+    if (this.sinceShot > 0.2) this.bloom = Math.max(0, this.bloom - dt * 1.8); // erst nach dem Feuern abklingen
     if (vehicle && !this.def.driveBy) {
       // im Auto auf eine Waffe für den Drive-by wechseln, wenn vorhanden
       const alt = this.owned().find(id => WEAPONS[id].driveBy);
@@ -207,6 +257,7 @@ class Weapons {
     } else if (d.mag && ((onFoot && pressed.KeyR && (inv.clip || 0) < d.mag) || (!inv.clip && this.cool <= 0)) && inv.ammo > 0) this.startReload();
 
     this.aiming = onFoot && !!keys.Mouse2 && !d.melee && !freeze;
+    this.sighting = this.aiming && this.sightMode && !!SIGHT_SVG[d.sight];
     const fire = !freeze && (d.auto ? keys.Mouse0 : pressed.Mouse0);
     if (fire && this.cool <= 0 && this.reloadT <= 0) {
       if (onFoot) this.attack();
@@ -223,21 +274,70 @@ class Weapons {
       p.pose.pitch = this.aimPitch;
       if (hold) { p.heading = yaw; }
       p.pose.swing = Math.max(0, p.pose.swing - dt * 2.6);
+      p.group.visible = !this.sighting; // über das Visier: Blick aus den Augen der Figur
       p.sync();
     } else p.pose.aim = 0;
+    this.updateAimHud(dt);
+    this.updateArc();
     this.updateLock(dt, onFoot, vehicle);
     this.updateGrenades(dt);
     this.updatePickups(dt, onFoot);
     this.updateTracers(dt);
     const me = vehicle || p;
     this.fadeShops(me.x, me.z);
-    this.$cross.classList.toggle('hidden', !this.aiming);
-    if (this.hitT > 0) { this.hitT -= dt; if (this.hitT <= 0) this.$cross.classList.remove('hit'); }
     this.hud();
   }
 
   // Blickneigung der Kamera als Winkel nach oben (Kamera über dem Kopf schaut leicht nach unten)
   camPitch() { this.camera.getWorldDirection(this._v); return -Math.asin(U.clamp(this._v.y, -1, 1)); }
+
+  // aktuelle Streuung (Winkel je Achse): Rückstoß, Zielen, Visier, Laufen, Auto
+  spreadNow(vehicle) {
+    const d = this.def, p = this.player();
+    let s = (d.spread || 0) * (1 + this.bloom * 2.2);
+    if (vehicle) return s * 1.6;
+    if (this.sighting) s *= 0.35; else if (this.aiming) s *= 0.6;
+    return s * (p.moveSpeed > 5 ? 1.8 : p.moveSpeed > 0.5 ? 1.25 : 1);
+  }
+
+  // Fadenkreuz (Spreizung = echte Streuung auf dem Bildschirm), Farbe über Zielen, Visier-Bild
+  updateAimHud(dt) {
+    const d = this.def, show = this.aiming && !this.sighting;
+    this.$cross.classList.toggle('hidden', !show);
+    this.$sight.classList.toggle('hidden', !this.sighting);
+    if (!this.aiming) { this.onTarget = null; return; }
+    if (this.sighting && this.sightKey !== d.sight) {
+      this.sightKey = d.sight;
+      this.$sight.innerHTML = `<svg viewBox="-640 -360 1280 720" preserveAspectRatio="xMidYMid slice">${SIGHT_SVG[d.sight]}</svg>`;
+    }
+    const f = innerHeight / 2 / Math.tan(this.camera.fov * Math.PI / 360);
+    const g = d.throw ? 5 : Math.max(3, this.spreadNow(null) * f);
+    this.$cross.style.setProperty('--g', g.toFixed(1) + 'px');
+    // was liegt unter dem Fadenkreuz? (alle 0,1 s)
+    this.targetT -= dt;
+    if (this.targetT <= 0 && !d.throw) {
+      this.targetT = 0.1;
+      this.camera.getWorldDirection(this._v);
+      const o = this.camera.position, dir = { x: this._v.x, y: this._v.y, z: this._v.z };
+      const skip = Math.max(0, U3.along(o, dir, this.player()) - 0.2);
+      const h = this.ray(o, dir, (d.range || 30) + skip, null, skip);
+      this.onTarget = h.type === 'ped' || h.type === 'officer' ? 'enemy' : h.type === 'car' ? 'car' : null;
+    }
+    const key = d.sight + '|' + this.onTarget + '|' + show;
+    if (key !== this.crossKey) {
+      this.crossKey = key;
+      this.$cross.className = `w-${d.sight}` + (this.onTarget ? ' ' + this.onTarget : '') + (show ? '' : ' hidden');
+      this.$sight.className = (this.onTarget ? 'on-' + this.onTarget : '') + (this.sighting ? '' : ' hidden');
+    }
+  }
+
+  // Treffer- bzw. Abschussmarke in der Bildmitte (nur beim Zielen)
+  hitMark(kill) {
+    this.audio.beep(kill ? 700 : 1500, kill ? 0.09 : 0.03, 0, 'triangle', kill ? 0.08 : 0.05);
+    if (!this.aiming) return;
+    const el = this.$hit;
+    el.className = ''; void el.offsetWidth; el.className = kill ? 'on kill' : 'on';
+  }
 
   startReload() {
     const d = this.def;
@@ -253,6 +353,10 @@ class Weapons {
       return { x: vehicle.x + Math.cos(vehicle.heading) * 0.9 * side + dir.x, y: vehicle.y + 1.35, z: vehicle.z - Math.sin(vehicle.heading) * 0.9 * side + dir.z };
     }
     const p = this.player(), h = p.heading, d = this.def;
+    if (this.sighting) { // Mündung knapp unter der Bildmitte vor der Kamera
+      const c = this.camera.position;
+      return { x: c.x + dir.x * 0.7, y: c.y + dir.y * 0.7 - 0.07, z: c.z + dir.z * 0.7 };
+    }
     const fwd = d.hands === 2 ? 0.75 : 0.62;
     return { x: p.x + Math.sin(h) * fwd - Math.cos(h) * 0.3, y: p.y + 1.45 + Math.sin(this.aimPitch) * fwd, z: p.z + Math.cos(h) * fwd + Math.sin(h) * 0.3 };
   }
@@ -298,8 +402,9 @@ class Weapons {
     this.flash.position.set(origin.x, origin.y, origin.z); this.flash.intensity = 30; this.flashT = 0.05;
     this.audio.noise(d.snd[0], d.snd[1], d.snd[2]);
     this.audio.beep(110, 0.07, 0, 'square', d.hands === 2 ? 0.14 : 0.09);
-    const spread = d.spread * (this.aiming ? 0.6 : 1) * (vehicle ? 1.6 : 1) * (p.moveSpeed > 5 && !vehicle ? 1.8 : 1);
-    let hitAny = false;
+    const spread = this.spreadNow(vehicle);
+    this.bloom = Math.min(1, this.bloom + (d.bloom || 0.2)); this.sinceShot = 0;
+    let best = 0;
     for (let k = 0; k < (d.pellets || 1); k++) {
       const dd = U3.norm({ x: dir.x + U3.rnd() * spread, y: dir.y + U3.rnd() * spread, z: dir.z + U3.rnd() * spread });
       // beim freien Zielen zählt der Strahl aus der Kamera (ab Höhe der Figur), sonst aus der Mündung
@@ -308,9 +413,9 @@ class Weapons {
       const h = this.ray(o, dd, d.range + skipT, vehicle, skipT);
       const end = { x: o.x + dd.x * h.t, y: o.y + dd.y * h.t, z: o.z + dd.z * h.t };
       if (k < 3) this.tracer(origin, end);
-      if (this.applyHit(h, end, dd, d)) hitAny = true;
+      best = Math.max(best, this.applyHit(h, end, dd, d));
     }
-    if (hitAny) { this.hitT = 0.15; this.$cross.classList.add('hit'); }
+    if (best) this.hitMark(best === 2);
     // Schüsse scheuchen die Leute auf; vor den Augen der Polizei gibt es einen Stern
     const px = vehicle ? vehicle.x : p.x, pz = vehicle ? vehicle.z : p.z;
     this.peds.panic(px, pz, 35);
@@ -444,20 +549,20 @@ class Weapons {
     return Infinity;
   }
 
-  // Wirkung eines Treffers; gibt true zurück, wenn ein Ziel (keine Wand) getroffen wurde
+  // Wirkung eines Treffers: 0 Wand/nichts, 1 Ziel getroffen, 2 Ziel ausgeschaltet
   applyHit(h, at, dir, d) {
     const fx = this.fx;
     if (h.type === 'ped') {
       this.blood(at.x, at.y, at.z, dir);
       const q = h.obj;
-      if (this.peds.hurt(q, d.dmg, dir.x, dir.z)) this.pedDown(q);
-      else if (this.police.witness(q.x, q.z, 80)) this.police.crime(0.15, 'Passant verletzt!', 1);
-      return true;
+      if (this.peds.hurt(q, d.dmg, dir.x, dir.z)) { this.pedDown(q); return 2; }
+      if (this.police.witness(q.x, q.z, 80)) this.police.crime(0.15, 'Passant verletzt!', 1);
+      return 1;
     }
     if (h.type === 'officer') {
       this.blood(at.x, at.y, at.z, dir);
-      if (this.police.shootOfficer(h.obj, d.dmg)) this.drop('weapon', h.obj.fig.x, h.obj.fig.z, 'pistol', 12);
-      return true;
+      if (this.police.shootOfficer(h.obj, d.dmg)) { this.drop('weapon', h.obj.fig.x, h.obj.fig.z, 'pistol', 12); return 2; }
+      return 1;
     }
     if (h.type === 'car') {
       const c = h.obj;
@@ -467,14 +572,13 @@ class Weapons {
         c.sleeping = false;
         if (c.kind === 'police' && !c.isPlayer && !c.wrecked) { this.police.hostileT = 30; this.police.crime(0.2, 'Auf einen Streifenwagen geschossen!', 2); }
       }
-      this.audio.beep(2400, 0.03, 0, 'triangle', 0.05);
-      return true;
+      return 1;
     }
     if (h.type === 'wall') {
       for (let i = 0; i < 2; i++) fx.particle(at.x, at.y, at.z, { color: '#ffd890', add: true, life: 0.12, size: 0.14, vx: -dir.x * 3 + U3.rnd() * 2, vy: Math.random() * 2, vz: -dir.z * 3 + U3.rnd() * 2 });
       fx.particle(at.x - dir.x * 0.2, at.y, at.z - dir.z * 0.2, { color: '#b9b2a4', life: 0.7, size: 0.3, grow: 1.6, alpha: 0.55, vy: 0.5 });
     }
-    return false;
+    return 0;
   }
 
   blood(x, y, z, dir) {
@@ -519,17 +623,42 @@ class Weapons {
   }
 
   // ---------- Granaten ----------
-  throwGrenade() {
-    const p = this.player();
+  // Abwurf: Ort und Geschwindigkeit (beim Zielen in Kamerarichtung, sonst schräg nach vorn)
+  grenadeLaunch() {
+    const p = this.player(), sp = 15;
     let dir;
     if (this.aiming) { this.camera.getWorldDirection(this._v); dir = U3.norm({ x: this._v.x, y: this._v.y + 0.35, z: this._v.z }); }
     else { const yaw = this.cam.yaw; dir = U3.norm({ x: Math.sin(yaw), y: 0.5, z: Math.cos(yaw) }); }
-    p.heading = Math.atan2(dir.x, dir.z); p.pose.swing = 1; this.aimHold = 0;
+    return { x: p.x + dir.x * 0.6, y: p.y + 1.7, z: p.z + dir.z * 0.6, vx: dir.x * sp, vy: dir.y * sp, vz: dir.z * sp, dir };
+  }
+
+  // Wurfbahn bis zum ersten Aufschlag (ohne Abpraller) vorausberechnen und zeigen
+  updateArc() {
+    const show = this.aiming && this.def.throw && this.inv().ammo > 0;
+    this.arc.visible = this.arcRing.visible = !!show;
+    if (!show) return;
+    const W = this.world, L = this.grenadeLaunch(), P = this.arcPts;
+    let { x, y, z, vx, vy, vz } = L, n = 0;
+    for (; n < 60; n++) {
+      P[n * 3] = x; P[n * 3 + 1] = y; P[n * 3 + 2] = z;
+      const g = W.groundAt ? W.groundAt(x, z, y) : W.heightAt(x, z), b = W.insideBuilding(x, z, 0);
+      if (n > 0 && (y < g + 0.08 || (b && y < b.top))) break;
+      x += vx * 0.04; y += vy * 0.04; z += vz * 0.04; vy -= 16 * 0.04;
+    }
+    n = Math.min(n, 59);
+    for (let k = n + 1; k < 60; k++) { P[k * 3] = P[n * 3]; P[k * 3 + 1] = P[n * 3 + 1]; P[k * 3 + 2] = P[n * 3 + 2]; }
+    this.arc.geometry.attributes.position.needsUpdate = true;
+    const ex = P[n * 3], ez = P[n * 3 + 2];
+    this.arcRing.position.set(ex, (W.groundAt ? W.groundAt(ex, ez, P[n * 3 + 1] + 1) : W.heightAt(ex, ez)) + 0.06, ez);
+  }
+
+  throwGrenade() {
+    const p = this.player(), L = this.grenadeLaunch();
+    p.heading = Math.atan2(L.dir.x, L.dir.z); p.pose.swing = 1; this.aimHold = 0;
     const m = new THREE.Mesh(this.grenadeGeo, _wm.mats ? _wm.mats.green : new THREE.MeshLambertMaterial({ color: '#3d4a2c' }));
     m.castShadow = true;
     this.scene.add(m);
-    const sp = 15;
-    this.grenades.push({ m, x: p.x + dir.x * 0.6, y: p.y + 1.7, z: p.z + dir.z * 0.6, vx: dir.x * sp, vy: dir.y * sp, vz: dir.z * sp, t: 2.1 });
+    this.grenades.push({ m, x: L.x, y: L.y, z: L.z, vx: L.vx, vy: L.vy, vz: L.vz, t: 2.1 });
     this.audio.noise(0.15, 700, 0.12);
   }
 
@@ -709,7 +838,7 @@ class Weapons {
           <div class="gn-buy"><button class="mn-btn primary" data-act="armor" ${money < ARMOR_PRICE || a >= 100 ? 'disabled' : ''}>${a >= 100 ? 'Voll' : 'Kaufen ' + euro(ARMOR_PRICE)}</button></div>
         </div>`;
       return `<div class="mn-head"><span class="mn-badge t-guns">Waffen</span><h2>${shop.name}</h2><button class="mn-x" data-act="close" aria-label="Schließen">✕</button></div>
-        <div class="mn-sub">Waffe wählen: <kbd>1</kbd>–<kbd>7</kbd> oder <kbd>Q</kbd> · Schießen: linke Maustaste · Zielen: rechte Maustaste · Nachladen: <kbd>R</kbd>.
+        <div class="mn-sub">Waffe wählen: <kbd>1</kbd>–<kbd>7</kbd> oder <kbd>Q</kbd> · Schießen: linke Maustaste · Zielen: rechte Maustaste · Visier: <kbd>V</kbd> · Nachladen: <kbd>R</kbd>.
           Wer verhaftet wird, verliert seine Waffen.</div>
         <div class="vn-list">${rows}${armor}</div>
         <div class="mn-foot">${P.moneyLine()}<button class="mn-btn ghost" data-act="close">Schließen</button></div>`;

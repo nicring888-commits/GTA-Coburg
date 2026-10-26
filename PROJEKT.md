@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.3.0 „GTA Coburg – Waffen“ · **Letzte Aktualisierung:** 26.10.2026
+**Version:** 3.4.0 „GTA Coburg – Waffen“ · **Letzte Aktualisierung:** 26.10.2026
 
 ---
 
@@ -69,7 +69,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 |---|---|---|
 | Bewegen | `W A S D` (relativ zur Kamera) | `W`/`S` Gas, Bremse, rückwärts · `A`/`D` lenken |
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
-| Waffen | `Linke Maustaste` schießen, schlagen, Granate werfen · `Rechte Maustaste` zielen (Schulterkamera, Fadenkreuz, Zoom) · `1`–`7` oder `Q` Waffe wechseln · `R` nachladen | `Linke Maustaste` Drive-by (Pistole, Maschinenpistole) |
+| Waffen | `Linke Maustaste` schießen, schlagen, Granate werfen · `Rechte Maustaste` zielen (Schulterkamera, Fadenkreuz, Zoom) · `V` beim Zielen: über das Visier (Kimme und Korn, Perlkorn, Leuchtpunkt) · `1`–`7` oder `Q` Waffe wechseln · `R` nachladen | `Linke Maustaste` Drive-by (Pistole, Maschinenpistole) |
 | Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
 | Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
@@ -82,6 +82,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Fahndung (★ 1–5) | Autodiebstahl, wenn ein Polizist oder ein Zeuge (30 %) es sieht · Unfall vor den Augen der Polizei · Polizeiauto rammen · Streifenwagen klauen (mind. 2 ★) · Polizist anfahren (mind. 2 ★) · Streifenwagen zerstören. Je länger die Polizei dich sieht, desto mehr Sterne |
 | Polizei | 2/3/4/5/7 Streifenwagen je Sternzahl; zuerst werden Streifen aus dem Verkehr alarmiert, sonst kommen neue außer Sicht hinzu. Sie fahren mit der normalen Fahrphysik über das Straßennetz (kürzester Weg), rammen aus der Nähe, halten neben einem langsamen Spieler an. Tempo wächst mit den Sternen (1 ★ ≈ 135 km/h, 5 ★ ≈ 175 km/h). Ab 3 ★ Straßensperren vor dem Spieler. Martinshorn (Tatü-tata), Blaulicht, blinkende Punkte auf der Minikarte |
 | Waffen (seit v3.3.0) | Faust, Baseballschläger, Pistole, Maschinenpistole, Schrotflinte (8 Schrotkugeln), Sturmgewehr (Zoom beim Zielen), Granaten (fliegen im Bogen, prallen ab, explodieren nach 2,1 s). Magazin und Vorrat, Nachladen, leer → Klicken und Wechsel auf die nächste Waffe mit Munition. Ohne Zielen rastet der Schuss auf das nächste Ziel im Kegel von ≈ 30° ein (grüner Pfeil über Passanten, roter über Polizisten; auf Touch-Geräten immer). Treffer: Passanten (Leben 100, fallen um, lassen € 5–40 fallen), Polizisten (fallen um, lassen eine Pistole mit 12 Schuss fallen), Autos (Schaden je Kugel bis zum Brand und zur Explosion), Wände und Boden (Funken, Staub). Mündungsfeuer mit Licht, Leuchtspuren, Blut, Knall je Waffe. Schüsse scheuchen Passanten im Umkreis von 35 m auf. Drive-by mit Pistole und MP aus dem eigenen Auto und als Mitfahrer. Waffen und Munition bleiben im Spielstand (`weapons`, `weapon`, `armor`) |
+| Fadenkreuze und Visiere (seit v3.4.0) | Fadenkreuz je Waffe beim Zielen: Pistole und MP vier Striche mit Punkt, Schrotflinte Streukreis, Sturmgewehr roter Leuchtpunkt mit kurzen Strichen, Granate kleiner Kreis plus gelbe Wurfbahn mit Ring an der Landestelle. Die Spreizung zeigt die echte Streuung auf dem Bildschirm (Rückstoß blüht bei Dauerfeuer auf und klingt ab, Laufen und Rennen vergrößern sie). Über Passanten und Polizisten wird es rot, über Autos orange. Treffermarke (weißes X), Abschussmarke (rotes X) mit Klang. `V` schaltet beim Zielen auf die Visier-Ansicht: Blick aus den Augen der Figur über die Waffe mit engerem Sichtfeld (Pistole 48°, MP 46°, Schrotflinte 52°, Sturmgewehr 26°) und Visierbild: Kimme und Korn mit Leuchtpunkten (Pistole, MP), Perlkorn auf der Laufschiene (Schrotflinte), Leuchtpunktvisier mit Rotpunkt und Ring (Sturmgewehr); Streuung dort nur 35 % (Schulter 60 %). Die 3D-Modelle tragen die Visiere (Kimme und Korn, Perlkorn, Leuchtpunktvisier mit rotem Glas) |
 | Waffenladen (rot, seit v3.3.0) | Hindenburgstraße, Ketschendorfer Straße, im Landkreis Neustadt. Zu Fuß `F`: Baseballschläger € 150, Pistole € 600 (36 Schuss), Maschinenpistole € 1.800 (90), Schrotflinte € 2.500 (18), Sturmgewehr € 4.500 (90), 3 Granaten € 450; Munition nachkaufen; Schutzweste € 500 (fängt Schaden ab, blauer Balken) |
 | Straftaten mit Waffen | Schüsse vor der Polizei (1 ★), Passant niedergeschossen (vor der Polizei sicher, sonst 50 %), Polizist getroffen (mind. 2 ★), Polizist niedergeschossen (mind. 3 ★), auf Streifenwagen geschossen (mind. 2 ★), Granate mit Opfern (mind. 2 ★). **Verhaftet:** alle Waffen und die Weste werden beschlagnahmt; **Erledigt:** Waffen bleiben, Weste ist weg |
 | Polizei schießt (seit v3.3.0) | Polizisten zu Fuß tragen Pistolen. Ab 3 ★, oder ab 2 ★ wenn der Spieler eine Schusswaffe zieht bzw. in den letzten 30 s auf die Polizei geschossen hat, bleiben sie unter 24 m mit freier Sicht stehen und schießen alle 0,75–1,45 s (Trefferchance sinkt mit Entfernung und Tempo, 6 Leben zu Fuß bzw. Schaden am Auto). Nah genug und der Spieler steht still: Festnahme wie bisher |
@@ -256,6 +257,11 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.4.0 (26.10.2026): **Fadenkreuze und Visiere** (`js/weapons.js`: `SIGHT_SVG`, `spreadNow`, `updateAimHud`, `hitMark`,
+  `grenadeLaunch`/`updateArc`; `game.js`: Visier-Kamera in `aimCamera`). Siehe 3a. Getestet (Chromium): Spreizung der MP
+  beim Zielen in Ruhe, nach 0,8 s Dauerfeuer und 1 s danach, Farbe über einem Passanten, Visier-Ansicht für MP,
+  Schrotflinte und Sturmgewehr (Figur ausgeblendet, Sichtfeld), Treffer über das Visier, Wurfbahn der Granate.
 
 - ✅ v3.3.0 (26.10.2026): **Waffensystem wie in GTA** (`js/weapons.js`, siehe 3 und 3a).
   - Sieben Waffen mit Magazin, Vorrat und Nachladen; Waffenanzeige mit Umriss, Name und Munition unter dem Lebensbalken,
