@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.5.0 „Regionale Architektur“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 02.11.2026
+**Version:** 3.6.0 „Haustypen, Gehsteige, Fußgänger“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 02.11.2026
 
 ---
 
@@ -155,7 +155,8 @@ und müssen dort bleiben.
 | `js/driver.js` | `RoadNav`: Straßennetz als Graph (beide Richtungen, ohne Durchfahrten durch Gebäude), Dijkstra nach Fahrzeit, Wegsuche, Zufallspunkte. `AutoDriver`: KI-Fahrer mit echter Fahrphysik (Vorausschau-Lenkung, Kurvenbremsung, Ausweichen, Freifahren) |
 | `js/police.js` | Fahndung, Streifenwagen (Verfolgen, Rammen, Anhalten), Polizisten zu Fuß, Festnahme, Straßensperren, Entkommen |
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
-| `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes |
+| `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes. Seit v3.6.0: Zahl nach Gegend und Tageszeit (`capacity`: Weglänge × Wegart × Belebtheit im Umkreis, Grenze in `game.js` je Sekunde), Auswahl der Wege nach Belebtheit (`act`), Laufspur auf dem Gehsteig (`walk`), überzählige gehen außer Sicht |
+| `js/houses.js` | Haustyp-Bibliothek (seit v3.6.0, `HouseKit`): `plan` (Dachform aus OSM `roof:shape` bzw. je Bautyp), `halfHip` (Krüppelwalm mit Giebelwänden), `hip` (Walm-/Zeltdach), `pult` (Pultdach mit Blende), `flat` (Attika, Bungalow-Blende, Rand), `dormers` (Schlepp-, Satteldach-, Flachdachgauben), `balcony` (Beton, Holz, Stahl, Glas). Alles als Dreiecke in den Kachel-Töpfen, keine zusätzlichen Zeichenaufrufe |
 | `js/venues.js` | Läden und Lokale zum Hineingehen (seit v1.4.0): `VENUES` (Ort, Typ), `VENUE_MENUS` (Speisekarten, Sortimente), sieben Innenraum-Bauer auf Basis der Raum-Klasse aus `interiors.js`, erweitert `Property` um `placeVenue`, `venueRoom`, `openVenueMenu` |
 | `js/townlife.js` | Stadtleben (seit v1.4.1): Pfandsammler am Markt (`updateCollector`), Schulhöfe mit Kindern, Ball, Tischtennis und Aufsicht (`SCHOOLS`, `yardCells`, `updateYard`), nachts leer |
 | `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, echte Ladenschilder (`shopSigns`, Texturatlas), Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
@@ -247,7 +248,8 @@ Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races
 `game.property` (z. B. `game.property.enter(game.property.homes[0], true)`, `.exit()`, `.openGarage()`, `.openShop(game.property.shops[0])`) und
 `game.atmo.clock = 19.5` (Uhrzeit), `game.atmo.setWeather('rain', true)`, `game.post.cycle()`, `game.post.debugAO = true`,
 `game.world.region.debugArch = true` (Umland-Häuser nach Bautyp einfärben: rot historisch, dunkelrot Fachwerk, gelb 1950er–70er,
-grün 1970er–90er, blau Neubau, violett Mehrfamilienhaus, türkis Gewerbe), `game.world.region.archAt(x, z)` und
+grün 1970er–90er, blau Neubau, violett Mehrfamilienhaus, türkis Gewerbe), `game.world.region.archAt(x, z)`,
+`game.world.walkAt(x, z)` (Gehsteig-Höhe oder null), `game.world.region.liveliness(x, z)` (Belebtheit 0…1), `game.peds.cap` und
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
@@ -265,6 +267,58 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.6.0 (02.11.2026, Branch `grafik/regionale-architektur`): **Haustypen, Grundstücke, Gehsteige und Fußgänger –
+  Phase 2 des Grafik-Fahrplans (7.1).** Alles im Umland (ganzer Landkreis und Coburger Stadtteile); Innenstadt unverändert.
+  - **Daten:** `convert-region.js` speichert zusätzlich die OSM-Dachform (Flags Bit 7–9) und die Bauzeit (Bit 10–11:
+    alt, 1950er–70er, 1970er–90er, ab 2000; Mehrfamilienhäuser aus der Bewertung, Garagen vom Nachbarhaus). Ältere
+    Spielstände lesen die Bits nicht; Geometrie, Straßen und Gelände unverändert
+  - **Dachformen** (`js/houses.js` `plan`): OSM-Dachform hat Vorrang (3.452 Sattel-, 146 Walm-, 128 Krüppelwalm-, 290
+    Flach-, 34 Zelt-, 10 Pult-, 10 Mansarddächer), sonst je Bautyp: alter Kern Satteldach (15 % Krüppelwalm), Siedlung
+    Satteldach (10 % Krüppelwalm, 12 % Walm), 1970er–90er Sattel-/Krüppelwalm-/Walmdach, Bungalows auch flach mit
+    dunkler Blende, Neubau Zeltdach (Stadtvilla), Flachdach mit Attika, Pultdach mit hochgezogener Wand, Satteldach.
+    Überstände, Untersicht, Traufbrett, Blechblenden, Abdeckbleche
+  - **Gauben** nur auf Sattel- und Krüppelwalmdächern mit ausgebautem Dachgeschoss (≥ 33°, ≥ 3 m Dachhöhe, ≥ 7 m
+    lang), symmetrisch (1–3), auf der Straßenseite (manchmal beidseits), nie am Schornstein: Schleppgaube (alter
+    Kern, Siedlung), Satteldachgaube (1970er–90er, Kleinstadtkern), Flachdachgaube mit großem Fenster (Neubau, selten)
+  - **Balkone:** Mehrfamilienhäuser an der Rückseite je Geschoss (1950er–70er Betonbrüstung, 1970er–90er Holz oder
+    Stahl, Neubau Glas oder Stahl), Häuser der 1970er–90er zu 40 % ein Holzbalkon am Giebel, Neubauten zu 30 % ein
+    Stahl-/Glasbalkon an der Gartenseite, Siedlungshäuser selten ein kleiner Betonbalkon
+  - **Garagen:** eigener Wandstil im Fassadenshader (Stil 4/5): Tore zur Straße, Zahl nach Breite (Garagenzeilen viele,
+    Neubau-Doppelgarage ein breites Tor), Holztor (alt), Schwingtor mit Sicken (1950er–90er, weiß/grau/grün/braun),
+    Sektionaltor (Neubau, anthrazit/weiß); 2,6–3 m hoch; Flachdach mit Attika (Neubau), Flachdach mit Rand bzw.
+    Satteldach (alt, oft 1970er–90er). Carports mit Pfosten, Gartenschuppen in Holzfarben
+  - **Grundstücke** (`landscape.js` `buildVillage`, Tabelle `FENCE`): alter Kern wie bisher (Staketen-, Lattenzaun,
+    Hecke); Siedlung Mauer, Jägerzaun, Hecke, Doppelstabmatte; 1970er–90er Mauer, Jägerzaun, Hecke, hinten Sichtschutz;
+    Neubau meist offen, sonst Doppelstabmatte, Mauer/Gabione, Hecke; eine Farbe je Grundstück; gepflasterte Einfahrten
+    an Neubauten (oft auch Nachkriegszeit), Kies am alten Haus. Neue Instanz-Formen: Doppelstabmatte, Mauer, Sichtschutz
+  - **Gehsteige** (`region.js` `buildSidewalks`): an Haupt-, Neben- und Wohnstraßen innerorts (Häuser an dieser
+    Seite, Ort groß genug: Hauptstraßen ab 10, Wohnstraßen ab 25 Häusern im Umkreis von 160 m), nicht an Spielstraßen,
+    Wirtschaftswegen, Zufahrten, Autobahnen, Brücken und Landstraßen außerorts; 1,5–2,2 m je Straßenart, Granitbord
+    12 cm, abgesenkt an Einfahrten und vor Kreuzungen, frei im Kreuzungsbereich, Schürze zum tieferen Gelände; ein
+    Netz je Kachel. Spielfigur und Fußgänger stehen darauf (`walkAt`), Fahrzeuge unverändert; Bäume, Bewuchs, Zäune
+    und Hecken halten Abstand, Laternen stehen auf dem Gehsteig
+  - **Fußgänger:** Belebtheit je Straße (`liveliness`: Läden, Nähe zur Stadt-/Dorfmitte, Wohndichte, Schulen und
+    Kirchen) und Zahl nach Gegend und Tageszeit. Gemessen (Grenze 8/11/19/23 Uhr): Innenstadt 113/150/90/45, Neustadt
+    Ortsmitte 23/31/19/8, Rödental Mitte 9/11/7/3, Meeder Mitte 5/6/4/2, Dorfkern Großwalbur 4/5/3/1, Wohn- und
+    Neubaugebiet 2–3/3/2/1, Weiler, Landstraße, Feld 0. Auf Straßen mit Gehsteig laufen sie darauf (13 von 15
+    gemessen, die übrigen an Kreuzungen), sonst am Straßenrand
+  - **Getestet:** Neubaugebiete (Unterlauter, Ebersdorf), 1970er–90er (Großheirath), Siedlung und Mehrfamilienhäuser
+    (Coburg Nord), Dorfkern Großwalbur, Seßlach, Kleindorf Eckersdorf, Kreisstraße CO 4, Neustadt und Rödental Mitte;
+    Innenstadt pixelgenau gegen v3.5.0 (eingefroren, ohne Figuren/Autos): 0,10–0,22 %, nur Schattenkanten; Kollision
+    216 Laufproben (0 im Haus, 21 auf dem Gehsteig in richtiger Höhe), Auto fahren; keine Konsolenfehler.
+    **Leistung gegen v3.5.0** (bester von 3, 1280 × 720, Stufe Hoch): Kachelaufbau Seßlach 22,8 → 24,6 ms,
+    Ebersdorf 26,5 → 29,3, Unterlauter 34,8 → 41,1, Rödental 36,4 → 42,8, Neustadt 39,4 → 48,0 (+8–22 %); Bildzeit
+    +0,1–1,1 ms (4,5–6,9 ms); geladene Dreiecke +2–10 %; Zeichenaufrufe +3–7 % (Neustadt 1.266 → 1.305)
+  - Beim Testen behoben: Namenskonflikt `WALK` mit `player.js` (Spiel startete nicht), Rasterabfrage zählte
+    Wegstücke mehrfach (Fußgänger dreifach), Einfahrt-Suche quadratisch (16 → 5 ms je Kachel), Gehsteige zwei Netze je
+    250 m (Zeichenaufrufe +30 % → +3 %), Gras und Sichtschutz-Rundumzäune
+- ⚠️ Grenzen v3.6.0: Dachformen ohne OSM-Angabe sind geschätzt und folgen nicht dem Luftbild auf dem Dach. Gauben und
+  Balkone sitzen nicht genau vor den Fenstern des Fassadenshaders; Balkone ohne Kollision. Garagentore sind gemalt.
+  Zäune sind weiter keine Hindernisse. Gehsteige nur im Umland (die Innenstadt hat Bordsteine und Gehwege aus dem
+  Luftbild); keine Zebrastreifen, Kreuzungsflächen ohne Gehweg-Ecken; Autos fahren unverändert über Bordsteine.
+  Weiler unter 12 Häusern je Kachel haben keine Fußgänger. Kachelaufbau +8–22 % (Abhilfe: Kachelbau im Worker,
+  Phase 8). Wintergärten und Solaranlagen als Geometrie folgen später (Solaranlagen sind im Luftbild sichtbar).
 
 - ✅ v3.5.0 (02.11.2026, Branch `grafik/regionale-architektur`): **Regionale Architektur im Landkreis, Phase 1 des
   Grafik-Fahrplans (7.1).** Bisher wurde jedes kleine Wohnhaus im Umland ein „Landhaus“ (steiles Dach, Läden,
@@ -784,8 +838,8 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 
 | Phase | Inhalt | Dateien | Aufwand |
 |---|---|---|---|
-| **1** | **Bautyp-Erkennung + Stilweiche:** jedes Haus im Landkreis bekommt beim Umwandeln einen Bautyp (historischer Kern, Siedlung 50er–70er, EFH 80er/90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft, Nebengebäude, Sonderbau) aus Denkmal-Kennung, Ortskern-Abstand (Kirchen, Ortsmittelpunkte), Parzellen-Regelmäßigkeit, Sackgassen/Wendehämmer, Grundriss, OSM-Merkmalen. Das Spiel wählt danach Dachneigung, Farben, Sockel, Fenster, Läden, Fachwerk (nur belegt) und Gärten | `tools/classify-buildings.js` (neu), `tools/convert-region.js`, `data/region.js`, `js/region.js`, `js/world.js` (`facadeShader`), `js/landscape.js` (`buildVillage`), `tools/arch-stats.js` (neu) | M |
-| 2 | Haustyp-Bibliothek Wohnen: Stadtvilla (flaches Walmdach), Satteldach 30–38°, Krüppelwalm, Pultdach, Flachdach-Würfel, Doppel-/Reihenhaus; Garagen, Carports, Gauben, Balkone, Wintergärten, Solaranlagen; Gärten je Bautyp (Doppelstabmatten, Thuja, Pflaster, Schotter) | `js/archetypes.js` (neu), `region.js`, `landscape.js` | L |
+| ✅ 1 | **Bautyp-Erkennung + Stilweiche (v3.5.0):** jedes Haus im Landkreis bekommt beim Umwandeln einen Bautyp (historischer Kern, Siedlung 50er–70er, EFH 80er/90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft, Nebengebäude, Sonderbau) aus Denkmal-Kennung, Ortskern-Abstand (Kirchen, Ortsmittelpunkte), Parzellen-Regelmäßigkeit, Sackgassen/Wendehämmer, Grundriss, OSM-Merkmalen. Das Spiel wählt danach Dachneigung, Farben, Sockel, Fenster, Läden, Fachwerk (nur belegt) und Gärten | `tools/classify-buildings.js` (neu), `tools/convert-region.js`, `data/region.js`, `js/region.js`, `js/world.js` (`facadeShader`), `js/landscape.js` (`buildVillage`), `tools/arch-stats.js` (neu) | M |
+| ✅ 2 | Haustyp-Bibliothek und Umgebung (v3.6.0): Dachformen je Bautyp, Gauben, Balkone, Garagen/Carports, Zäune und Einfassungen, Gehsteige, Fußgängerverteilung nach Gegend und Tageszeit | `js/houses.js` (neu), `region.js`, `world.js`, `landscape.js`, `pedestrians.js`, `player.js`, `game.js`, `tools/convert-region.js`, `tools/classify-buildings.js` | L |
 | 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder: Hallen, Discounter, Tankstellen, Parkplätze, Zäune, Firmenschilder, Stahlhallen, Fahrsilos | `region.js`, `props.js`, `archetypes.js` | M |
 | 4 | Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
 | 5 | three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
@@ -796,9 +850,8 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phase 1 umgesetzt und getestet (02.11.2026, v3.5.0 auf dem Branch, siehe 6). Nächster Schritt nach
-Freigabe: **Phase 2** (Haustyp-Bibliothek Wohnen: Garagen/Carports als eigene Formen, Gauben, Balkone, Krüppelwalm-
-und Pultdächer, Solaranlagen, Doppelstabmattenzäune, Pflaster- und Schottervorgärten). Offene Entscheidung: Branch
+**Stand:** Phase 1 (v3.5.0) und Phase 2 (v3.6.0) umgesetzt und getestet (02.11.2026, auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 3** (Gewerbe, Industrie, moderne Höfe, Ortsränder). Offene Entscheidung: Branch
 nach Durchsicht auf `main` übernehmen (löst Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben

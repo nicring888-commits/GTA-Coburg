@@ -941,7 +941,7 @@
   // ---------- Schleife ----------
   let last = performance.now();
   let hudTimer = 0;
-  let prevPX = 0, prevPZ = 0;
+  let prevPX = 0, prevPZ = 0, pedCapT = 0;
   let burnWarned = null;
   let lastTown = null;
   function loop(now) {
@@ -1082,7 +1082,13 @@
     if (world.region) {
       world.region.update(px, pz);
       if (world.region.lifeChanged) { world.region.lifeChanged = false; peds.setExtra(world.region.lifeSegments()); }
-      peds.cap = world.inCoreRect(px, pz) ? 0 : 45;
+      // Fußgängerzahl nach Gegend und Tageszeit: Innenstadt voll (nachts weniger), im Landkreis nach Belebtheit der
+      // Straßen (Pedestrians.capacity), jede Sekunde neu
+      if ((pedCapT -= dt) <= 0) {
+        pedCapT = 1;
+        const c = atmo.clock, day = c < 5 ? 0.08 : c < 7 ? 0.3 : c < 9 ? 0.75 : c < 18 ? 1 : c < 21 ? 0.6 : 0.25;
+        peds.cap = world.inCoreRect(px, pz) ? Math.round(PEDS.max * Math.max(0.3, day)) : peds.capacity(px, pz, day);
+      }
     }
     const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars(), net.remoteCars, net.walkers);
     traffic.update(dt, px, pz, obstacles);

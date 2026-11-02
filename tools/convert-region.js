@@ -213,13 +213,15 @@ for (const s of bSources) {
 // Bautyp je Haus (tools/classify-buildings.js): Bits 2–5 der Flags = Bautyp, Bit 6 = Fachwerk. Ältere Spielstände
 // des Spiels lesen nur Bit 0 und 1, das Format bleibt also verträglich.
 const { classify, ARCH_NAMES, LANDKREIS } = require('./classify-buildings');
+const ROOF_SHAPE = { gabled: 1, pitched: 1, hipped: 2, 'half-hipped': 3, skillion: 4, flat: 5, pyramidal: 6, mansard: 7, gambrel: 7 };
 // Dachfarben aus den Luftbildern (tools/roof-colors.ps1), falls schon gemessen
 const roofFile = path.join(RAW, 'roof-colors.json');
 const roofCol = fs.existsSync(roofFile) ? JSON.parse(fs.readFileSync(roofFile, 'utf8')) : null;
 for (const k of kept) { k.tk = tileOf(k.cx, k.cz).join(','); if (roofCol && roofCol[k.id]) k.rc = roofCol[k.id]; }
 const CL = classify(kept, { ways, nodes, tagNodes, rels, coordsOf, isClosed, assembleRings, pointInRing });
 for (const k of kept) {
-  const flags = k.flags | (k.a << 2) | (k.fw << 6);
+  // Bits 7–9: Dachform aus OSM (roof:shape), Bits 10–11: Bauzeit (tools/classify-buildings.js)
+  const flags = k.flags | (k.a << 2) | (k.fw << 6) | ((ROOF_SHAPE[k.tags['roof:shape']] || 0) << 7) | ((k.era || 0) << 10);
   tileData(k.cx, k.cz).b.push([typeOf(k.type), Math.round(k.h * 10), flags, nameOf(k.tags.name || null), ...enc(k.ring)]);
   nb++;
 }

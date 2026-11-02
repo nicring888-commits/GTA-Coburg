@@ -33,6 +33,10 @@ function segHit(ax, az, bx, bz, cx, cz, dx, dz) {
   return t > 0 && t < 1 && u > 0 && u < 1 ? t : null;
 }
 const LAMP_ROADS = /residential|living_street|tertiary|secondary|primary|unclassified/;
+// Gehsteige (seit v3.6.0): Breite je Straßenart; Spielstraßen (Mischfläche), Wirtschaftswege, Zufahrten, Autobahnen und
+// Kraftfahrstraßen bekommen keinen. Gebaut wird nur innerorts (Häuser an dieser Straßenseite, Ort groß genug).
+const WALK_WIDTH = { primary: 2.2, secondary: 2.1, tertiary: 1.9, unclassified: 1.5, residential: 1.6 };
+const SIDEWALK = { curb: 0.15, h: 0.12, cell: 40 };
 // begehbare Lokale und Läden im Landkreis: Art aus OSM -> Raumtyp (venues.js)
 function regionVenueType(name, kind) {
   if (kind === 'amenity=fast_food' && /kebab|kebap|döner|doner|dürüm/i.test(name)) return 'doener';
@@ -67,6 +71,9 @@ const GEWERBE_WALLS = ['#d8d8d4', '#c9ccce', '#e4e2dc', '#b8bec4', '#d3cfc5', '#
 const INDUSTRIE_WALLS = ['#c5c1b7', '#b9bec4', '#d6d8d8', '#8e9aa3', '#a9b0a8', '#c9c4b5', '#7f8d93'];
 const AGRAR_NEU_WALLS = ['#b7b9b4', '#8f9a8c', '#6f7f6c', '#c9c7bd', '#a39d90', '#7d8a86'];
 const NEBEN_WALLS = ['#d9d4c8', '#cfcac0', '#e2ded4', '#bdb8ad', '#c8c2b4'];
+// Garagen je Bauzeit (0 alt, 1 1950er–70er, 2 1970er–90er, 3 Neubau) und Gartenschuppen aus Holz
+const GARAGE_WALLS = [['#cfc6b4', '#bfb39d', '#d6cfc0'], ['#d8d2c4', '#cfcabd', '#e0dbd0'], ['#efe6d2', '#e9dfc9', '#f2ede2'], ['#ecebe7', '#e2e0db', '#d4d1ca', '#f2f1ed']];
+const SHED_WALLS = ['#7a5a3c', '#8b6a48', '#6e5a46', '#9a7b58', '#5f6b5a'];
 const ARCH_WALLS = { 1: RURAL_FACADES, 2: RURAL_FACADES, 3: SIEDLUNG_FACADES, 4: EFH_FACADES, 5: NEUBAU_FACADES, 6: MFH_FACADES, 7: GEWERBE_WALLS };
 // Dach je Wohn-Bautyp: Neigung (Grad), Überstand an Traufe und Ortgang (m), Untersicht, Schornstein-Wahrscheinlichkeit
 const ARCH_ROOF = {
@@ -75,7 +82,7 @@ const ARCH_ROOF = {
   2: { pitch: [42, 55], oE: 0.35, oG: 0.25, under: ['#5a4636'], chimney: 1 },
   3: { pitch: [38, 48], oE: 0.32, oG: 0.22, under: ['#77706a', '#6e675e'], chimney: 0.9 },
   4: { pitch: [30, 42], oE: 0.7, oG: 0.5, under: ['#5b3f2a', '#6a4a30', '#e9e5dc'], chimney: 0.7 },
-  5: { pitch: [24, 38], oE: 0.55, oG: 0.35, under: ['#ecebe7', '#3a3c3f', '#ecebe7'], chimney: 0.2, hip: 0.5 },
+  5: { pitch: [24, 38], oE: 0.55, oG: 0.35, under: ['#ecebe7', '#3a3c3f', '#ecebe7'], chimney: 0.2 },
 };
 const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600,
   scrub: 1 / 380, residential: 1 / 1700, meadow: 1 / 5000, farmyard: 1 / 2500 };
@@ -195,6 +202,7 @@ class Region {
     const adj = new Map();
     E.forEach((e, ei) => { for (const nd of [e.a, e.b]) { if (!adj.has(nd)) adj.set(nd, []); adj.get(nd).push(ei); } });
     this.nodeDeg = nd => (adj.get(nd) || []).length;
+    this.nodeEdges = nd => adj.get(nd) || [];
     // Höhenprofil einer Kante, alle `step` m (Fahrbahn ohne Brücke: Gelände)
     const make = (ei, linear) => {
       const e = E[ei], p = e.p, n = p.length / 2, cum = [0];
@@ -513,6 +521,7 @@ class Region {
       this.buildRoads(t);
       this.buildWater(t);
       this.buildBuildings(t);
+      this.buildSidewalks(t);
       this.buildRails(t);
       t.town = t.buildings.length >= REGION.townBuildings;
       const rr = this.rural.get(t.key);
@@ -545,8 +554,10 @@ class Region {
     const line = (a, from = 0) => { const o = []; let x = 0, z = 0; for (let k = from; k < a.length; k += 2) { x += a[k]; z += a[k + 1]; o.push(x / 10, z / 10); } return o; };
     const types = this.R.types, names = this.R.names;
     return {
-      // Flags: Bit 0 Satteldach, Bit 1 Flachdach, Bits 2–5 Bautyp (tools/classify-buildings.js, 0 = ältere Daten), Bit 6 Fachwerk
+      // Flags: Bit 0 Satteldach, Bit 1 Flachdach, Bits 2–5 Bautyp (tools/classify-buildings.js, 0 = ältere Daten), Bit 6 Fachwerk,
+      // Bits 7–9 Dachform aus OSM (1 Sattel, 2 Walm, 3 Krüppelwalm, 4 Pult, 5 Flach, 6 Zelt, 7 Mansard), Bits 10–11 Bauzeit
       buildings: (raw.b || []).map(b => ({ t: types[b[0]], h: b[1] / 10, r: b[2] & 1, f: b[2] & 2, a: (b[2] >> 2) & 15, fw: (b[2] >> 6) & 1,
+        rs: (b[2] >> 7) & 7, e: (b[2] >> 10) & 3,
         n: b[3] >= 0 ? names[b[3]] : undefined, p: line(b, 4) })),
       areas: (raw.a || []).map(a => ({ k: a[0], p: line(a[1]), ho: a[2] ? a[2].map(h => line(h)) : undefined })),
       trees: line(raw.t || []),
@@ -802,6 +813,176 @@ class Region {
     marks.meshes(mm, { receive: true }).forEach(m => t.group.add(m));
   }
 
+  // ---------------- Gehsteige und Belebtheit (seit v3.6.0) ----------------
+  // Grobes Raster über den ganzen Landkreis (40 m): Wohn- und Geschäftshäuser, Läden, Sonderbauten (Schule, Kirche,
+  // Amt …). Daraus: innerorts ja/nein (Gehsteige) und wie belebt eine Straße ist (Fußgänger).
+  activity() {
+    if (this._act) return this._act;
+    const C = SIDEWALK.cell, m = new Map(), types = this.R.types;
+    const cell = (x, z) => { const k = Math.floor(x / C) * 100003 + Math.floor(z / C); let o = m.get(k); if (!o) m.set(k, o = { h: 0, s: 0, x: 0 }); return o; };
+    for (const key in this.R.data) {
+      const d = this.R.data[key];
+      for (const b of d.b || []) {
+        const a = (b[2] >> 2) & 15, x = b[4] / 10, z = b[5] / 10;
+        if ((a >= 1 && a <= 7) || (a === 0 && RURAL_HOUSES.has(types[b[0]]))) cell(x, z).h++;
+        else if (a === 12) cell(x, z).x++;
+      }
+      for (const q of d.s || []) cell(q[2] / 10, q[3] / 10).s++;
+    }
+    const sum = (x, z, r, f) => {
+      let n = 0;
+      const i0 = Math.floor((x - r) / C), i1 = Math.floor((x + r) / C), j0 = Math.floor((z - r) / C), j1 = Math.floor((z + r) / C);
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const o = m.get(i * 100003 + j); if (o) n += o[f]; }
+      return n;
+    };
+    const towns = this.places.filter(p => p.k === 'town' || p.k === 'city'), villages = this.places.filter(p => p.k === 'village' || p.k === 'suburb');
+    return this._act = { sum, towns, villages };
+  }
+  // innerorts an dieser Stelle (Häuser in ≈ 45 m) und Ort groß genug: Hauptstraßen ab 10 Häusern im Umkreis von
+  // 160 m, Wohn- und Nebenstraßen ab 25 (in kleinen Dörfern gibt es meist keinen Gehsteig)
+  builtUp(x, z, h) {
+    // Ergebnis je 20-m-Feld zwischenspeichern (viele Stützpunkte liegen im selben Feld)
+    const A = this.activity(), memo = A.memo || (A.memo = new Map()), k = Math.floor(x / 20) * 100003 + Math.floor(z / 20);
+    let m = memo.get(k);
+    if (!m) { m = [A.sum(x, z, 40, 'h'), A.sum(x, z, 160, 'h')]; memo.set(k, m); }
+    return m[0] >= 4 && m[1] >= (/residential|unclassified/.test(h) ? 25 : 10);
+  }
+  // Belebtheit einer Straßenstelle 0…1: Läden und Lokale, Nähe zur Stadt- bzw. Dorfmitte, Wohndichte, Schulen/Kirchen
+  liveliness(x, z) {
+    // je 40-m-Feld einmal rechnen
+    const A = this.activity(), memo = A.live || (A.live = new Map()), k = Math.floor(x / 40) * 100003 + Math.floor(z / 40);
+    if (memo.has(k)) return memo.get(k);
+    const shops = Math.min(1, A.sum(x, z, 120, 's') / 8), homes = Math.min(1, A.sum(x, z, 100, 'h') / 45), pub = Math.min(1, A.sum(x, z, 120, 'x') / 2);
+    let center = 0;
+    for (const p of A.towns) { const d = Math.hypot(p.x - x, p.z - z); if (d < 600) center = Math.max(center, 1 - d / 600); }
+    for (const p of A.villages) { const d = Math.hypot(p.x - x, p.z - z); if (d < 260) center = Math.max(center, (1 - d / 260) * 0.45); }
+    const v = U.clamp(Math.max(shops * 0.95, center * 0.8) + 0.22 * homes + 0.12 * pub, 0.02, 1);
+    memo.set(k, v);
+    return v;
+  }
+  edgeCum(e) {
+    if (!e.cum) { const p = e.p, c = [0]; for (let i = 1; i < p.length / 2; i++) c.push(c[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1])); e.cum = c; }
+    return e.cum;
+  }
+  // Abstand vom Knoten, ab dem der Gehsteig beginnt (Kreuzung: Fahrbahn der Querstraße plus Übergang)
+  nodeTrim(nd, e) {
+    if (this.nodeDeg(nd) < 3) return 0;
+    let w = 0;
+    for (const ei of this.nodeEdges(nd)) { const o = this.graph.edges[ei]; if (o !== e) w = Math.max(w, o.w / 2); }
+    return w + 2.2;
+  }
+  // Gehsteige an beiden Straßenseiten: Bordstein (Granit, 12 cm), Belag, Absenkung an Einfahrten und vor Kreuzungen,
+  // Schürze zum tieferen Gelände. Fußgänger und Spielfigur stehen darauf (walkAt), Bäume und Zäune halten Abstand.
+  buildSidewalks(t) {
+    const runs = this.runs.get(t.key);
+    t.walkGrid = new U.Grid(16);
+    if (!runs) return;
+    const W = this.world, walkB = new Bucket(); // ein Netz je Kachel (Belag und Bordstein, eine Zeichnung)
+    const colS = U.color('#7a7772', 0.04, U.rng(t.key)), colC = new THREE.Color('#bdb9b0'), y0 = REGION.roadY;
+    const hAt = (x, z) => this.heightAt0(x, z);
+    let built = 0;
+    // Wohnhäuser und Garagen der Kachel (für Einfahrten) in einem kleinen Raster
+    const homes = new U.Grid(20), hq = [];
+    for (const b of t.buildings) {
+      if (!(b.a >= 3 && b.a <= 6) && b.a !== 11 && b.a !== 0) continue;
+      const x = (b.bb.minX + b.bb.maxX) / 2, z = (b.bb.minZ + b.bb.maxZ) / 2;
+      homes.insert({ x, z }, x, z, x, z);
+    }
+    for (const run of runs) {
+      const e = this.graph.edges[run.e], wid = WALK_WIDTH[e.h];
+      if (!wid || e.deck || e.br) continue;
+      const pts = W.resample(e.p.slice(run.k0 * 2, run.k1 * 2 + 2), 4), n = pts.length / 2;
+      if (n < 2) continue;
+      const cum = this.edgeCum(e), total = cum[cum.length - 1], half = e.w / 2;
+      const sAt = [cum[run.k0]];
+      for (let i = 1; i < n; i++) sAt.push(sAt[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]));
+      const trimA = this.nodeTrim(e.a, e), trimB = this.nodeTrim(e.b, e);
+      const nrm = [];
+      for (let i = 0; i < n; i++) {
+        const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+        let tx = pts[b * 2] - pts[a * 2], tz = pts[b * 2 + 1] - pts[a * 2 + 1];
+        const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+        nrm.push([-tz, tx]);
+      }
+      for (const side of [1, -1]) {
+        const on = new Uint8Array(n), low = new Uint8Array(n);
+        for (let i = 0; i < n; i++) {
+          const x = pts[i * 2] + nrm[i][0] * side * (half + 14), z = pts[i * 2 + 1] + nrm[i][1] * side * (half + 14);
+          on[i] = this.builtUp(x, z, e.h) && !this.inCore(pts[i * 2], pts[i * 2 + 1]) ? 1 : 0;
+        }
+        // Lücken bis 12 m schließen, Stücke unter 16 m weglassen
+        for (let i = 1; i < n - 1; i++) if (!on[i]) { let j = i; while (j < n && !on[j]) j++; if (j < n && j - i <= 3 && on[i - 1]) for (let k = i; k < j; k++) on[k] = 1; i = j; }
+        for (let i = 0; i < n; i++) if (on[i]) { let j = i; while (j < n && on[j]) j++; if (j - i < 5) for (let k = i; k < j; k++) on[k] = 0; i = j; }
+        // Kreuzungen frei, davor abgesenkt (Übergang)
+        for (let i = 0; i < n; i++) if (sAt[i] < trimA || total - sAt[i] < trimB) on[i] = 0;
+        for (let i = 0; i < n; i++) if (on[i] && ((i > 0 && !on[i - 1]) || (i < n - 1 && !on[i + 1]))) low[i] = 1;
+        // Einfahrten: Häuser und Garagen an dieser Seite bis 30 m hinter dem Gehsteig, je eines an der nächsten Stelle
+        const best = new Map();
+        for (let i = 0; i < n; i++) {
+          if (!on[i]) continue;
+          for (const h of homes.query(pts[i * 2], pts[i * 2 + 1], half + 32, hq)) {
+            const dx = h.x - pts[i * 2], dz = h.z - pts[i * 2 + 1], lat = (dx * nrm[i][0] + dz * nrm[i][1]) * side, d = Math.hypot(dx, dz);
+            if (lat <= half || lat >= half + 32) continue;
+            const o = best.get(h);
+            if (!o || d < o[1]) best.set(h, [i, d]);
+          }
+        }
+        for (const [i] of best.values()) low[i] = 2;
+        const P = (i, o) => [pts[i * 2] + nrm[i][0] * side * o, pts[i * 2 + 1] + nrm[i][1] * side * o];
+        const geo = [];
+        for (let i = 0; i < n; i++) {
+          const p0 = P(i, half), p1 = P(i, half + SIDEWALK.curb), p2 = P(i, half + SIDEWALK.curb + wid);
+          const hr = hAt(p0[0], p0[1]) + y0, top = hr + (low[i] ? 0.03 : SIDEWALK.h), ground = hAt(p2[0], p2[1]);
+          const outer = U.clamp(ground + 0.03, top, top + 0.25);
+          geo.push({ p0, p1, p2, hr, top, inner: low[i] ? top : top, outer, ground });
+        }
+        for (let i = 0; i < n - 1; i++) {
+          if (!on[i] || !on[i + 1]) continue;
+          const A = geo[i], B = geo[i + 1], mx = pts[i * 2], mz = pts[i * 2 + 1];
+          const nx = nrm[i][0] * side, nz = nrm[i][1] * side;
+          const v = (p, y) => [p[0], y, p[1]];
+          const sb = walkB, cb = walkB;
+          // Bordstein: Ansichtsfläche zur Fahrbahn und Oberseite
+          cb.tri(v(A.p0, A.hr - 0.04), v(B.p0, B.hr - 0.04), v(B.p0, B.top), colC, null, null, null, -nx, 0, -nz);
+          cb.tri(v(A.p0, A.hr - 0.04), v(B.p0, B.top), v(A.p0, A.top), colC, null, null, null, -nx, 0, -nz);
+          cb.tri(v(A.p0, A.top), v(B.p0, B.top), v(B.p1, B.top), colC, null, null, null, 0, 1, 0);
+          cb.tri(v(A.p0, A.top), v(B.p1, B.top), v(A.p1, A.top), colC, null, null, null, 0, 1, 0);
+          // Belag
+          sb.tri(v(A.p1, A.top), v(B.p1, B.top), v(B.p2, B.outer), colS, null, null, null, 0, 1, 0);
+          sb.tri(v(A.p1, A.top), v(B.p2, B.outer), v(A.p2, A.outer), colS, null, null, null, 0, 1, 0);
+          // Schürze zum tieferen Gelände
+          if (A.ground < A.outer - 0.05 || B.ground < B.outer - 0.05) {
+            cb.tri(v(A.p2, A.outer), v(B.p2, B.outer), v(B.p2, Math.min(B.ground, B.outer) - 0.3), colS, null, null, null, nx, 0, nz);
+            cb.tri(v(A.p2, A.outer), v(B.p2, Math.min(B.ground, B.outer) - 0.3), v(A.p2, Math.min(A.ground, A.outer) - 0.3), colS, null, null, null, nx, 0, nz);
+          }
+          const strip = { ax: mx, az: mz, bx: pts[i * 2 + 2], bz: pts[i * 2 + 3], side, o0: half, o1: half + SIDEWALK.curb + wid, ya: A.top, yb: B.top, oa: A.outer, ob: B.outer };
+          t.walkGrid.insert(strip, Math.min(A.p0[0], A.p2[0], B.p0[0], B.p2[0]), Math.min(A.p0[1], A.p2[1], B.p0[1], B.p2[1]),
+            Math.max(A.p0[0], A.p2[0], B.p0[0], B.p2[0]), Math.max(A.p0[1], A.p2[1], B.p0[1], B.p2[1]));
+          built++;
+        }
+      }
+    }
+    const g = walkB.geometry();
+    if (g) { const m = new THREE.Mesh(g, W.buildingMaterials().plain); m.receiveShadow = true; t.group.add(m); }
+    t.walkPieces = built;
+  }
+  // Höhe der Gehsteig-Oberfläche an einer Stelle (oder null): für Spielfigur, Fußgänger, Bäume und Zäune
+  walkAt(x, z) {
+    const [ti, tj] = this.tileOf(x, z), t = this.loaded.get(tileKey(ti, tj));
+    if (!t || !t.walkGrid) return null;
+    for (const s of t.walkGrid.query(x, z, 0.5, this._walkQ || (this._walkQ = []))) {
+      const dx = s.bx - s.ax, dz = s.bz - s.az, l2 = dx * dx + dz * dz;
+      if (l2 < 1e-6) continue;
+      const k = ((x - s.ax) * dx + (z - s.az) * dz) / l2;
+      if (k < -0.05 || k > 1.05) continue;
+      const l = Math.sqrt(l2), lat = ((x - s.ax) * -dz + (z - s.az) * dx) / l * s.side;
+      if (lat < s.o0 || lat > s.o1) continue;
+      const kk = U.clamp(k, 0, 1), f = (lat - s.o0) / (s.o1 - s.o0);
+      return (s.ya + (s.yb - s.ya) * kk) * (1 - f) + (s.oa + (s.ob - s.oa) * kk) * f;
+    }
+    return null;
+  }
+
   // Linie parallel zur Polylinie im Abstand o (positiv: links)
   offsetLine(pts, o) {
     const n = pts.length / 2, out = [];
@@ -1005,15 +1186,20 @@ class Region {
         if (len < 0.1) continue;
         const dx = (bx - ax) / len, dz = (bz - az) / len, mx = (ax + bx) / 2, mz = (az + bz) / 2;
         const town = near(mx, mz, 30);
-        if (town) life.segs.push({ ax, az, bx, bz, n: e.n, k: 'road', h: e.h, w: e.w });
+        if (town) {
+          // Belebtheit (Fußgängerdichte) und auf welcher Seite ein Gehsteig ist (1 links, 2 rechts in Richtung a→b)
+          const off = e.w / 2 + 1, sl = this.walkAt(mx - dz * off, mz + dx * off) !== null, sr = this.walkAt(mx + dz * off, mz - dx * off) !== null;
+          life.segs.push({ ax, az, bx, bz, n: e.n, k: 'road', h: e.h, w: e.w, act: this.liveliness(mx, mz), walk: (sl ? 1 : 0) | (sr ? 2 : 0) });
+        }
         for (; nextAt < segStart + len; nextAt += 30) {
           const s = nextAt - segStart, x0 = ax + dx * s, z0 = az + dz * s;
           if (!near(x0, z0, 25)) { side = -side; continue; }
-          const off = e.w / 2 + 0.7, x = x0 - dz * off * side, z = z0 + dx * off * side;
+          const off = e.w / 2 + (this.walkAt(x0 - dz * (e.w / 2 + 1) * side, z0 + dx * (e.w / 2 + 1) * side) !== null ? SIDEWALK.curb + 0.45 : 0.7), x = x0 - dz * off * side, z = z0 + dx * off * side;
           side = -side;
           // nicht im Haus, nicht an einem Hindernis und nicht auf einer anderen Fahrbahn (Kreuzungen, Einmündungen)
           if (this.insideBuilding(x, z, 0.4, t) || W.collideCircle(x, z, 0.3, {}).hit || this.nearRoad(x, z, 0.4)) continue;
-          lamps.push({ x, z, y: W.heightAt(x, z), ry: Math.atan2(dz * -side, -dx * -side) });
+          const wy = this.walkAt(x, z);
+          lamps.push({ x, z, y: wy !== null ? wy : W.heightAt(x, z), ry: Math.atan2(dz * -side, -dx * -side) });
         }
         segStart += len;
       }
@@ -1113,25 +1299,40 @@ class Region {
       const plainType = PLAIN_TYPES.has(b.t) || farm || hall || isCanopy || neben;
       // kleines Wohnhaus: eigene Fenster, Haustür und Dach je Bautyp (Landhaus nur im historischen Kern)
       const rural = !plainType && arch <= ARCH.NEUBAU && RURAL_HOUSES.has(b.t) && absA >= 30 && absA <= 300 && b.h < 14 && n <= 12;
+      // Garage (mit Tor zur Straße), Garagenzeile, Gartenschuppen; Bauzeit vom Nachbarhaus (tools/classify-buildings.js)
+      const road0 = neben ? this.nearestRoad((ring[0] + ring[4 % ring.length]) / 2, (ring[1] + ring[5 % ring.length]) / 2, 40, null) : null;
+      const garage = neben && !isCanopy && absA >= 14 && (b.t === 'garage' || b.t === 'garages' || (b.t === 'yes' && absA <= 75 && !!road0));
+      const shed = neben && !garage && !isCanopy && absA < 40;
+      const era = b.e || 0;
       // Nebengebäude ohne Typ (Garage, Schuppen) bekämen sonst die geschätzten 8 m eines Hauses
-      const eaveH = rural ? this.eaveHeight(arch, b.h, rnd) : neben && b.t === 'yes' ? Math.min(b.h, 2.9 + rnd() * 0.5) : b.h;
-      const top = Math.max(minH + eaveH, maxH + 2.2), base = isCanopy ? top - 0.6 : minH - 2;
+      const eaveH = rural ? this.eaveHeight(arch, b.h, rnd) : garage ? 2.55 + rnd() * 0.4 : shed ? Math.min(b.h, 2.3 + rnd() * 0.3)
+        : neben && b.t === 'yes' ? Math.min(b.h, 2.9 + rnd() * 0.5) : b.h;
+      const top = Math.max(minH + eaveH, maxH + (garage || shed ? 1.4 : 2.2)), base = isCanopy ? top - 0.6 : minH - 2;
       const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
       const pick = list => list[Math.floor(rnd() * list.length)];
       const hex = farm ? pick(agNeu ? AGRAR_NEU_WALLS : BARN_WALLS) : indus ? pick(INDUSTRIE_WALLS) : hall ? '#c5c1b7'
+        : garage ? pick(GARAGE_WALLS[era]) : shed && /shed|hut|allotment_house|yes/.test(b.t) ? pick(SHED_WALLS)
         : neben ? pick(NEBEN_WALLS) : PLAIN_TYPES.has(b.t) ? '#a7a39a'
         : /church|chapel|cathedral/.test(b.t) ? '#e6dfcc' : b.t === 'castle' ? '#d8ccae' : pick(ARCH_WALLS[arch] || RURAL_FACADES);
       const styleCode = 8 * arch + 128 * (b.fw || 0);
       const wallCol = U.color(hex, 0.1, rnd);
-      const wb = plainType ? plain.get(cx, cz) : walls.get(cx, cz), pb = plain.get(cx, cz);
-      // Haustür: an der längsten Wand, die zur nächsten Straße zeigt
+      const wb = plainType && !garage ? plain.get(cx, cz) : walls.get(cx, cz), pb = plain.get(cx, cz);
+      // Dachform (js/houses.js) vor den Wänden festlegen: Pultdach hebt die hohe Wand an, Flachdach bekommt eine Attika
+      const f4 = n === 4 ? HouseKit.frame(ring) : null;
+      const plan = rural && n === 4 ? HouseKit.plan(arch, b.rs || 0, f4.a / Math.max(0.5, f4.d), eaveH < 4.2, rnd)
+        : rural && arch === ARCH.NEUBAU && (b.rs === 5 || (!b.rs && rnd() < 0.3)) ? { kind: 'flat', par: 0.35 }
+        : garage && (era === 3 || (era !== 0 && !(era === 2 && rnd() < 0.4))) && b.rs !== 1 ? { kind: 'flat', par: era === 3 ? 0.25 : 0 } : null;
+      const yHigh = plan && plan.kind === 'pult' ? top + 2 * f4.d * Math.tan(plan.pitch * Math.PI / 180) : top;
+      const wallTop = (ox, oz) => !plan ? top : plan.kind === 'pult' ? ((ox * f4.vx + oz * f4.vz) * plan.side > 0.7 ? yHigh : top)
+        : plan.kind === 'flat' ? top + plan.par : top;
+      // Haustür: an der längsten Wand, die zur nächsten Straße zeigt (Garage: Tor zur Straße)
       let doorWall = -1, doorSlot = 0;
-      if (rural) {
-        const road = this.nearestRoad(cx, cz, 45, null);
+      if (rural || garage) {
+        const road = rural ? this.nearestRoad(cx, cz, 45, null) : road0;
         let best = -Infinity;
         for (let i = 0; i < n; i++) {
           const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
-          if (len < 3.6) continue;
+          if (len < (garage ? 2.6 : 3.6)) continue;
           const ox = sgn * (bz - az) / len, oz = -sgn * (bx - ax) / len;
           const tx = road ? road.x - (ax + bx) / 2 : ox, tz = road ? road.z - (az + bz) / 2 : oz, tl = Math.hypot(tx, tz) || 1;
           const score = (ox * tx + oz * tz) / tl + len * 0.02;
@@ -1150,18 +1351,28 @@ class Region {
         const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
         if (len < 0.01) { sideBase.push(minH); continue; }
         const ox = sgn * dz / len, oz = -sgn * dx / len;
-        const u0 = along / BAY_W, u1 = (along + len) / BAY_W, v0 = (base - minH) / BAY_H, v1 = (top - minH) / BAY_H;
+        const wt = wallTop(ox, oz), profTop = plan && plan.kind === 'pult' ? wt : top;
+        const u0 = along / BAY_W, u1 = (along + len) / BAY_W, v0 = (base - minH) / BAY_H, v1 = (wt - minH) / BAY_H;
         // Boden an dieser Wand: höchstes Gelände an ihr (Fenster und Tür darüber)
         const gnd = Math.max(minH, this.heightAt(ax, az), this.heightAt(bx, bz), this.heightAt((ax + bx) / 2, (az + bz) / 2));
         sideBase.push(gnd);
-        const style = (rural ? (i === doorWall ? 2 : 1) : 0) + styleCode;
-        const pr = plainType ? null : rectProfile(along, len, top, gnd, style, i === doorWall ? doorSlot : 0);
+        const style = (rural ? (i === doorWall ? 2 : 1) : garage ? (i === doorWall ? 5 : 4) : 0) + styleCode;
+        // Garage: Feld „Tür“ = Bauzeit × 16 + Zahl der Tore (Doppelgarage am Neubau mit einem breiten Tor)
+        const gDoors = garage && i === doorWall ? era * 16 + (era === 3 && len < 7.2 ? 1 : U.clamp(Math.floor((len - 0.35) / 2.95), 1, 12)) : 0;
+        const pr = plainType && !garage ? null : rectProfile(along, len, profTop, gnd, style, garage ? gDoors : i === doorWall ? doorSlot : 0);
         along += len;
-        const A0 = [ax, base, az], B0 = [bx, base, bz], B1 = [bx, top, bz], A1 = [ax, top, az];
+        const A0 = [ax, base, az], B0 = [bx, base, bz], B1 = [bx, wt, bz], A1 = [ax, wt, az];
         wb.tri(A0, B0, B1, wallCol, [u0, v0], [u1, v0], [u1, v1], ox, 0, oz, pr);
         wb.tri(A0, B1, A1, wallCol, [u0, v0], [u1, v1], [u0, v1], ox, 0, oz, pr);
         if (!isCanopy) { t.edges.push(ax, az, bx, bz); t.edgeGrid.insert(t.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)); }
-        if (i === doorWall) {
+        // Pultdach: Giebelseiten bekommen das Dreieck bis zur hohen Traufe
+        if (plan && plan.kind === 'pult' && Math.abs(ox * f4.vx + oz * f4.vz) < 0.3) {
+          const hiB = ((bx - f4.c[0]) * f4.vx + (bz - f4.c[1]) * f4.vz) * plan.side > 0, a0 = along - len;
+          const T = hiB ? [bx, yHigh, bz] : [ax, yHigh, az];
+          const tp = hiB ? [a0, a0 + len, a0 + len, style, top, yHigh, yHigh, gnd, top - 0.05, 0] : [a0, a0, a0 + len, style, yHigh, yHigh, top, gnd, top - 0.05, 0];
+          wb.tri(A1, B1, T, wallCol, [u0, v1], [u1, v1], [hiB ? u1 : u0, (yHigh - minH) / BAY_H], ox, 0, oz, tp);
+        }
+        if (i === doorWall && rural) {
           // Vordach über der Haustür und eine Stufe davor
           const nS = Math.max(1, Math.floor(len / 3.1)), sw = len / nS, dm = (doorSlot + 0.5) * sw;
           const px = ax + dx / len * dm, pz = az + dz / len * dm, ang = Math.atan2(dz, dx);
@@ -1176,16 +1387,26 @@ class Region {
       // Dach: mit Luftbild das Foto von oben, sonst Ziegel- oder Flachdachfarbe
       const rt = t.photo ? { b: roofs.get(cx, cz), uv: tuv } : { b: plain.get(cx, cz) };
       const roofCol = t.photo ? photoCol : U.color(b.r || HIP_TYPES.has(b.t) ? TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)] : '#7c7973', 0.12, rnd);
-      if (isCanopy) W.flatRoof({ b: pb }, [ring], base, roofCol, -1);
+      if (isCanopy) { W.flatRoof({ b: pb }, [ring], base, roofCol, -1); this.carportPosts(pb, ring, base, minH, rnd); }
       const RF = ARCH_ROOF[arch] || ARCH_ROOF[0];
-      if (rural && n === 4 && RF.hip && this.quadAspect(ring) < 1.35 && rnd() < RF.hip) this.hipHouseRoof(rt, pb, ring, top, roofCol, RF, rnd);
-      else if (rural && n === 4) this.ruralRoof(t, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H, RF, styleCode);
+      let info = null;
+      // Straßenseite in v (für Gauben): Seite der Haustür
+      const streetSide = f4 && doorWall >= 0 ? Math.sign(((ring[doorWall * 2] + ring[((doorWall + 1) % n) * 2]) / 2 - f4.c[0]) * f4.vx + ((ring[doorWall * 2 + 1] + ring[((doorWall + 1) % n) * 2 + 1]) / 2 - f4.c[1]) * f4.vz) || 1 : 1;
+      if (plan && plan.kind === 'flat') HouseKit.flat(W, rt, pb, ring, top, plan, garage ? (era === 3 ? 5 : 3) : arch, roofCol, wallCol, rnd);
+      else if (plan && plan.kind === 'pult') HouseKit.pult(W, rt, pb, f4, top, yHigh, plan.side, RF, roofCol, rnd);
+      else if (plan && (plan.kind === 'hip' || plan.kind === 'tent')) HouseKit.hip(W, rt, pb, ring, top, roofCol, plan, RF, rnd);
+      else if (plan && plan.kind === 'halfhip') info = HouseKit.halfHip(W, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, plan, RF, styleCode, minH, BAY_W, BAY_H, rnd);
+      else if (plan) info = this.ruralRoof(t, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H,
+        plan.pitch ? Object.assign({}, RF, { pitch: [plan.pitch, plan.pitch] }) : RF, styleCode);
       else if (/tower/.test(b.t) && absA < 200) W.pyramidRoof(rt, ring, top, roofCol, Math.sqrt(absA) * 1.1);
       else if (b.r && n === 4) W.gableRoof(rt, pb, ring, top, wallCol, roofCol);
       else if (!b.f && !isCanopy && !neben && (HIP_TYPES.has(b.t) || farm || rural) && absA > 25 && absA < 3500 && b.h < 28 && W.hipRoof(rt, ring, top, roofCol)) { /* Walmdach */ }
       else W.flatRoof(rt, [ring], top, roofCol, 1);
+      // Gauben (nur Sattel- und Krüppelwalmdach mit ausgebautem Dachgeschoss), Balkone je Bautyp und Bauzeit
+      if (info) HouseKit.dormers(W, rt, pb, info, arch, wallCol, roofCol, streetSide, info.chimU !== undefined ? info.chimU : null, rnd);
+      if (!plainType && (rural || arch === ARCH.MFH)) this.balconies(pb, ring, sgn, sideBase, top, arch, era, rural, f4, info, doorWall, rnd);
       if (!isCanopy) {
-        const rec = { p: ring, bb, top, n: b.n, t: b.t, a: arch };
+        const rec = { p: ring, bb, top, n: b.n, t: b.t, a: arch, e: era };
         t.buildings.push(rec);
         t.polyGrid.insert(rec, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
       }
@@ -1206,48 +1427,10 @@ class Region {
       default: return low ? 3.5 + rnd() * 0.5 : rnd() < 0.3 ? 4.1 + rnd() * 0.5 : 5.3 + rnd() * 0.9;
     }
   }
-  // Seitenverhältnis eines Vierecks (lange zu kurze Seite)
-  quadAspect(p) {
-    const e = i => Math.hypot(p[((i + 1) % 4) * 2] - p[i * 2], p[((i + 1) % 4) * 2 + 1] - p[i * 2 + 1]);
-    const a = (e(0) + e(2)) / 2, b = (e(1) + e(3)) / 2;
-    return Math.max(a, b) / Math.max(0.5, Math.min(a, b));
-  }
-  // Flaches Walm- bzw. Zeltdach eines Neubaus („Stadtvilla“, 20–26°) mit Überstand, heller oder anthrazitfarbener
-  // Untersicht; Grundriss mit vier Ecken, First über die lange Seite (bei quadratischem Grundriss eine Spitze)
-  hipHouseRoof(rt, pb, p, top, roofCol, RF, rnd) {
-    const W = this.world;
-    const P = i => [p[(i % 4) * 2], p[(i % 4) * 2 + 1]];
-    const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-    const s = len(P(0), P(1)) >= len(P(1), P(2)) ? 0 : 1;
-    const c = [0, 1, 2, 3].map(i => P(i)).reduce((m, q) => [m[0] + q[0] / 4, m[1] + q[1] / 4], [0, 0]);
-    const p0 = P(s), p1 = P(s + 1), L = len(p0, p1), ux = (p1[0] - p0[0]) / L, uz = (p1[1] - p0[1]) / L, vx = -uz, vz = ux;
-    let a = 0, d = 0;
-    for (let i = 0; i < 4; i++) { const q = P(i), du = (q[0] - c[0]) * ux + (q[1] - c[1]) * uz, dv = (q[0] - c[0]) * vx + (q[1] - c[1]) * vz; a = Math.max(a, Math.abs(du)); d = Math.max(d, Math.abs(dv)); }
-    const o = RF.oE, tn = Math.tan((20 + rnd() * 6) * Math.PI / 180);
-    const A = a + o, D = d + o, yE = top - o * tn, ridge = Math.max(0, A - D), yR = yE + D * tn;
-    const X = (u, v, y) => [c[0] + ux * u + vx * v, y, c[1] + uz * u + vz * v];
-    const face = (q1, q2, q3, nu, nv) => W.roofTri(rt, q1, q2, q3, roofCol, ux * nu + vx * nv, 0.6, uz * nu + vz * nv);
-    const R0 = X(-ridge, 0, yR), R1 = X(ridge, 0, yR);
-    const E = [X(-A, -D, yE), X(A, -D, yE), X(A, D, yE), X(-A, D, yE)];
-    face(E[0], E[1], R1, 0, -1); face(E[0], R1, R0, 0, -1);
-    face(E[2], E[3], R0, 0, 1); face(E[2], R0, R1, 0, 1);
-    face(E[1], E[2], R1, 1, 0); face(E[3], E[0], R0, -1, 0);
-    // Untersicht und Traufbrett
-    const under = U.color(RF.under[Math.floor(rnd() * RF.under.length)], 0.06, rnd), th = 0.18;
-    const Ed = E.map(q => [q[0], q[1] - th, q[2]]);
-    const inner = [X(-a, -d, top), X(a, -d, top), X(a, d, top), X(-a, d, top)];
-    for (let i = 0; i < 4; i++) {
-      const j = (i + 1) % 4, mx = (E[i][0] + E[j][0]) / 2 - c[0], mz = (E[i][2] + E[j][2]) / 2 - c[1];
-      pb.tri(Ed[i], Ed[j], inner[j], under, null, null, null, mx * 0.1, -1, mz * 0.1);
-      pb.tri(Ed[i], inner[j], inner[i], under, null, null, null, mx * 0.1, -1, mz * 0.1);
-      pb.tri(Ed[i], Ed[j], E[j], under, null, null, null, mx, 0, mz);
-      pb.tri(Ed[i], E[j], E[i], under, null, null, null, mx, 0, mz);
-    }
-  }
 
-  // Satteldach eines Landhauses (Grundriss mit vier Ecken): steil (40–52°), First über die lange Seite, Dachüberstand
-  // an Traufe (45 cm) und Ortgang (30 cm) mit Untersicht und Traufbrett, Giebelwände mit Fenstern (Wandprofil als
-  // Dreieck), Schornstein auf dem First
+  // Satteldach (Grundriss mit vier Ecken): Neigung je Bautyp (ARCH_ROOF bzw. HouseKit.plan), First über die lange Seite, Dachüberstand
+  // an Traufe und Ortgang mit Untersicht und Traufbrett, Giebelwände mit Fenstern (Wandprofil als Dreieck), Schornstein auf
+  // dem First; gibt die Maße für Gauben zurück (js/houses.js)
   ruralRoof(t, rt, wb, pb, p, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H, RF = ARCH_ROOF[0], styleCode = 0) {
     const W = this.world;
     const P = i => [p[(i % 4) * 2], p[(i % 4) * 2 + 1]];
@@ -1294,11 +1477,78 @@ class Region {
     gable(p1, p2, r1, (s + 1) % 4);
     gable(p3, p0, r0, (s + 3) % 4);
     // Schornstein auf dem First (verputzt oder Ziegel), mit Abdeckplatte
-    if (rnd() > RF.chimney) return;                      // Neubauten meist ohne Schornstein
+    const info = { f: HouseKit.frame(p), top, yR: ridgeH, slope, d: depth / 2, a: L / 2 };
+    if (rnd() > RF.chimney) return info;                 // Neubauten meist ohne Schornstein
     const f = rnd() < 0.5 ? 0.28 : 0.68, sx = r0[0] + (r1[0] - r0[0]) * f, sz = r0[1] + (r1[1] - r0[1]) * f, ang = Math.atan2(dz, dx);
     const ch = rnd() < 0.55 ? U.color('#8c4a38', 0.1, rnd) : wallCol;
     W.boxTris(pb, sx, top + rise * 0.4, sz, 0.55, ridgeH + 0.95 - (top + rise * 0.4), 0.55, ang, ch);
     W.boxTris(pb, sx, ridgeH + 0.95, sz, 0.72, 0.08, 0.72, ang, U.color('#55524d', 0.05, rnd));
+    info.chimU = (sx - info.f.c[0]) * info.f.ux + (sz - info.f.c[1]) * info.f.uz;
+    return info;
+  }
+
+  // Pfosten eines Carports an den Ecken (Holz oder Anthrazit)
+  carportPosts(pb, ring, y, minH, rnd) {
+    const col = U.color(rnd() < 0.5 ? '#6e5236' : '#3a3c3f', 0.06, rnd), n = ring.length / 2;
+    for (let i = 0; i < n; i++) {
+      const x = ring[i * 2], z = ring[i * 2 + 1], g = this.heightAt(x, z);
+      this.world.boxTris(pb, x, g - 0.1, z, 0.12, y - g + 0.1, 0.12, 0, col);
+    }
+  }
+
+  // Balkone: Mehrfamilienhäuser an der Rückseite je Geschoss (Bauweise nach Bauzeit), Häuser der 1970er–90er oft
+  // ein Holzbalkon am Giebel, Neubauten manchmal ein Stahl-/Glasbalkon im Obergeschoss, Siedlungshäuser selten.
+  // Die Rückseite ist die längste Wand, die nicht zur Straße zeigt.
+  balconies(pb, ring, sgn, sideBase, top, arch, era, rural, f4, info, doorWall, rnd) {
+    const n = ring.length / 2;
+    const wall = i => {
+      const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
+      return { i, ax, az, bx, bz, len, ox: sgn * (bz - az) / (len || 1), oz: -sgn * (bx - ax) / (len || 1), g: sideBase[i] };
+    };
+    const kindFor = e => e === 1 ? 'beton' : e === 2 ? (rnd() < 0.55 ? 'holz' : 'stahl') : e === 3 ? (rnd() < 0.5 ? 'glas' : 'stahl') : 'stahl';
+    if (!rural) {
+      // Mehrfamilienhaus: Balkonreihen übereinander (Geschoss ≈ 2,9 m), alle ≈ 7 m eine Achse
+      if (rnd() > (era === 0 ? 0.25 : 0.85)) return;
+      const floors = Math.floor((top - sideBase[0]) / 2.9);
+      if (floors < 2) return;
+      let best = null;
+      const road = this.nearestRoad((ring[0] + ring[2]) / 2, (ring[1] + ring[3]) / 2, 60, null);
+      for (let i = 0; i < n; i++) {
+        const w = wall(i);
+        if (w.len < 6) continue;
+        const mx = (w.ax + w.bx) / 2, mz = (w.az + w.bz) / 2, toRoad = road ? ((road.x - mx) * w.ox + (road.z - mz) * w.oz) / (Math.hypot(road.x - mx, road.z - mz) || 1) : 0;
+        const score = w.len * (toRoad > 0.3 && era !== 3 ? 0.4 : 1);
+        if (!best || score > best.score) best = Object.assign(w, { score });
+      }
+      if (!best) return;
+      const kind = kindFor(era || 1), cols = Math.max(1, Math.floor(best.len / 7)), width = era === 3 ? 4.2 : 3.4, depth = era === 1 ? 1.1 : 1.5;
+      for (let c = 0; c < cols; c++) {
+        const f = (c + 0.5) / cols, mx = best.ax + (best.bx - best.ax) * f, mz = best.az + (best.bz - best.az) * f;
+        for (let k = 1; k < Math.min(floors, 7); k++) HouseKit.balcony(this.world, pb, mx, mz, best.ox, best.oz, best.g + k * 2.9, width, depth, kind, rnd);
+      }
+      return;
+    }
+    const P = { 3: 0.1, 4: 0.4, 5: 0.3 }[arch] || 0;
+    if (!f4 || rnd() > P) return;
+    if (arch === ARCH.NEUBAU) {
+      // Obergeschoss an der Gartenseite (nicht die Wand mit der Haustür)
+      if (top - sideBase[0] < 5.4) return;
+      let best = null;
+      for (let i = 0; i < n; i++) { const w = wall(i); if (i !== doorWall && w.len >= 5 && (!best || w.len > best.len)) best = w; }
+      if (best) HouseKit.balcony(this.world, pb, (best.ax + best.bx) / 2, (best.az + best.bz) / 2, best.ox, best.oz, best.g + 2.85, Math.min(5, best.len * 0.55), 1.4, kindFor(3), rnd);
+      return;
+    }
+    // Giebelbalkon (Holz in den 1970er–90ern, kleine Betonplatte an Siedlungshäusern) im Obergeschoss bzw. Dachgeschoss
+    if (!info) return;
+    for (let i = 0; i < n; i++) {
+      const w = wall(i);
+      if (Math.abs(w.ox * info.f.ux + w.oz * info.f.uz) < 0.8 || w.len < 6.5) continue;
+      const y = w.g + 2.8;
+      if (info.yR - y < 2.4) return;
+      HouseKit.balcony(this.world, pb, (w.ax + w.bx) / 2, (w.az + w.bz) / 2, w.ox, w.oz, y, Math.min(arch === 3 ? 2.6 : 4.4, w.len - 2), arch === 3 ? 1.0 : 1.3,
+        arch === 3 ? 'beton' : kindFor(2), rnd);
+      return;
+    }
   }
 
   // ---------------- Bäume ----------------
@@ -1319,7 +1569,7 @@ class Region {
     const pts = [];
     const d = t.d;
     const wet = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0; // keine Bäume im Wasser
-    const free = (x, z, m) => !this.inCore(x, z) && !this.insideBuilding(x, z, m, t) && !this.nearRoad(x, z, m, t) && !wet(x, z) &&
+    const free = (x, z, m) => !this.inCore(x, z) && !this.insideBuilding(x, z, m, t) && !this.nearRoad(x, z, m, t) && !wet(x, z) && this.walkAt(x, z) === null &&
       !(this.land && this.land.onTrack(x, z, t, m * 0.6));
     const onEdge = (x, z) => Math.abs(x - t.x0) < 0.6 || Math.abs(x - t.x1) < 0.6 || Math.abs(z - t.z0) < 0.6 || Math.abs(z - t.z1) < 0.6;
     const rT = U.rng(t.key * 31 + 7);

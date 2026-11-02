@@ -81,7 +81,10 @@ class Player {
       this.x = r.x; this.z = r.z;
       for (const c of cars) this.pushFromCar(c);
     }
-    const ground = world.groundAt ? world.groundAt(this.x, this.z, this.y) : world.heightAt(this.x, this.z);
+    let ground = world.groundAt ? world.groundAt(this.x, this.z, this.y) : world.heightAt(this.x, this.z);
+    // auf dem Gehsteig stehen (Bordstein 12 cm), nicht darin versinken
+    const walk = world.walkAt ? world.walkAt(this.x, this.z) : null;
+    if (walk !== null && walk > ground && walk - ground < 0.5) ground = walk;
     if (move.jump && this.onGround) { this.vy = WALK.jump; this.onGround = false; }
     this.vy -= WALK.gravity * dt;
     this.y += this.vy * dt;

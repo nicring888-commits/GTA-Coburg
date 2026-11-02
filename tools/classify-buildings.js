@@ -411,6 +411,23 @@ function classify(list, osm) {
     b.gemeinde = best || '?';
   }
 
+  // ---------- Bauzeit (für Balkone, Gauben, Garagen, Zäune): 0 historisch/unbekannt, 1 1950er–70er, 2 1970er–90er,
+  // 3 ab 2000; Mehrfamilienhäuser und Nebengebäude bekommen sie aus der Bewertung bzw. vom Nachbarhaus
+  const ERA = { [ARCH.SIEDLUNG]: 1, [ARCH.EFH]: 2, [ARCH.NEUBAU]: 3 };
+  for (const b of list) {
+    if (ERA[b.a]) b.era = ERA[b.a];
+    else if (b.a === ARCH.MFH) b.era = b.year ? (b.year < 1949 ? 0 : b.year < 1979 ? 1 : b.year < 2001 ? 2 : 3)
+      : b.E === undefined ? 1 : b.E < tE1 ? 1 : b.E < tE2 ? 2 : 3;
+    else b.era = 0;
+  }
+  const eg = new Grid(40);
+  for (const b of list) if (b.a >= ARCH.HOF && b.a <= ARCH.MFH) eg.add(b.cx, b.cz, b);
+  for (const b of list) {
+    if (b.a !== ARCH.NEBEN) continue;
+    let best = Infinity, host = null;
+    eg.near(b.cx, b.cz, 40, o => { const d = Math.hypot(o.cx - b.cx, o.cz - b.cz) - o.rEq; if (d < best) { best = d; host = o; } });
+    if (host && best < 30) b.era = host.a <= ARCH.BUERGER ? 0 : host.era;
+  }
   return { list, thresholds: { tO, tE1, tE2 } };
 }
 

@@ -529,6 +529,9 @@ class World {
   }
 
   // Boden für Figuren und Autos: auf Brücken die Fahrbahn, sonst das Gelände. y: jetzige Höhe (Infinity = oberste Fläche)
+  // Gehsteig-Oberfläche im Umland (für Figuren; Fahrzeuge fahren weiter auf groundAt), sonst null
+  walkAt(x, z) { return this.region && !this.inCoreRect(x, z) ? this.region.walkAt(x, z) : null; }
+
   groundAt(x, z, y) {
     if (this.region && !this.inCoreRect(x, z)) return this.region.groundAt(x, z, y);
     let h = this.region ? this.region.groundAt(x, z, y) : this.heightAt(x, z);
@@ -1474,7 +1477,27 @@ class World {
             bool shop = false;
             float wr = fh(cell + bh * 7.0);
 
-            if (style > 0.5 && style < 2.5) {
+            if (style > 3.5 && style < 5.5) {
+              // ===== Garage (Stil 4, an der Torwand 5): Putz mit Sockel, Tore je Bauzeit (Feld „Tür“ = Bauzeit × 16 + Tore):
+              // Holztor (alt), Schwingtor mit senkrechten Sicken (1950er–90er), Sektionaltor mit waagrechten Feldern (Neubau)
+              fFlat = 1.0;
+              float gEra = floor(vProfC.y / 16.0 + 0.01), nD = max(1.0, vProfC.y - 16.0 * gEra);
+              if (h < 0.22) diffuseColor.rgb *= 0.62;
+              if (style > 4.5) {
+                float gp = 0.35, dw = (W - gp * (nD + 1.0)) / nD, dh = gEra < 0.5 ? 2.3 : 2.05;
+                float k = floor((uLoc - gp) / (dw + gp)), xx = uLoc - gp - k * (dw + gp);
+                if (k >= 0.0 && k < nD && xx < dw && h < dh && dw > 1.7) {
+                  vec3 dC; float rib;
+                  if (gEra < 0.5) { dC = vec3(0.3, 0.2, 0.12); rib = step(fract(xx / 0.16), 0.1) + step(abs(xx - dw * 0.5), 0.03); }
+                  else if (gEra < 1.5) { dC = fract(bh * 3.1) < 0.4 ? vec3(0.76, 0.76, 0.73) : fract(bh * 3.1) < 0.7 ? vec3(0.32, 0.42, 0.34) : vec3(0.88, 0.88, 0.85); rib = step(fract(xx / 0.11), 0.14); }
+                  else if (gEra < 2.5) { dC = fract(bh * 3.1) < 0.55 ? vec3(0.4, 0.27, 0.16) : vec3(0.88, 0.88, 0.85); rib = step(fract(xx / 0.11), 0.14); }
+                  else { dC = fract(bh * 3.1) < 0.6 ? vec3(0.21, 0.22, 0.23) : vec3(0.9, 0.9, 0.88); rib = step(fract(h / 0.5), 0.05); }
+                  float edge = step(min(min(xx, dw - xx), dh - h), 0.05);
+                  diffuseColor.rgb = dC * (1.0 - 0.16 * min(rib, 1.0)) * (1.0 - 0.4 * edge) * sampledDiffuseColor.rgb;
+                  relief = 0.86 + 0.14 * (1.0 - min(rib, 1.0));
+                }
+              }
+            } else if (style > 0.5 && style < 2.5) {
               // ===== Landhaus (oberfränkisches Dorf): Fenster in Feldern, nicht streng gereiht, Haustür, Läden =====
               fRural = 1.0; fFlat = 1.0;
               float hEG = 2.8, hOG = 2.65;

@@ -542,7 +542,7 @@ class Landscape {
       } else if (r1 < pg * 0.85 + pf + pw * 0.9) kind = r2 < 0.22 ? 'fern' : r2 < 0.45 ? 'grass' : null;
       else if (r2 < 0.12 && !c.t.town) kind = 'grass';
       if (!kind) continue;
-      if (R.nearRoad(x, z, 0.6, c.t) || R.insideBuilding(x, z, 0.3, c.t) || this.onTrack(x, z, c.t, kind === 'grass' ? -0.9 : 0.2)) continue;
+      if (R.nearRoad(x, z, 0.6, c.t) || R.walkAt(x, z) !== null || R.insideBuilding(x, z, 0.3, c.t) || this.onTrack(x, z, c.t, kind === 'grass' ? -0.9 : 0.2)) continue;
       if (c.t.waterAll && !c.t.waterAll.empty && c.t.waterAll.carveAt(x, z) > 0) continue;
       const y = R.heightAt(x, z);
       photo = photo || this.photoAt(x, z, c.t) || [0.4, 0.45, 0.3];
@@ -753,8 +753,17 @@ Landscape.prototype.villageAssets = function () {
   const rail = [box(0.1, 1.0, 0.1, 0, 0.5, 0)];
   for (const y of [0.3, 0.6, 0.9]) rail.push(box(2, 0.1, 0.04, 1, y, -0.06));
   const bale = new THREE.CylinderGeometry(0.75, 0.75, 1.2, 14); bale.rotateZ(Math.PI / 2); bale.translate(0, 0.75, 0);
+  // moderne Einfassungen (seit v3.6.0): Doppelstabmatte (Metall), niedrige Mauer mit Abdeckung (Putz, Sandstein,
+  // Gabione/Beton nach Farbe), Sichtschutz aus Holz
+  const mesh = [box(0.06, 1.1, 0.06, 0, 0.55, 0)];
+  for (const y of [0.06, 1.0]) for (const o of [-0.012, 0.012]) mesh.push(box(2, 0.02, 0.01, 1, y, o - 0.04));
+  for (let i = 1; i < 10; i++) mesh.push(box(0.012, 0.98, 0.012, i * 0.2, 0.53, -0.04));
+  const wall = [box(2, 0.62, 0.24, 1, 0.31, -0.1), box(2.02, 0.06, 0.3, 1, 0.65, -0.1)];
+  const privacy = [box(0.09, 1.85, 0.09, 0, 0.92, 0), box(1.9, 1.75, 0.035, 1, 0.92, -0.05), box(1.9, 0.06, 0.06, 1, 1.82, -0.05)];
   this._village = {
     picket: U.mergeParts(picket.map(g => [g, 0, 0, 0])), rail: U.mergeParts(rail.map(g => [g, 0, 0, 0])),
+    mesh: U.mergeParts(mesh.map(g => [g, 0, 0, 0])), wall: U.mergeParts(wall.map(g => [g, 0, 0, 0])),
+    privacy: U.mergeParts(privacy.map(g => [g, 0, 0, 0])),
     bale: U.mergeParts([[bale, 0, 0, 0]]),
     woodMat: new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true }),
     baleMat: new THREE.MeshLambertMaterial({ color: '#c9b277', vertexColors: true }),
@@ -765,11 +774,24 @@ Landscape.prototype.villageAssets = function () {
 // Obstbäume und Büsche im Garten (gehen als Punkte an buildTrees). Rundballen an Scheunen.
 Landscape.prototype.buildVillage = function (t, pts, free) {
   const R = this.region, A = this.villageAssets(), rnd = U.rng(t.key * 101 + 9);
-  const fences = { picket: [], rail: [] }, bales = [];
-  const drive = new Bucket(), white = new THREE.Color('#ffffff');
+  const fences = { picket: [], rail: [], mesh: [], wall: [], privacy: [] }, bales = [];
+  const drive = new Bucket(), drive2 = new Bucket(), white = new THREE.Color('#ffffff');
+  // Einfassung je Bautyp: [Art, Anteil] vorn bzw. seitlich/hinten ('open' = nichts, 'hedge' = Hecke). Alter Ortskern wie
+  // bisher (Staketen-/Lattenzaun, Hecke), Nachkriegszeit Jägerzaun, Mauer, Maschendraht, Hecke; Neubau meist offen,
+  // sonst Doppelstabmatte, Mauer/Gabione oder Hecke, hinten Sichtschutz
+  const FENCE = {
+    3: { front: [['wall', 0.3], ['rail', 0.25], ['hedge', 0.2], ['mesh', 0.1], ['open', 0.15]], side: [['mesh', 0.35], ['hedge', 0.45], ['open', 0.2]] },
+    4: { front: [['wall', 0.3], ['rail', 0.2], ['hedge', 0.25], ['open', 0.25]], side: [['hedge', 0.5], ['privacy', 0.2], ['rail', 0.15], ['open', 0.15]] },
+    5: { front: [['open', 0.55], ['mesh', 0.2], ['wall', 0.15], ['hedge', 0.1]], side: [['mesh', 0.45], ['hedge', 0.3], ['privacy', 0.15], ['open', 0.1]] },
+    6: { front: [['open', 0.5], ['hedge', 0.35], ['mesh', 0.15]], side: [['hedge', 0.6], ['open', 0.4]] },
+  };
+  const choose = list => { let x = rnd(); for (const [k, p] of list) { if ((x -= p) <= 0) return k; } return list[list.length - 1][0]; };
+  const fenceCol = { mesh: ['#2f3234', '#2f3234', '#4d5a4a', '#a9adb0'], wall: ['#e6e1d6', '#d8d2c4', '#c9b48e', '#8e8c87', '#bdbab3'], privacy: ['#7a5a3c', '#8b6a48', '#5e5a55', '#a08a6a'] };
   // ohne Gewerbe, Industrie, moderne Hallen, Nebengebäude und Sonderbauten (Bautyp aus tools/classify-buildings.js)
   const houses = t.buildings.filter(b => (GARDEN_HOUSES.has(b.t) || FARM_TYPES.has(b.t)) && !(b.a >= 7 && b.a !== 9));
+  let houseNo = 0;
   for (const b of houses) {
+    houseNo++;
     const cx = (b.bb.minX + b.bb.maxX) / 2, cz = (b.bb.minZ + b.bb.maxZ) / 2;
     if (FARM_TYPES.has(b.t)) {
       // Rundballen neben Scheunen
@@ -807,13 +829,12 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
       const a = corners[s], c = corners[(s + 1) % 4], mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2, d = Math.hypot(mx - road.x, mz - road.z);
       if (d < fd) { fd = d; front = s; }
     }
-    // Garten je Bautyp: Staketenzaun am alten Haus; Nachkriegszeit Jägerzaun, Hecke oder offen; Neubau offener Vorgarten
-    // oder Hecke (moderne Zaunformen folgen in Phase 2)
-    const ar = b.a || 0, modern = ar >= 3 && ar <= 6;
-    const style = modern ? (ar !== 5 && rnd() < 0.35 ? 'rail' : 'hedge') : rnd() < 0.55 ? 'picket' : 'rail';
+    // Garten je Bautyp (Tabelle FENCE oben); am alten Haus wie bisher
+    const ar = b.a || 0, modern = !!FENCE[ar];
+    const style = modern ? choose(FENCE[ar].side) : rnd() < 0.55 ? 'picket' : 'rail';
     const backHedge = modern ? style === 'hedge' : rnd() < 0.5;
-    const fr = modern ? rnd() : 0;
-    const frontKind = !modern ? 'picket' : ar === 5 ? (fr < 0.6 ? 'open' : 'hedge') : fr < 0.4 ? 'rail' : fr < 0.7 ? 'hedge' : 'open';
+    const frontKind = modern ? choose(FENCE[ar].front) : 'picket';
+    const pave = ar === 5 || ((ar === 3 || ar === 4 || ar === 6) && rnd() < 0.5);
     // Nachbarn: Zaun nur, wo der Punkt näher an diesem Haus liegt als an einem anderen
     const others = [];
     for (const tt of R.tilesNear(cx, cz, 40)) for (const o of tt.polyGrid.query(cx, cz, 35, [])) if (o !== b && !others.includes(o)) others.push(o);
@@ -830,21 +851,24 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
         if (dl > 2 && dl < 40) {
           const nx = -ddz / dl * 1.6, nz = ddx / dl * 1.6, y = p => R.heightAt(p[0], p[2]) + 0.04;
           const q = [[ex + nx, 0, ez + nz], [ex - nx, 0, ez - nz], [hx - nx, 0, hz - nz], [hx + nx, 0, hz + nz]].map(p => [p[0], y(p), p[2]]);
-          drive.tri(q[0], q[1], q[2], white, [0, 0], [1, 0], [1, dl], 0, 1, 0);
-          drive.tri(q[0], q[2], q[3], white, [0, 0], [1, dl], [0, dl], 0, 1, 0);
+          // Einfahrt: Kies am alten Haus, Pflaster (grau) an Neubauten und oft auch in der Nachkriegszeit
+          const db = pave ? drive2 : drive;
+          db.tri(q[0], q[1], q[2], white, [0, 0], [1, 0], [1, dl], 0, 1, 0);
+          db.tri(q[0], q[2], q[3], white, [0, 0], [1, dl], [0, dl], 0, 1, 0);
         }
       }
       for (let d = 0; d + 1.9 < L; d += 2) {
         if (Math.abs(d + 1 - gate) < 2.2) continue;
         const x = a[0] + dx * (d + 1), z = a[1] + dz * (d + 1);
-        if (!mine(x, z) || R.insideBuilding(x, z, 0.8, t) || R.nearRoad(x, z, 0.9, t) || this.onTrack(x, z, t, 0.4)) continue;
-        const kind = isFront ? frontKind : style;
+        if (!mine(x, z) || R.insideBuilding(x, z, 0.8, t) || R.nearRoad(x, z, 0.9, t) || this.onTrack(x, z, t, 0.4) || (R.walkAt && R.walkAt(x, z) !== null)) continue;
+        const kind0 = isFront ? frontKind : style, kind = kind0 === 'privacy' && front >= 0 && s !== (front + 2) % 4 ? 'mesh' : kind0;
         if (kind === 'open') continue;
+        if (kind === 'privacy' && isFront) continue;
         if (kind === 'hedge' || (!isFront && backHedge)) {
           if (rnd() < 0.85) pts.push([x - dx * 0.5, z - dz * 0.5, 2, 0.55 + rnd() * 0.25], [x + dx * 0.5, z + dz * 0.5, 2, 0.55 + rnd() * 0.25]);
           continue;
         }
-        fences[kind].push([a[0] + dx * d, a[1] + dz * d, Math.atan2(-dz, dx)]);
+        fences[kind].push([a[0] + dx * d, a[1] + dz * d, Math.atan2(-dz, dx), houseNo]);
       }
     }
     // Obstbäume und Büsche im Garten hinter dem Haus
@@ -858,15 +882,19 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
   const meshes = [];
   const cols = { picket: ['#ece8df', '#d8d2c4', '#7a5a3c', '#6e7466'], rail: ['#8a6a48', '#6f5438', '#9c8466'] };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), ps = new THREE.Vector3();
-  for (const kind of ['picket', 'rail']) {
+  Object.assign(cols, fenceCol);
+  for (const kind of ['picket', 'rail', 'mesh', 'wall', 'privacy']) {
     const list = fences[kind];
     if (!list.length) continue;
     const m = new THREE.InstancedMesh(A[kind], A.woodMat, list.length);
     const c = new THREE.Color(), col = cols[kind], pick = U.rng(t.key + list.length);
+    // eine Farbe je Grundstück (gleiche Farbe für alle Felder eines Gartens: f[3] = Haus-Nummer)
+    let lastHouse = -1, hc = null;
     list.forEach((f, i) => {
       q.setFromAxisAngle(up, f[2]); ps.set(f[0], R.heightAt(f[0], f[1]) - 0.05, f[1]);
       m4.compose(ps, q, one); m.setMatrixAt(i, m4);
-      m.setColorAt(i, c.set(col[Math.floor(pick() * col.length)]));
+      if (f[3] !== lastHouse || !hc) { lastHouse = f[3]; hc = col[Math.floor(pick() * col.length)]; }
+      m.setColorAt(i, c.set(hc));
     });
     meshes.push(m);
   }
@@ -875,8 +903,9 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
     bales.forEach((b, i) => { q.setFromAxisAngle(up, b[2]); ps.set(b[0], R.heightAt(b[0], b[1]) - 0.05, b[1]); m4.compose(ps, q, one); m.setMatrixAt(i, m4); });
     meshes.push(m);
   }
-  const g = drive.geometry();
+  const g = drive.geometry(), g2 = drive2.geometry();
   if (g) { const m = new THREE.Mesh(g, this.trackMaterial(0)); meshes.push(m); }
+  if (g2) { const m = new THREE.Mesh(g2, this.trackMaterial(2)); meshes.push(m); }
   for (const m of meshes) { m.castShadow = !!m.isInstancedMesh; m.receiveShadow = true; if (m.isInstancedMesh) m.computeBoundingSphere(); t.group.add(m); }
   return meshes;
 };

@@ -108,7 +108,14 @@ class Pedestrians {
   pickLat(p) {
     const e = p.e, w = e.s.w || 2;
     let lat;
-    if (e.road) lat = w / 2 + 0.9 + this.rnd() * 0.7;
+    if (e.road) {
+      lat = w / 2 + 0.9 + this.rnd() * 0.7;
+      // Gehsteig nur auf einer Seite (Umland): dort gehen (walk: 1 links, 2 rechts in Richtung a→b)
+      const wk = e.s.walk;
+      // auf dem Gehsteig mittig gehen (Bordstein 0,15 m, Belag ab 1,5 m breit)
+      if (wk) lat = w / 2 + 0.55 + this.rnd() * 0.75;
+      if (wk === 1 || wk === 2) { const want = wk === 1 ? 1 : -1; if (Math.sign(lat * p.dir) !== want) lat = -lat; }
+    }
     else if (e.wide) lat = (this.rnd() * 2 - 1) * Math.max(0.3, w / 2 - 1);
     else lat = (this.rnd() - 0.3) * 0.6;
     if (p.buddy) lat = p.buddy.latT - 0.65;
@@ -149,7 +156,8 @@ class Pedestrians {
       const list = this.segGrid.query(x, z, 12, this._q);
       if (!list.length) continue;
       const e = list[Math.floor(this.rnd() * list.length)];
-      if (this.rnd() > e.w) continue;
+      // Belebtheit der Straße (js/region.js liveliness; Innenstadt = 1)
+      if (this.rnd() > e.w * (e.s.act === undefined ? 1 : e.s.act)) continue;
       const p = this.spawnAt(e, this.rnd() * e.len, this.rnd() < 0.5 ? 1 : -1);
       if (this.rnd() < 0.28 && this.list.length < PEDS.max) this.spawnAt(e, p.t, p.dir, p); // zu zweit unterwegs
       return true;
@@ -258,7 +266,14 @@ class Pedestrians {
     }
     this.spawnT -= dt;
     let n = 0;
-    const max = this.cap || PEDS.max; // im Landkreis weniger als in der Fußgängerzone
+    const max = this.cap !== undefined && this.cap !== null ? this.cap : PEDS.max; // nach Gegend und Tageszeit (game.js)
+    // zu viele (Gegend ruhiger geworden, Nacht): außer Sicht nach und nach gehen lassen
+    if (this.list.length > max + 2 && (this.trimT = (this.trimT || 0) - dt) <= 0) {
+      this.trimT = 0.7;
+      let far = -1, fd = 60;
+      this.list.forEach((p, i) => { const d = Math.hypot(p.x - px, p.z - pz); if (d > fd && p.state !== 'down') { fd = d; far = i; } });
+      if (far >= 0) { const p = this.list.splice(far, 1)[0]; for (const o of this.list) if (o.buddy === p) o.buddy = null; }
+    }
     while (this.list.length < max && n++ < 6 && this.spawnT <= 0) this.spawn(px, pz);
     if (this.list.length >= max) this.spawnT = 0.5;
 
@@ -299,6 +314,8 @@ class Pedestrians {
         p.phase += dt * p.speed * 2.6; p.moving = p.speed;
       }
       p.y = this.world.groundAt(p.x, p.z, p.y);
+      const wy = this.world.walkAt ? this.world.walkAt(p.x, p.z) : null;
+      if (wy !== null && wy > p.y && wy - p.y < 0.5) p.y = wy;
     }
 
     // Autos: Ausweichen, Umfahren, Wegschieben
@@ -353,6 +370,22 @@ class Pedestrians {
   }
 
   // Anzahl in der Nähe (für Stimmengewirr)
+  // Wie viele Fußgänger in diese Gegend passen: Summe aus Weglänge × Wegart × Belebtheit im Umkreis, mal Tageszeit
+  // (Innenstadt: js/game.js). Ergebnis 0…45 (tagsüber): Felder und Landstraßen 0, kleine Dörfer 0–2, Wohngebiete 2–4,
+  // Dorfmitten 4–9, Einkaufsstraßen und Stadtmitten bis 45.
+  capacity(px, pz, day) {
+    let s = 0, sh = 0;
+    // das Raster liefert Wegstücke mehrfach (eines je Zelle): jedes nur einmal zählen
+    for (const e of new Set(this.segGrid.query(px, pz, PEDS.spawnMax, this._q))) {
+      if (e.s.act === undefined) continue;
+      const mx = (e.s.ax + e.s.bx) / 2, mz = (e.s.az + e.s.bz) / 2;
+      if (Math.hypot(mx - px, mz - pz) < PEDS.spawnMax) { s += e.len * e.w * e.s.act; sh += e.len * e.w * Math.max(0, e.s.act - 0.5) * 2; }
+    }
+    // Grundlast wächst mit der Wurzel (Wohngebiete ein paar Leute, große Dörfer nicht übervoll), belebte Straßen
+    // (Läden, Ortsmitte) zählen zusätzlich
+    return Math.min(45, Math.round((0.42 * Math.sqrt(s) + 0.032 * sh) * day));
+  }
+
   countNear(x, z, r) {
     let n = 0;
     for (const p of this.list) if (Math.abs(p.x - x) < r && Math.abs(p.z - z) < r) n++;
