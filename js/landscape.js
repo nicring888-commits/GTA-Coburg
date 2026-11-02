@@ -767,7 +767,8 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
   const R = this.region, A = this.villageAssets(), rnd = U.rng(t.key * 101 + 9);
   const fences = { picket: [], rail: [] }, bales = [];
   const drive = new Bucket(), white = new THREE.Color('#ffffff');
-  const houses = t.buildings.filter(b => GARDEN_HOUSES.has(b.t) || FARM_TYPES.has(b.t));
+  // ohne Gewerbe, Industrie, moderne Hallen, Nebengebäude und Sonderbauten (Bautyp aus tools/classify-buildings.js)
+  const houses = t.buildings.filter(b => (GARDEN_HOUSES.has(b.t) || FARM_TYPES.has(b.t)) && !(b.a >= 7 && b.a !== 9));
   for (const b of houses) {
     const cx = (b.bb.minX + b.bb.maxX) / 2, cz = (b.bb.minZ + b.bb.maxZ) / 2;
     if (FARM_TYPES.has(b.t)) {
@@ -806,8 +807,13 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
       const a = corners[s], c = corners[(s + 1) % 4], mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2, d = Math.hypot(mx - road.x, mz - road.z);
       if (d < fd) { fd = d; front = s; }
     }
-    const style = rnd() < 0.55 ? 'picket' : 'rail';
-    const backHedge = rnd() < 0.5;
+    // Garten je Bautyp: Staketenzaun am alten Haus; Nachkriegszeit Jägerzaun, Hecke oder offen; Neubau offener Vorgarten
+    // oder Hecke (moderne Zaunformen folgen in Phase 2)
+    const ar = b.a || 0, modern = ar >= 3 && ar <= 6;
+    const style = modern ? (ar !== 5 && rnd() < 0.35 ? 'rail' : 'hedge') : rnd() < 0.55 ? 'picket' : 'rail';
+    const backHedge = modern ? style === 'hedge' : rnd() < 0.5;
+    const fr = modern ? rnd() : 0;
+    const frontKind = !modern ? 'picket' : ar === 5 ? (fr < 0.6 ? 'open' : 'hedge') : fr < 0.4 ? 'rail' : fr < 0.7 ? 'hedge' : 'open';
     // Nachbarn: Zaun nur, wo der Punkt näher an diesem Haus liegt als an einem anderen
     const others = [];
     for (const tt of R.tilesNear(cx, cz, 40)) for (const o of tt.polyGrid.query(cx, cz, 35, [])) if (o !== b && !others.includes(o)) others.push(o);
@@ -832,11 +838,13 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
         if (Math.abs(d + 1 - gate) < 2.2) continue;
         const x = a[0] + dx * (d + 1), z = a[1] + dz * (d + 1);
         if (!mine(x, z) || R.insideBuilding(x, z, 0.8, t) || R.nearRoad(x, z, 0.9, t) || this.onTrack(x, z, t, 0.4)) continue;
-        if (!isFront && backHedge) {
+        const kind = isFront ? frontKind : style;
+        if (kind === 'open') continue;
+        if (kind === 'hedge' || (!isFront && backHedge)) {
           if (rnd() < 0.85) pts.push([x - dx * 0.5, z - dz * 0.5, 2, 0.55 + rnd() * 0.25], [x + dx * 0.5, z + dz * 0.5, 2, 0.55 + rnd() * 0.25]);
           continue;
         }
-        fences[isFront ? 'picket' : style].push([a[0] + dx * d, a[1] + dz * d, Math.atan2(-dz, dx)]);
+        fences[kind].push([a[0] + dx * d, a[1] + dz * d, Math.atan2(-dz, dx)]);
       }
     }
     // Obstbäume und Büsche im Garten hinter dem Haus

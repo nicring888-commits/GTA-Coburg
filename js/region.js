@@ -51,6 +51,32 @@ const FARM_TYPES = new Set(['barn', 'farm_auxiliary', 'stable', 'cowshed', 'silo
 // kleine Wohnhäuser auf dem Land bekommen den Landhaus-Stil (Fassadenshader Stil 1/2) und ein steiles Satteldach
 const RURAL_HOUSES = new Set(['house', 'detached', 'semidetached_house', 'residential', 'yes', 'farm', 'bungalow', 'terrace']);
 const HALL_TYPES = new Set(['industrial', 'warehouse', 'retail', 'supermarket', 'commercial', 'hangar', 'manufacture']);
+// Bautypen aus tools/classify-buildings.js. Landhaus-Formen (steiles Dach, Läden, Sandsteinsockel, Fachwerk nur mit
+// Fachwerk-Bit) gibt es nur für den historischen Kern; Wohnhäuser der Nachkriegszeit und Neubauten haben eigene Maße,
+// Farben, Dächer und Fenster (Fassadenshader: Stil + 8 × Bautyp + 128 × Fachwerk im Wandprofil).
+const ARCH = { UNBEKANNT: 0, HOF: 1, BUERGER: 2, SIEDLUNG: 3, EFH: 4, NEUBAU: 5, MFH: 6, GEWERBE: 7, INDUSTRIE: 8,
+  AGRAR_ALT: 9, AGRAR_NEU: 10, NEBEN: 11, SONDER: 12 };
+const ARCH_NAMES = ['unbekannt', 'Historischer Kern (Dorf)', 'Historischer Kern (Kleinstadt)', 'Siedlung 1950er–70er',
+  'Einfamilienhaus 1970er–90er', 'Neubau ab 2000', 'Mehrfamilienhaus', 'Gewerbe', 'Industrie', 'Landwirtschaft alt',
+  'Landwirtschaft modern', 'Nebengebäude', 'Sonderbau'];
+const SIEDLUNG_FACADES = ['#e4dac2', '#d9cfb6', '#e3d6a6', '#cfc7b4', '#e8e1cf', '#d7c8a7', '#dcd6c8', '#e6dcb9'];
+const EFH_FACADES = ['#f2eee5', '#ede4cf', '#efe1bd', '#ead8b8', '#f4f0e8', '#e3d5bd', '#ecdfc8', '#f0e6d2', '#e8d2b5'];
+const NEUBAU_FACADES = ['#f5f4f0', '#f3f2ed', '#ebeae5', '#dfddd7', '#f2ede2', '#e7e2d7', '#d4d1ca', '#f6f2e8', '#c9c6bf', '#ece6d8'];
+const MFH_FACADES = ['#ebe6db', '#e4dccb', '#d9d5cc', '#efe9dc', '#e2d6bf', '#d4d8d6', '#e9e1d0'];
+const GEWERBE_WALLS = ['#d8d8d4', '#c9ccce', '#e4e2dc', '#b8bec4', '#d3cfc5', '#9aa3aa'];
+const INDUSTRIE_WALLS = ['#c5c1b7', '#b9bec4', '#d6d8d8', '#8e9aa3', '#a9b0a8', '#c9c4b5', '#7f8d93'];
+const AGRAR_NEU_WALLS = ['#b7b9b4', '#8f9a8c', '#6f7f6c', '#c9c7bd', '#a39d90', '#7d8a86'];
+const NEBEN_WALLS = ['#d9d4c8', '#cfcac0', '#e2ded4', '#bdb8ad', '#c8c2b4'];
+const ARCH_WALLS = { 1: RURAL_FACADES, 2: RURAL_FACADES, 3: SIEDLUNG_FACADES, 4: EFH_FACADES, 5: NEUBAU_FACADES, 6: MFH_FACADES, 7: GEWERBE_WALLS };
+// Dach je Wohn-Bautyp: Neigung (Grad), Überstand an Traufe und Ortgang (m), Untersicht, Schornstein-Wahrscheinlichkeit
+const ARCH_ROOF = {
+  0: { pitch: [40, 52], oE: 0.45, oG: 0.3, under: ['#5a4636'], chimney: 1 },
+  1: { pitch: [40, 52], oE: 0.45, oG: 0.3, under: ['#5a4636'], chimney: 1 },
+  2: { pitch: [42, 55], oE: 0.35, oG: 0.25, under: ['#5a4636'], chimney: 1 },
+  3: { pitch: [38, 48], oE: 0.32, oG: 0.22, under: ['#77706a', '#6e675e'], chimney: 0.9 },
+  4: { pitch: [30, 42], oE: 0.7, oG: 0.5, under: ['#5b3f2a', '#6a4a30', '#e9e5dc'], chimney: 0.7 },
+  5: { pitch: [24, 38], oE: 0.55, oG: 0.35, under: ['#ecebe7', '#3a3c3f', '#ecebe7'], chimney: 0.2, hip: 0.5 },
+};
 const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600,
   scrub: 1 / 380, residential: 1 / 1700, meadow: 1 / 5000, farmyard: 1 / 2500 };
 const tileKey = (ti, tj) => (ti + 512) * 1024 + (tj + 512);
@@ -519,7 +545,9 @@ class Region {
     const line = (a, from = 0) => { const o = []; let x = 0, z = 0; for (let k = from; k < a.length; k += 2) { x += a[k]; z += a[k + 1]; o.push(x / 10, z / 10); } return o; };
     const types = this.R.types, names = this.R.names;
     return {
-      buildings: (raw.b || []).map(b => ({ t: types[b[0]], h: b[1] / 10, r: b[2] & 1, f: b[2] & 2, n: b[3] >= 0 ? names[b[3]] : undefined, p: line(b, 4) })),
+      // Flags: Bit 0 Satteldach, Bit 1 Flachdach, Bits 2–5 Bautyp (tools/classify-buildings.js, 0 = ältere Daten), Bit 6 Fachwerk
+      buildings: (raw.b || []).map(b => ({ t: types[b[0]], h: b[1] / 10, r: b[2] & 1, f: b[2] & 2, a: (b[2] >> 2) & 15, fw: (b[2] >> 6) & 1,
+        n: b[3] >= 0 ? names[b[3]] : undefined, p: line(b, 4) })),
       areas: (raw.a || []).map(a => ({ k: a[0], p: line(a[1]), ho: a[2] ? a[2].map(h => line(h)) : undefined })),
       trees: line(raw.t || []),
       water: (raw.w || []).map(w => ({ w: w[0] / 10, p: line(w, 1) })),
@@ -1044,6 +1072,17 @@ class Region {
     for (const key of this.lifeOn) { const t = this.loaded.get(key); if (t && t.life) out.push(...t.life.segs); }
     return out;
   }
+  // Testansicht: Wände nach Bautyp einfärben (rot historisch, dunkelrot Fachwerk, gelb 1950er–70er, grün 1970er–90er,
+  // blau Neubau, violett Mehrfamilienhaus, türkis Gewerbe)
+  set debugArch(v) { this.world.archDebug.value = v ? 1 : 0; }
+  get debugArch() { return this.world.archDebug.value > 0.5; }
+  // Bautyp des Hauses an einer Stelle (für Tests)
+  archAt(x, z) {
+    const t = this.loaded.get(tileKey(...this.tileOf(x, z)));
+    if (!t || !t.polyGrid) return null;
+    const hit = t.polyGrid.query(x, z, 1, []).find(r => U.pointInPoly(x, z, r.p));
+    return hit ? { a: hit.a, name: ARCH_NAMES[hit.a], t: hit.t } : null;
+  }
   setNight(n) {
     this.night = n;
     for (const key of this.lifeOn) {
@@ -1069,15 +1108,20 @@ class Region {
       for (let i = 0; i < ring.length; i += 2) { const h = W.heightAt0(ring[i], ring[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
       const isCanopy = b.t === 'roof' || b.t === 'carport';
       const area = U.polyArea(ring), absA = Math.abs(area), sgn = area > 0 ? 1 : -1;
-      const farm = FARM_TYPES.has(b.t), hall = HALL_TYPES.has(b.t);
-      const plainType = PLAIN_TYPES.has(b.t) || farm || hall || isCanopy;
-      // kleines Wohnhaus auf dem Land: eigener Haustyp (Landhaus) statt Stadtfassade
-      const rural = !plainType && RURAL_HOUSES.has(b.t) && absA >= 30 && absA <= 300 && b.h < 14 && n <= 12;
-      const eaveH = rural ? (b.h <= 4.6 ? 3.5 + rnd() * 0.5 : rnd() < 0.3 ? 4.1 + rnd() * 0.5 : 5.3 + rnd() * 0.9) : b.h;
+      const arch = b.a || 0, neben = arch === ARCH.NEBEN, agNeu = arch === ARCH.AGRAR_NEU, indus = arch === ARCH.INDUSTRIE;
+      const farm = FARM_TYPES.has(b.t) || arch === ARCH.AGRAR_ALT || agNeu, hall = HALL_TYPES.has(b.t) || indus;
+      const plainType = PLAIN_TYPES.has(b.t) || farm || hall || isCanopy || neben;
+      // kleines Wohnhaus: eigene Fenster, Haustür und Dach je Bautyp (Landhaus nur im historischen Kern)
+      const rural = !plainType && arch <= ARCH.NEUBAU && RURAL_HOUSES.has(b.t) && absA >= 30 && absA <= 300 && b.h < 14 && n <= 12;
+      // Nebengebäude ohne Typ (Garage, Schuppen) bekämen sonst die geschätzten 8 m eines Hauses
+      const eaveH = rural ? this.eaveHeight(arch, b.h, rnd) : neben && b.t === 'yes' ? Math.min(b.h, 2.9 + rnd() * 0.5) : b.h;
       const top = Math.max(minH + eaveH, maxH + 2.2), base = isCanopy ? top - 0.6 : minH - 2;
       const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
-      const hex = farm ? BARN_WALLS[Math.floor(rnd() * BARN_WALLS.length)] : hall ? '#c5c1b7' : PLAIN_TYPES.has(b.t) ? '#a7a39a'
-        : /church|chapel|cathedral/.test(b.t) ? '#e6dfcc' : b.t === 'castle' ? '#d8ccae' : RURAL_FACADES[Math.floor(rnd() * RURAL_FACADES.length)];
+      const pick = list => list[Math.floor(rnd() * list.length)];
+      const hex = farm ? pick(agNeu ? AGRAR_NEU_WALLS : BARN_WALLS) : indus ? pick(INDUSTRIE_WALLS) : hall ? '#c5c1b7'
+        : neben ? pick(NEBEN_WALLS) : PLAIN_TYPES.has(b.t) ? '#a7a39a'
+        : /church|chapel|cathedral/.test(b.t) ? '#e6dfcc' : b.t === 'castle' ? '#d8ccae' : pick(ARCH_WALLS[arch] || RURAL_FACADES);
+      const styleCode = 8 * arch + 128 * (b.fw || 0);
       const wallCol = U.color(hex, 0.1, rnd);
       const wb = plainType ? plain.get(cx, cz) : walls.get(cx, cz), pb = plain.get(cx, cz);
       // Haustür: an der längsten Wand, die zur nächsten Straße zeigt
@@ -1110,7 +1154,7 @@ class Region {
         // Boden an dieser Wand: höchstes Gelände an ihr (Fenster und Tür darüber)
         const gnd = Math.max(minH, this.heightAt(ax, az), this.heightAt(bx, bz), this.heightAt((ax + bx) / 2, (az + bz) / 2));
         sideBase.push(gnd);
-        const style = rural ? (i === doorWall ? 2 : 1) : 0;
+        const style = (rural ? (i === doorWall ? 2 : 1) : 0) + styleCode;
         const pr = plainType ? null : rectProfile(along, len, top, gnd, style, i === doorWall ? doorSlot : 0);
         along += len;
         const A0 = [ax, base, az], B0 = [bx, base, bz], B1 = [bx, top, bz], A1 = [ax, top, az];
@@ -1121,7 +1165,10 @@ class Region {
           // Vordach über der Haustür und eine Stufe davor
           const nS = Math.max(1, Math.floor(len / 3.1)), sw = len / nS, dm = (doorSlot + 0.5) * sw;
           const px = ax + dx / len * dm, pz = az + dz / len * dm, ang = Math.atan2(dz, dx);
-          W.boxTris(pb, px + ox * 0.45, gnd + 2.42, pz + oz * 0.45, 1.75, 0.09, 0.9, ang, U.color('#4a4038', 0.1, rnd));
+          // Holz am historischen Haus, Beton an Siedlungshäusern, flaches Anthrazit-Vordach an Neubauten
+          const cv = arch === ARCH.NEUBAU ? ['#3a3c3f', 2.3, 0.07, 1.1] : arch === ARCH.SIEDLUNG ? ['#8d8a83', 1.6, 0.1, 0.85]
+            : arch === ARCH.EFH ? ['#5b3f2a', 2.0, 0.12, 1.0] : ['#4a4038', 1.75, 0.09, 0.9];
+          W.boxTris(pb, px + ox * cv[3] / 2, gnd + 2.42, pz + oz * cv[3] / 2, cv[1], cv[2], cv[3], ang, U.color(cv[0], 0.1, rnd));
           const gy = this.heightAt(px + ox * 0.35, pz + oz * 0.35);
           W.boxTris(pb, px + ox * 0.3, gy - 0.3, pz + oz * 0.3, 1.5, gnd - gy + 0.3 + 0.02, 0.6, ang, U.color('#9c927f', 0.08, rnd));
         }
@@ -1130,13 +1177,15 @@ class Region {
       const rt = t.photo ? { b: roofs.get(cx, cz), uv: tuv } : { b: plain.get(cx, cz) };
       const roofCol = t.photo ? photoCol : U.color(b.r || HIP_TYPES.has(b.t) ? TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)] : '#7c7973', 0.12, rnd);
       if (isCanopy) W.flatRoof({ b: pb }, [ring], base, roofCol, -1);
-      if (rural && n === 4) this.ruralRoof(t, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H);
+      const RF = ARCH_ROOF[arch] || ARCH_ROOF[0];
+      if (rural && n === 4 && RF.hip && this.quadAspect(ring) < 1.35 && rnd() < RF.hip) this.hipHouseRoof(rt, pb, ring, top, roofCol, RF, rnd);
+      else if (rural && n === 4) this.ruralRoof(t, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H, RF, styleCode);
       else if (/tower/.test(b.t) && absA < 200) W.pyramidRoof(rt, ring, top, roofCol, Math.sqrt(absA) * 1.1);
       else if (b.r && n === 4) W.gableRoof(rt, pb, ring, top, wallCol, roofCol);
-      else if (!b.f && !isCanopy && (HIP_TYPES.has(b.t) || farm || rural) && absA > 25 && absA < 3500 && b.h < 28 && W.hipRoof(rt, ring, top, roofCol)) { /* Walmdach */ }
+      else if (!b.f && !isCanopy && !neben && (HIP_TYPES.has(b.t) || farm || rural) && absA > 25 && absA < 3500 && b.h < 28 && W.hipRoof(rt, ring, top, roofCol)) { /* Walmdach */ }
       else W.flatRoof(rt, [ring], top, roofCol, 1);
       if (!isCanopy) {
-        const rec = { p: ring, bb, top, n: b.n, t: b.t };
+        const rec = { p: ring, bb, top, n: b.n, t: b.t, a: arch };
         t.buildings.push(rec);
         t.polyGrid.insert(rec, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
       }
@@ -1147,23 +1196,72 @@ class Region {
     roofs.meshes(t.roofMat, { cast: true, receive: true }).forEach(m => t.group.add(m));
   }
 
+  // Traufhöhe eines Wohnhauses je Bautyp (OSM-Höhe ≤ 4,6 m = eingeschossig/Bungalow)
+  eaveHeight(arch, h, rnd) {
+    const low = h <= 4.6;
+    switch (arch) {
+      case ARCH.SIEDLUNG: return low ? 3.1 + rnd() * 0.4 : rnd() < 0.6 ? 3.6 + rnd() * 0.8 : 5.4 + rnd() * 0.6;
+      case ARCH.EFH: return low ? 3.0 + rnd() * 0.4 : rnd() < 0.3 ? 3.6 + rnd() * 0.6 : 5.0 + rnd() * 0.9;
+      case ARCH.NEUBAU: return low ? 3.2 + rnd() * 0.3 : 5.8 + rnd() * 0.7;
+      default: return low ? 3.5 + rnd() * 0.5 : rnd() < 0.3 ? 4.1 + rnd() * 0.5 : 5.3 + rnd() * 0.9;
+    }
+  }
+  // Seitenverhältnis eines Vierecks (lange zu kurze Seite)
+  quadAspect(p) {
+    const e = i => Math.hypot(p[((i + 1) % 4) * 2] - p[i * 2], p[((i + 1) % 4) * 2 + 1] - p[i * 2 + 1]);
+    const a = (e(0) + e(2)) / 2, b = (e(1) + e(3)) / 2;
+    return Math.max(a, b) / Math.max(0.5, Math.min(a, b));
+  }
+  // Flaches Walm- bzw. Zeltdach eines Neubaus („Stadtvilla“, 20–26°) mit Überstand, heller oder anthrazitfarbener
+  // Untersicht; Grundriss mit vier Ecken, First über die lange Seite (bei quadratischem Grundriss eine Spitze)
+  hipHouseRoof(rt, pb, p, top, roofCol, RF, rnd) {
+    const W = this.world;
+    const P = i => [p[(i % 4) * 2], p[(i % 4) * 2 + 1]];
+    const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const s = len(P(0), P(1)) >= len(P(1), P(2)) ? 0 : 1;
+    const c = [0, 1, 2, 3].map(i => P(i)).reduce((m, q) => [m[0] + q[0] / 4, m[1] + q[1] / 4], [0, 0]);
+    const p0 = P(s), p1 = P(s + 1), L = len(p0, p1), ux = (p1[0] - p0[0]) / L, uz = (p1[1] - p0[1]) / L, vx = -uz, vz = ux;
+    let a = 0, d = 0;
+    for (let i = 0; i < 4; i++) { const q = P(i), du = (q[0] - c[0]) * ux + (q[1] - c[1]) * uz, dv = (q[0] - c[0]) * vx + (q[1] - c[1]) * vz; a = Math.max(a, Math.abs(du)); d = Math.max(d, Math.abs(dv)); }
+    const o = RF.oE, tn = Math.tan((20 + rnd() * 6) * Math.PI / 180);
+    const A = a + o, D = d + o, yE = top - o * tn, ridge = Math.max(0, A - D), yR = yE + D * tn;
+    const X = (u, v, y) => [c[0] + ux * u + vx * v, y, c[1] + uz * u + vz * v];
+    const face = (q1, q2, q3, nu, nv) => W.roofTri(rt, q1, q2, q3, roofCol, ux * nu + vx * nv, 0.6, uz * nu + vz * nv);
+    const R0 = X(-ridge, 0, yR), R1 = X(ridge, 0, yR);
+    const E = [X(-A, -D, yE), X(A, -D, yE), X(A, D, yE), X(-A, D, yE)];
+    face(E[0], E[1], R1, 0, -1); face(E[0], R1, R0, 0, -1);
+    face(E[2], E[3], R0, 0, 1); face(E[2], R0, R1, 0, 1);
+    face(E[1], E[2], R1, 1, 0); face(E[3], E[0], R0, -1, 0);
+    // Untersicht und Traufbrett
+    const under = U.color(RF.under[Math.floor(rnd() * RF.under.length)], 0.06, rnd), th = 0.18;
+    const Ed = E.map(q => [q[0], q[1] - th, q[2]]);
+    const inner = [X(-a, -d, top), X(a, -d, top), X(a, d, top), X(-a, d, top)];
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4, mx = (E[i][0] + E[j][0]) / 2 - c[0], mz = (E[i][2] + E[j][2]) / 2 - c[1];
+      pb.tri(Ed[i], Ed[j], inner[j], under, null, null, null, mx * 0.1, -1, mz * 0.1);
+      pb.tri(Ed[i], inner[j], inner[i], under, null, null, null, mx * 0.1, -1, mz * 0.1);
+      pb.tri(Ed[i], Ed[j], E[j], under, null, null, null, mx, 0, mz);
+      pb.tri(Ed[i], E[j], E[i], under, null, null, null, mx, 0, mz);
+    }
+  }
+
   // Satteldach eines Landhauses (Grundriss mit vier Ecken): steil (40–52°), First über die lange Seite, Dachüberstand
   // an Traufe (45 cm) und Ortgang (30 cm) mit Untersicht und Traufbrett, Giebelwände mit Fenstern (Wandprofil als
   // Dreieck), Schornstein auf dem First
-  ruralRoof(t, rt, wb, pb, p, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H) {
+  ruralRoof(t, rt, wb, pb, p, top, sideBase, wallCol, roofCol, rnd, minH, BAY_W, BAY_H, RF = ARCH_ROOF[0], styleCode = 0) {
     const W = this.world;
     const P = i => [p[(i % 4) * 2], p[(i % 4) * 2 + 1]];
     const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
     const s = len(P(0), P(1)) >= len(P(1), P(2)) ? 0 : 1;
     const p0 = P(s), p1 = P(s + 1), p2 = P(s + 2), p3 = P(s + 3);
     const L = len(p0, p1), depth = (len(p1, p2) + len(p3, p0)) / 2;
-    const pitch = (40 + rnd() * 12) * Math.PI / 180, tn = Math.tan(pitch);
+    const pitch = (RF.pitch[0] + rnd() * (RF.pitch[1] - RF.pitch[0])) * Math.PI / 180, tn = Math.tan(pitch);
     const rise = Math.min(depth / 2 * tn, 8.5), ridgeH = top + rise, slope = rise / (depth / 2);
     const dx = (p1[0] - p0[0]) / L, dz = (p1[1] - p0[1]) / L;
     const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     const r0 = mid(p3, p0), r1 = mid(p1, p2);
     const cx = (p0[0] + p1[0] + p2[0] + p3[0]) / 4, cz = (p0[1] + p1[1] + p2[1] + p3[1]) / 4;
-    const oE = 0.45, oG = 0.3, yE = top - oE * slope;
+    const oE = RF.oE, oG = RF.oG, yE = top - oE * slope;
     const outA = (() => { const m = mid(p0, p1); const l = Math.hypot(m[0] - r0[0] - (r1[0] - r0[0]) / 2, m[1] - r0[1] - (r1[1] - r0[1]) / 2) || 1; return [(m[0] - (r0[0] + r1[0]) / 2) / l, (m[1] - (r0[1] + r1[1]) / 2) / l]; })();
     const outB = [-outA[0], -outA[1]];
     const v = (q, y) => [q[0], y, q[1]];
@@ -1174,7 +1272,7 @@ class Region {
     face(v(A0, yE), v(A1, yE), v(R1, ridgeH), outA); face(v(A0, yE), v(R1, ridgeH), v(R0, ridgeH), outA);
     face(v(B2, yE), v(B3, yE), v(R0, ridgeH), outB); face(v(B2, yE), v(R0, ridgeH), v(R1, ridgeH), outB);
     // Untersicht (Holz, dunkel) und Traufbrett
-    const under = U.color('#5a4636', 0.1, rnd), th = 0.16;
+    const under = U.color(RF.under[Math.floor(rnd() * RF.under.length)], 0.1, rnd), th = 0.16;
     const quad = (a, b, c, d, nx, ny, nz, col) => { pb.tri(a, b, c, col, null, null, null, nx, ny, nz); pb.tri(a, c, d, col, null, null, null, nx, ny, nz); };
     quad(v(A0, yE - th), v(A1, yE - th), v(R1, ridgeH - th), v(R0, ridgeH - th), outA[0] * 0.3, -1, outA[1] * 0.3, under);
     quad(v(B2, yE - th), v(B3, yE - th), v(R0, ridgeH - th), v(R1, ridgeH - th), outB[0] * 0.3, -1, outB[1] * 0.3, under);
@@ -1189,13 +1287,14 @@ class Region {
     const gable = (a, b, r, side) => {
       const g = len(a, b), gx = (a[0] + b[0]) / 2 - cx, gz = (a[1] + b[1]) / 2 - cz;
       const base = sideBase[side] !== undefined ? sideBase[side] : minH;
-      const pr = [0, g / 2, g, 1, top, ridgeH, top, base, top - 0.05, 0];
+      const pr = [0, g / 2, g, 1 + styleCode, top, ridgeH, top, base, top - 0.05, 0];
       const uv = (q, y) => [len(q, a) / BAY_W, (y - minH) / BAY_H];
       wb.tri(v(a, top), v(b, top), v(r, ridgeH), wallCol, uv(a, top), uv(b, top), uv(r, ridgeH), gx, 0, gz, pr);
     };
     gable(p1, p2, r1, (s + 1) % 4);
     gable(p3, p0, r0, (s + 3) % 4);
     // Schornstein auf dem First (verputzt oder Ziegel), mit Abdeckplatte
+    if (rnd() > RF.chimney) return;                      // Neubauten meist ohne Schornstein
     const f = rnd() < 0.5 ? 0.28 : 0.68, sx = r0[0] + (r1[0] - r0[0]) * f, sz = r0[1] + (r1[1] - r0[1]) * f, ang = Math.atan2(dz, dx);
     const ch = rnd() < 0.55 ? U.color('#8c4a38', 0.1, rnd) : wallCol;
     W.boxTris(pb, sx, top + rise * 0.4, sz, 0.55, ridgeH + 0.95 - (top + rise * 0.4), 0.55, ang, ch);

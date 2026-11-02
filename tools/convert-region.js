@@ -179,6 +179,7 @@ for (const r of rels.values()) if (r.tags.building && r.members) {
   outer.forEach((ring, k) => bSources.push({ id: r.id * 10 + k, tags: r.tags, ring }));
 }
 let nb = 0;
+const kept = [];
 for (const s of bSources) {
   const t = s.tags;
   if (t.building === 'no' || t.building === 'construction' && !t['building:levels']) continue;
@@ -207,9 +208,38 @@ for (const s of bSources) {
   else if (!shape && GABLE_TYPES.has(type) && ring.length === 4 && area < 400 && h < 16) flags |= 1;
   if (ring.length !== 4) flags &= ~1;
   if (shape === 'flat') flags |= 2;
-  tileData(cx, cz).b.push([typeOf(type), Math.round(h * 10), flags, nameOf(t.name || null), ...enc(ring)]);
+  kept.push({ id: s.id, tags: t, ring, area, cx, cz, h, type, flags });
+}
+// Bautyp je Haus (tools/classify-buildings.js): Bits 2–5 der Flags = Bautyp, Bit 6 = Fachwerk. Ältere Spielstände
+// des Spiels lesen nur Bit 0 und 1, das Format bleibt also verträglich.
+const { classify, ARCH_NAMES, LANDKREIS } = require('./classify-buildings');
+// Dachfarben aus den Luftbildern (tools/roof-colors.ps1), falls schon gemessen
+const roofFile = path.join(RAW, 'roof-colors.json');
+const roofCol = fs.existsSync(roofFile) ? JSON.parse(fs.readFileSync(roofFile, 'utf8')) : null;
+for (const k of kept) { k.tk = tileOf(k.cx, k.cz).join(','); if (roofCol && roofCol[k.id]) k.rc = roofCol[k.id]; }
+const CL = classify(kept, { ways, nodes, tagNodes, rels, coordsOf, isClosed, assembleRings, pointInRing });
+for (const k of kept) {
+  const flags = k.flags | (k.a << 2) | (k.fw << 6);
+  tileData(k.cx, k.cz).b.push([typeOf(k.type), Math.round(k.h * 10), flags, nameOf(k.tags.name || null), ...enc(k.ring)]);
   nb++;
 }
+// Aufträge für tools/roof-colors.ps1: je Luftbild die Häuser mit Mittelpunkt und Radius (Pixel), der ins Dach passt
+const ORTHO_META = (() => { const c = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'data', 'region', 'ortho.js'), 'utf8'), c); return c.window.COBURG_REGION_ORTHO; })();
+const jobs = {};
+for (const k of kept) {
+  const [ti, tj] = tileOf(k.cx, k.cz), fl = ORTHO_META.tiles[ti + ',' + tj];
+  if (!fl || k.area < 25) continue;
+  const x0 = tileX0(ti), z0 = tileZ0(tj), sx = ORTHO_META.px / (tileX0(ti + 1) - x0), sz = ORTHO_META.px / (tileZ0(tj + 1) - z0);
+  const job = [k.id, +((k.cx - x0) * sx).toFixed(1), +((k.cz - z0) * sz).toFixed(1), +(0.36 * Math.min(k.L, k.Wd) * sx).toFixed(2)];
+  for (const [bit, src] of [[1, 'by'], [2, 'th']]) if (fl & bit) (jobs[`${src}${ti}_${tj}.jpg`] = jobs[`${src}${ti}_${tj}.jpg`] || []).push(...job);
+}
+fs.writeFileSync(path.join(RAW, 'roof-jobs.json'), JSON.stringify(jobs));
+// Bericht für tools/arch-stats.js (Verteilung je Gemeinde, Abgleich mit Baujahr und Denkmal-Kennung)
+fs.writeFileSync(path.join(RAW, 'arch-report.json'), JSON.stringify({
+  names: ARCH_NAMES, landkreis: LANDKREIS, thresholds: CL.thresholds,
+  b: kept.map(k => [k.a, k.fw, k.gemeinde, Math.round(k.cx), Math.round(k.cz), k.year || 0, k.heritage ? 1 : 0, Math.round(k.area),
+    k.O !== undefined ? +k.O.toFixed(3) : null, k.S !== undefined ? +k.S.toFixed(3) : null, k.E !== undefined ? +k.E.toFixed(3) : null]),
+}));
 
 // ---------- Straßennetz (zugleich die gezeichneten Straßen) ----------
 const ROAD = {

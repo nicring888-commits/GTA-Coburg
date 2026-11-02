@@ -355,6 +355,7 @@ function treeAssets(detail, renderer) {
 
 class World {
   constructor(data, scene, renderer) {
+    this.archDebug = { value: 0 };            // Testansicht der Bautypen (Umland), siehe Region.debugArch
     this.data = data;
     this.scene = scene;
     this.renderer = renderer;
@@ -1400,6 +1401,7 @@ class World {
       sh.uniforms.facadeDepth = { value: tex.depth };
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.shopBox = { value: new THREE.Vector4(A.minX, A.minZ, A.maxX, A.maxZ) };
+      sh.uniforms.uArchDebug = this.archDebug;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
           varying vec3 vWPos; varying vec3 vWNor;
@@ -1415,9 +1417,15 @@ class World {
           flat varying vec4 vProfA, vProfB; flat varying vec2 vProfC;
           uniform sampler2D facadeMask, detailMap, facadeDepth;
           uniform vec4 shopBox;
-          uniform float uNight, uWet;
+          uniform float uNight, uWet, uArchDebug;
           uniform vec3 uSkyTop, uSkyHorizon, uSkyGround;
           float fh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          // Testfarben der Bautypen (game.world.region.debugArch = true)
+          vec3 archCol(float a, float fw) {
+            if (fw > 0.5) return vec3(0.42, 0.05, 0.04);
+            return a < 1.5 ? vec3(0.85, 0.2, 0.12) : a < 2.5 ? vec3(0.9, 0.45, 0.12) : a < 3.5 ? vec3(0.9, 0.8, 0.25)
+              : a < 4.5 ? vec3(0.3, 0.7, 0.3) : a < 5.5 ? vec3(0.2, 0.5, 0.95) : a < 6.5 ? vec3(0.62, 0.35, 0.8) : vec3(0.3, 0.8, 0.85);
+          }
           float fGlass = 0.0, fShop = 0.0, fCurtain = 0.0, fGlassVar = 0.0, fFlat = 0.0, fLit = 0.0, fRural = 0.0;
           vec2 fUv = vec2(0.0), fUvG = vec2(0.0);
           // Oberkante der Wand an der Stelle u (Linienzug links – First – rechts aus dem Wandprofil)
@@ -1432,7 +1440,14 @@ class World {
             float bh2 = fh(qc.gb * 1.31 + 7.7);
             vec2 kk = vec2(bh2 < 0.3 ? 1.1 : bh2 < 0.72 ? 1.0 : 0.89, fract(bh2 * 13.7) < 0.35 ? 1.07 : fract(bh2 * 13.7) < 0.75 ? 1.0 : 0.9);
             bool hasProf = vProfA.z - vProfA.x > 0.25;
-            float style = hasProf ? vProfA.w : 0.0;
+            // Stil (0 Stadt, 1/2 Wohnhaus, 3 ohne Fenster) + 8 × Bautyp (tools/classify-buildings.js) + 128 × Fachwerk
+            float styleRaw = hasProf ? vProfA.w : 0.0;
+            float archF = floor(styleRaw / 8.0 + 0.01);
+            float fwBit = step(15.5, archF);
+            float arch = archF - 16.0 * fwBit;
+            float style = styleRaw - 8.0 * archF;
+            bool histA = arch < 2.5;                            // historischer Kern (und ältere Daten)
+            bool sied = abs(arch - 3.0) < 0.5, efh = abs(arch - 4.0) < 0.5, neu = abs(arch - 5.0) < 0.5;
             float uAl = vMapUv.x * 12.8;                        // Meter entlang der Wand (System der Wand-UV)
             float W = hasProf ? vProfA.z - vProfA.x : 1e4;      // Wandbreite
             float uLoc = hasProf ? uAl - vProfA.x : uAl;
@@ -1473,24 +1488,36 @@ class World {
               float ww = mix(0.82, 1.12, fract(bh * 5.3)), whh = mix(1.18, 1.42, fract(bh * 9.1));
               if (fl > 0.5) whh *= 0.93;
               if (attic) { ww *= 0.72; whh = 0.92; }
-              float sill = attic ? 0.65 : 0.88;
+              // Nachkriegszeit und Neubau: regelmäßige, größere Fenster; Neubau mit bodentiefen Fenstern im Erdgeschoss
+              bool tall = false;
+              if (sied) { ww = mix(0.95, 1.2, fract(bh * 5.3)); whh = mix(1.2, 1.35, fract(bh * 9.1)); }
+              else if (efh) { ww = mix(1.1, 1.65, fract(bh * 5.3)); whh = mix(1.25, 1.4, fract(bh * 9.1)); }
+              else if (neu) {
+                ww = mix(1.0, 1.9, fract(bh * 5.3)); whh = mix(1.3, 1.5, fract(bh * 9.1));
+                tall = fl < 0.5 && fh(vec2(s * 3.1, wseed * 5.0)) < 0.45;
+                if (tall) { ww = mix(1.0, 2.2, fract(bh * 3.9)); whh = 2.15; }
+              }
+              if (!histA && attic) { ww = min(ww, 1.0); whh = 1.0; }
+              float sill = attic ? 0.65 : tall ? 0.05 : 0.88;
               bool isDoor = style > 1.5 && fl < 0.5 && abs(s - vProfC.y) < 0.5;
-              float cx = (s + 0.5) * sw + (isDoor ? 0.0 : (fh(vec2(s, wseed * 7.0)) - 0.5) * min(0.5, sw * 0.16));
+              float cx = (s + 0.5) * sw + (isDoor || !histA ? 0.0 : (fh(vec2(s, wseed * 7.0)) - 0.5) * min(0.5, sw * 0.16));
               vec2 wsz = isDoor ? vec2(1.05, 2.15) : vec2(ww, whh);
               float rl = cx - wsz.x * 0.5, rb = flBot + (isDoor ? 0.0 : sill);
               float rt = rb + wsz.y;
               float tp = min(topAt(vProfA.x + rl - 0.2), topAt(vProfA.x + rl + wsz.x + 0.2));
-              bool ok = (isDoor || ws > 0.16) && rl > 0.35 && rl + wsz.x < W - 0.35 && rt < tp - 0.3 && rb > vProfC.x + 0.2 && W > 1.6;
+              bool ok = (isDoor || ws > (histA ? 0.16 : 0.08)) && rl > 0.35 && rl + wsz.x < W - 0.35 && rt < tp - 0.3 && rb > vProfC.x + 0.2 && W > 1.6;
               vec2 q = vec2(uLoc - rl, vWPos.y - rb);
               vec3 fasche = fract(bh * 3.3) < 0.5 ? wallBase * 1.12 : vec3(0.62, 0.55, 0.45) * sampledDiffuseColor.rgb;
               if (ok) {
                 bool inWin = q.x > 0.0 && q.x < wsz.x && q.y > 0.0 && q.y < wsz.y;
                 // Faschen (Putzband) um das Fenster, Sohlbank aus Sandstein darunter
-                float fb = 0.13;
-                if (!inWin && q.x > -fb && q.x < wsz.x + fb && q.y > -fb && q.y < wsz.y + fb) { diffuseColor.rgb = fasche; relief = 0.93; }
-                if (!isDoor && q.y < 0.0 && q.y > -0.08 && q.x > -0.18 && q.x < wsz.x + 0.18) { diffuseColor.rgb = vec3(0.6, 0.55, 0.46) * sampledDiffuseColor.rgb; relief = 0.85; }
+                float fb = histA ? 0.13 : sied ? 0.07 : 0.0;            // Faschen nur an alten Häusern
+                if (fb > 0.0 && !inWin && q.x > -fb && q.x < wsz.x + fb && q.y > -fb && q.y < wsz.y + fb) { diffuseColor.rgb = fasche; relief = 0.93; }
+                if (histA && !isDoor && q.y < 0.0 && q.y > -0.08 && q.x > -0.18 && q.x < wsz.x + 0.18) { diffuseColor.rgb = vec3(0.6, 0.55, 0.46) * sampledDiffuseColor.rgb; relief = 0.85; }
+                // schmale Fensterbank aus Aluminium bzw. Beton
+                if (!histA && !isDoor && !tall && q.y < 0.0 && q.y > -0.05 && q.x > -0.05 && q.x < wsz.x + 0.05) { diffuseColor.rgb = (sied ? vec3(0.62, 0.6, 0.56) : vec3(0.55, 0.56, 0.57)) * sampledDiffuseColor.rgb; relief = 0.85; }
                 // Fensterläden (an knapp der Hälfte der Häuser)
-                if (!isDoor && !attic && fract(bh * 2.3) < 0.45 && q.y > 0.0 && q.y < wsz.y && ((q.x < -fb && q.x > -fb - wsz.x * 0.5) || (q.x > wsz.x + fb && q.x < wsz.x + fb + wsz.x * 0.5))) {
+                if (histA && !isDoor && !attic && fract(bh * 2.3) < 0.45 && q.y > 0.0 && q.y < wsz.y && ((q.x < -fb && q.x > -fb - wsz.x * 0.5) || (q.x > wsz.x + fb && q.x < wsz.x + fb + wsz.x * 0.5))) {
                   vec3 shC = fract(bh * 7.7) < 0.35 ? vec3(0.16, 0.26, 0.17) : fract(bh * 7.7) < 0.65 ? vec3(0.3, 0.19, 0.11) : vec3(0.3, 0.35, 0.4);
                   float lp = q.y / 0.07, louv = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
                   diffuseColor.rgb = shC * (0.85 + 0.25 * louv);
@@ -1499,11 +1526,15 @@ class World {
                 if (inWin && isDoor) {
                   // Haustür: Holz in Hausfarbe, zwei Füllungen, oben ein kleines Fenster
                   vec3 dC = fract(bh * 6.1) < 0.4 ? vec3(0.28, 0.16, 0.08) : fract(bh * 6.1) < 0.7 ? vec3(0.13, 0.22, 0.15) : vec3(0.42, 0.12, 0.08);
+                  if (neu) dC = vec3(0.17, 0.18, 0.19);
+                  else if (efh) dC = fract(bh * 6.1) < 0.6 ? vec3(0.34, 0.21, 0.11) : vec3(0.85, 0.85, 0.83);
+                  else if (sied) dC = fract(bh * 6.1) < 0.5 ? vec3(0.4, 0.3, 0.2) : vec3(0.55, 0.5, 0.42);
                   diffuseColor.rgb = dC;
                   float px = abs(q.x - wsz.x * 0.5);
                   float panel = step(0.12, q.x) * step(q.x, wsz.x - 0.12) * step(0.2, q.y) * step(q.y, 1.5) * step(0.06, px);
                   relief = 1.0 - 0.25 * panel * (1.0 - step(0.03, min(min(q.x - 0.12, wsz.x - 0.12 - q.x), min(q.y - 0.2, 1.5 - q.y))));
-                  if (q.y > 1.62 && q.y < 2.0 && q.x > 0.18 && q.x < wsz.x - 0.18) { glass = 1.0; }
+                  if (q.y > 1.62 && q.y < 2.0 && q.x > 0.18 && q.x < wsz.x - 0.18 && !neu) { glass = 1.0; }
+                  if (neu) { relief = 1.0; if (q.x > wsz.x * 0.64 && q.x < wsz.x * 0.84 && q.y > 0.15 && q.y < 1.95) glass = 1.0; }
                   if (q.y < 0.04) relief = 0.7;
                 } else if (inWin) {
                   // Fenster mit Tiefe: Glas 14 cm hinter der Wand, Laibung sichtbar
@@ -1512,32 +1543,59 @@ class World {
                   else {
                     float fr = 0.06;
                     float bord = step(min(min(q2.x, wsz.x - q2.x), min(q2.y, wsz.y - q2.y)), fr);
-                    float mull = step(abs(q2.x - wsz.x * 0.5), 0.03);
-                    float trans = step(abs(q2.y - wsz.y * 0.64), 0.03);
+                    float mull = neu && wsz.x < 1.3 ? 0.0 : step(abs(q2.x - wsz.x * 0.5), 0.03);
+                    float trans = neu || tall || (efh && fract(bh * 2.7) < 0.5) ? 0.0 : step(abs(q2.y - wsz.y * 0.64), 0.03);
                     frame = max(bord, max(mull, trans));
                     frame = mix(frame, 0.32, smoothstep(0.02, 0.05, fwidth(q2.x)));   // aus der Ferne gemittelt
                     glass = 1.0 - frame;
                     frameC = fract(bh * 4.9) < 0.75 ? vec3(0.9, 0.9, 0.87) : vec3(0.32, 0.2, 0.12);
+                    if (neu) frameC = fract(bh * 4.9) < 0.6 ? vec3(0.2, 0.21, 0.22) : vec3(0.92, 0.92, 0.9);
+                    else if (efh) frameC = fract(bh * 4.9) < 0.5 ? vec3(0.36, 0.23, 0.13) : vec3(0.9, 0.9, 0.88);
+                    else if (sied) frameC = vec3(0.9, 0.9, 0.87);
                     fLit = glass * step(0.5, fh(vec2(s, fl) + bh * 3.0));
+                    // Rollladen bzw. Raffstore teils heruntergelassen (Nachkriegszeit und Neubau)
+                    float rk = fh(vec2(s * 1.3 + fl * 2.1, wseed * 11.0));
+                    if (!histA && rk < 0.3 && q2.y > wsz.y * (1.0 - rk / 0.3 * 0.85)) {
+                      vec3 rC = neu ? vec3(0.3, 0.31, 0.32) : efh && fract(bh * 4.9) < 0.5 ? vec3(0.4, 0.27, 0.16) : vec3(0.8, 0.79, 0.75);
+                      float lp = q2.y / 0.045, lam = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
+                      diffuseColor.rgb = rC * (0.85 + 0.2 * lam) * sampledDiffuseColor.rgb;
+                      glass = 0.0; frame = 0.0; fLit = 0.0; relief = 0.85 + 0.15 * lam;
+                    }
                   }
                 }
               }
               // Sandsteinsockel mit Fugen
-              float sock = mix(0.45, 0.85, fract(bh * 8.3));
-              if (h < sock && glass < 0.5 && !(isDoor && ok && q.x > 0.0 && q.x < wsz.x)) {
+              float sock = histA ? mix(0.45, 0.85, fract(bh * 8.3)) : mix(0.3, 0.5, fract(bh * 8.3));
+              bool inOpen = ok && q.x > -0.02 && q.x < wsz.x + 0.02 && q.y > -0.1 && q.y < wsz.y + 0.02;
+              if (!histA && h < sock && !inOpen) {
+                // Sockelputz: grau, am Neubau oft anthrazit
+                diffuseColor.rgb = (neu ? (fract(bh * 2.9) < 0.6 ? vec3(0.26, 0.27, 0.28) : vec3(0.5, 0.5, 0.49)) : efh ? vec3(0.5, 0.48, 0.45) : vec3(0.56, 0.54, 0.5)) * sampledDiffuseColor.rgb;
+                frame = 0.0; reveal = 0.0;
+              }
+              else if (histA && h < sock && glass < 0.5 && !(isDoor && ok && q.x > 0.0 && q.x < wsz.x)) {
                 vec3 sC = fract(bh * 2.9) < 0.6 ? vec3(0.66, 0.58, 0.44) : vec3(0.55, 0.36, 0.28);
                 float joint = step(fract(h / 0.3), 0.06) + step(fract((uLoc + step(0.5, fract(h / 0.6)) * 0.3) / 0.6), 0.04);
                 diffuseColor.rgb = sC * sampledDiffuseColor.rgb * (1.0 - 0.35 * min(joint, 1.0));
                 frame = 0.0; reveal = 0.0;
               }
               // Eckquader aus Sandstein an manchen Häusern
-              if (fract(bh * 4.1) < 0.3 && h > sock && h < eave - base) {
+              if (histA && fract(bh * 4.1) < 0.3 && h > sock && h < eave - base) {
                 float bi = floor(h / 0.34), wq = mod(bi, 2.0) < 0.5 ? 0.45 : 0.28;
                 if (uLoc < wq || uLoc > W - wq) diffuseColor.rgb = vec3(0.68, 0.6, 0.47) * sampledDiffuseColor.rgb * (1.0 - 0.3 * step(fract(h / 0.34), 0.05));
               }
               // Fachwerk im Obergeschoss und Giebel (gut ein Drittel der Häuser): Ständer an den Feldern und neben den
               // Fenstern, Riegel an Schwelle, Brüstung, Sturz und Rähm, Streben in fensterlosen Feldern
-              if (fract(bh2 * 7.31) < 0.38 && fl > 0.5 && glass < 0.5 && reveal < 0.5) {
+              // Holzverschalung: Giebel an Häusern der 1970er–90er, Akzentflächen im Obergeschoss an Neubauten
+              bool boards = (efh && fract(bh * 12.7) < 0.35 && vWPos.y > eave + 0.15) ||
+                (neu && fract(bh * 11.3) < 0.28 && fl > 0.5 && fract(wseed * 3.7) < 0.5);
+              if (boards && !inOpen && h > sock) {
+                vec3 bC = neu ? (fract(bh * 5.9) < 0.5 ? vec3(0.62, 0.45, 0.3) : vec3(0.22, 0.23, 0.24)) : vec3(0.42, 0.28, 0.16);
+                float bd = fract(uLoc / (neu ? 0.14 : 0.11));
+                diffuseColor.rgb = bC * (0.82 + 0.18 * step(0.08, bd)) * sampledDiffuseColor.rgb;
+                relief = 0.9 + 0.1 * step(0.08, bd);
+              }
+              // Fachwerk nur, wenn die Bautyp-Erkennung es belegt (Fachwerk-Bit)
+              if (fwBit > 0.5 && fl > 0.5 && glass < 0.5 && reveal < 0.5) {
                 float ly = vWPos.y - flBot, xs = uLoc - s * sw, b2 = 0.09;
                 float beam = step(ly, 0.18) + step(hOG - 0.12, ly) + step(abs(ly - (sill - 0.05)), b2);
                 beam += step(abs(ly - (sill + whh + 0.06)), b2) + step(xs, b2) + step(sw - b2, xs);
@@ -1613,6 +1671,7 @@ class World {
             diffuseColor.rgb *= mix(1.0, relief, 0.6) * mix(0.62, 1.0, smoothstep(-0.3, 1.6, h));
             // Regen dunkelt Putz und Stein
             diffuseColor.rgb *= 1.0 - 0.22 * uWet * (1.0 - glass);
+            if (uArchDebug > 0.5 && arch > 0.5) diffuseColor.rgb = mix(archCol(arch, fwBit), diffuseColor.rgb, glass * 0.6);
           }`)
         .replace('#include <opaque_fragment>', `
           {

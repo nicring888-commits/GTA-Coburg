@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.4.0 „GTA Coburg – Waffen“ · **Letzte Aktualisierung:** 02.11.2026 (Grafik-Fahrplan, siehe 7)
+**Version:** 3.5.0 „Regionale Architektur“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 02.11.2026
 
 ---
 
@@ -174,7 +174,10 @@ und müssen dort bleiben.
 | `tools/fetch-region-osm.js` | OSM fürs Umland in 30 Teilstücken (zu große werden geviertelt; `REVERSE=1` lädt von hinten, für einen zweiten Lauf parallel) |
 | `tools/fetch-region-elevation.js` | Terrarium-PNG-Kacheln (eigener PNG-Leser ohne Bibliothek) → `data/raw/region/elevation.json` |
 | `tools/fetch-region-ortho.js` | Luftbilder je Kachel nach `data/region/ortho/by…/th….jpg` und `data/region/ortho.js` |
-| `tools/convert-region.js` | → `data/region.js` (11 MB): Gelände (Int16, base64), Kachelzustände, Straßennetz, je Kachel Häuser, zugeschnittene Flächen, Bäume, Gewässer, Gleise; Orte |
+| `tools/convert-region.js` | → `data/region.js` (11 MB): Gelände (Int16, base64), Kachelzustände, Straßennetz, je Kachel Häuser, zugeschnittene Flächen, Bäume, Gewässer, Gleise; Orte. Seit v3.5.0 mit Bautyp je Haus (Flags Bit 2–5, Fachwerk Bit 6), schreibt `data/raw/region/arch-report.json` und `roof-jobs.json` |
+| `tools/classify-buildings.js` | Bautyp-Erkennung (seit v3.5.0): historischer Kern (Dorf/Hof bzw. Kleinstadt), Siedlung 1950er–70er, Einfamilienhaus 1970er–90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft alt/modern, Nebengebäude, Sonderbau. Merkmale: Denkmal (`heritage`, `ref:BLfD`), Baujahr, Dachform, Geschosse, Baustoff, Flächennutzung, Abstand zu Kirche/Ortsmittelpunkt (relativ zur Ortsgröße), zusammenhängende Siedlung, Gleichförmigkeit der Nachbarhäuser (Größe, Ausrichtung zur Straße, Abstand zur Straße), Lage direkt an der Gasse, Hofstellen, Sackgassen und Spielstraßen, Grundriss (schmal = Siedlungshaus, Würfel = Neubau, Winkel = 70er–90er), Dachfarbe aus dem Luftbild; Glättung je Straßenzug. Fachwerk nur bei historischem Bautyp mit Beleg (Baustoff `timber_framing`, Denkmal) bzw. starken historischen Merkmalen |
+| `tools/roof-colors.ps1` | Dachfarbe je Haus aus den Luftbildern (PowerShell/.NET, weil Node keinen JPEG-Leser hat) → `data/raw/region/roof-colors.json`; optional, ohne Datei arbeitet die Erkennung ohne Dachfarbe |
+| `tools/arch-stats.js` | Verteilung der Bautypen je Gemeinde und Prüfungen (Denkmäler, Fachwerk nur historisch) aus `arch-report.json`; `--md datei` schreibt sie als Tabelle (`recherche/bautypen-statistik.md`) |
 | `tools/utm.js` | Umrechnung UTM 32N (EPSG:25832) ↔ Länge/Breite (Krüger-Reihen, millimetergenau) |
 | `tools/fetch-osm.js` | Lädt die OSM-Daten über die Overpass-API (mit Ausweichservern) |
 | `tools/fetch-elevation.js` | Lädt das Höhenraster (≈ 38 Anfragen, 1 pro Sekunde) |
@@ -214,6 +217,9 @@ node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
 node tools/fetch-region-ortho-hd.js   # scharfe Ortskacheln, nach convert-region.js
 node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
 node tools/convert-region.js
+powershell -ExecutionPolicy Bypass -File tools/roof-colors.ps1   # Dachfarben (3 s), danach convert-region.js noch einmal
+node tools/convert-region.js
+node tools/arch-stats.js --md recherche/bautypen-statistik.md    # Bautypen je Gemeinde
 node tools/fetch-region-rural.js      # Feldwege, Hecken, Baumreihen (Overpass, oft überlastet; REVERSE=1 parallel)
 node tools/convert-region-rural.js    # → data/region-rural.js (geht auch mit einem Teil der Stücke)
 ```
@@ -239,7 +245,9 @@ sie nicht zum Gelände (`meta.base`), baut das Spiel alle Häuser wie bisher aus
 Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races.list` / `game.races.start(r, game.car)`,
 `game.addMoney(1000)`, `game.explode(auto)`, `game.busted()`, `game.wasted('Grund')` und
 `game.property` (z. B. `game.property.enter(game.property.homes[0], true)`, `.exit()`, `.openGarage()`, `.openShop(game.property.shops[0])`) und
-`game.atmo.clock = 19.5` (Uhrzeit), `game.atmo.setWeather('rain', true)`, `game.post.cycle()`, `game.post.debugAO = true` und
+`game.atmo.clock = 19.5` (Uhrzeit), `game.atmo.setWeather('rain', true)`, `game.post.cycle()`, `game.post.debugAO = true`,
+`game.world.region.debugArch = true` (Umland-Häuser nach Bautyp einfärben: rot historisch, dunkelrot Fachwerk, gelb 1950er–70er,
+grün 1970er–90er, blau Neubau, violett Mehrfamilienhaus, türkis Gewerbe), `game.world.region.archAt(x, z)` und
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
@@ -257,6 +265,40 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.5.0 (02.11.2026, Branch `grafik/regionale-architektur`): **Regionale Architektur im Landkreis, Phase 1 des
+  Grafik-Fahrplans (7.1).** Bisher wurde jedes kleine Wohnhaus im Umland ein „Landhaus“ (steiles Dach, Läden,
+  Sandsteinsockel, Staketenzaun) und 38 % bekamen per Zufall Fachwerk – auch in Neubaugebieten.
+  - **Bautyp-Erkennung** beim Umwandeln (`tools/classify-buildings.js`, siehe 5) für alle 78.786 Umland-Häuser;
+    Verteilung je Gemeinde in `recherche/bautypen-statistik.md`. Landkreis + Coburger Stadtteile: 17 % historischer
+    Kern, 37 % Siedlung 1950er–70er, 24 % Einfamilienhaus 1970er–90er, 16 % Neubau ab 2000, 5 % Mehrfamilienhaus
+    (Anteile der Wohnhäuser); Fachwerk an 4 % der Wohnhäuser, ausschließlich an historischen.
+  - **Gestaltung je Bautyp** (`js/region.js`: `ARCH`, `ARCH_WALLS`, `ARCH_ROOF`, `eaveHeight`, `hipHouseRoof`;
+    `js/world.js` `facadeShader`: Bautyp im Stil-Feld des Wandprofils): Neubau mit zwei Vollgeschossen, Satteldach 24–38°
+    oder flachem Walmdach („Stadtvilla“), hellem Putz, anthrazitfarbenem Sockel, großen und bodentiefen Fenstern mit
+    Anthrazit- oder Weißrahmen, Raffstores, Haustür mit Glasstreifen, flachem Vordach, selten Schornstein,
+    Holz-/Anthrazit-Akzentflächen; 1970er–90er mit breiten Fenstern, Holz- oder Kunststoffrahmen, Rollläden,
+    großem Dachüberstand, teils Holzgiebel; Siedlungshäuser schlicht mit kleinen Fenstern, grauem Sockel, Rollläden;
+    historische Häuser wie bisher (Faschen, Läden, Sandsteinsockel, Eckquader), Fachwerk nur mit Fachwerk-Bit.
+    Nebengebäude ohne Fenster und mit Garagenhöhe statt 8-m-Haus, Gewerbe-/Industriehallen und moderne Agrarhallen
+    mit eigenen Farben. Gärten (`js/landscape.js`): Staketenzaun nur am alten Haus, sonst Hecke, Jägerzaun oder
+    offener Vorgarten
+  - **Getestet:** `convert-region.js` erzeugt ohne Erkennung die alte Datei byte-gleich; neue `data/region.js` ändert
+    nur die neuen Bits (Geometrie, Typ, Höhe, Name, alte Flags, Straßen, Gelände: 0 Abweichungen); altes Spiel lädt
+    die neuen Daten fehlerfrei. Innenstadt pixelgenau gegen den alten Stand (eingefrorene Zeit, ohne Figuren und Autos):
+    0,04–0,17 % Kantenpixel (wie zwischen zwei Aufnahmen desselben Stands), Unterschiede nur am Horizont im Landkreis.
+    Im Browser: Unterlauter, Ebersdorf, Rödental (Neubaugebiete), Coburg Nord (Siedlung), Großheirath (1970er–90er),
+    Seßlach-Altstadt, Bad Rodach, Meeder, Großwalbur (historische Kerne), Industriegebiet Ebersdorf; Tag und Nacht.
+    Kollision (96 Laufproben gegen Hauswände, 0 im Haus), Auto fahren, keine Konsolenfehler. Kachelaufbau 23–35 ms
+    (vorher 24–39 ms), Bildzeit unverändert (4,5–6,5 ms)
+  - Beim Testen behoben: Siedlungshäuser der 1930er–60er in Stadtteilen wurden zunächst als Neubau erkannt
+    (Hausform jetzt stärker gewichtet, Lage und Dachfarbe in großen Siedlungskörpern schwächer); Zufallswert verlor
+    bei großen OSM-Kennungen Stellen (Fachwerk war zu häufig)
+- ⚠️ Grenzen v3.5.0: Die Bauzeit ist geschätzt (OSM hat im Landkreis fast keine Baujahre), einzelne Häuser innerhalb
+  einer Straße können falsch liegen; graue Faserzement-Dächer der Nachkriegszeit ähneln im Luftbild Neubau-Anthrazit.
+  Dachformen folgen nicht dem Luftbild (Walmdach oder Satteldach geschätzt). Garagen, Gauben, Balkone, moderne Zäune
+  (Doppelstabmatten), Solaranlagen als Geometrie und detaillierte Gewerbebauten folgen in Phase 2/3. Dachfarben-Messung
+  nur unter Windows (`roof-colors.ps1`).
 
 - ✅ v3.4.0 (26.10.2026): **Fadenkreuze und Visiere** (`js/weapons.js`: `SIGHT_SVG`, `spreadNow`, `updateAimHud`, `hitMark`,
   `grenadeLaunch`/`updateArc`; `game.js`: Visier-Kamera in `aimCamera`). Siehe 3a. Getestet (Chromium): Spreizung der MP
@@ -754,7 +796,10 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Analyse und Fahrplan fertig (02.11.2026). Phase 1 ist vorbereitet und wartet auf Freigabe.
+**Stand:** Phase 1 umgesetzt und getestet (02.11.2026, v3.5.0 auf dem Branch, siehe 6). Nächster Schritt nach
+Freigabe: **Phase 2** (Haustyp-Bibliothek Wohnen: Garagen/Carports als eigene Formen, Gauben, Balkone, Krüppelwalm-
+und Pultdächer, Solaranlagen, Doppelstabmattenzäune, Pflaster- und Schottervorgärten). Offene Entscheidung: Branch
+nach Durchsicht auf `main` übernehmen (löst Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben
 
