@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.4.0 „GTA Coburg – Waffen“ · **Letzte Aktualisierung:** 26.10.2026
+**Version:** 3.4.0 „GTA Coburg – Waffen“ · **Letzte Aktualisierung:** 02.11.2026 (Grafik-Fahrplan, siehe 7)
 
 ---
 
@@ -704,6 +704,59 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   - Der Verkehr fährt weiter auf Schienen: er weicht nicht aus und bleibt bei Unfällen nur kurz stehen.
 
 ## 7. Nächste Schritte
+
+### 7.1 Grafik-Fahrplan „GTA-V-Realismus, regionale Architektur, WebGPU“ (seit 02.11.2026)
+
+Arbeitszweig: **`grafik/regionale-architektur`** (von `origin/main` v3.4.0). Nie direkt auf `main`, kein Deployment
+ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einzeln vorgestellt, freigegeben und getestet.
+
+**Regeln für alle Phasen**
+- Gilt für die **ganze Karte**: Innenstadt (`world.js`, LoD2) und Landkreis (`region.js`, OSM-Häuser) samt
+  Kleinstädten (Neustadt, Rödental, Bad Rodach, Seßlach …) und Dörfern.
+- **Kein zufälliges Fachwerk, keine pauschalen Bauernhausfassaden.** Fachwerk, Fensterläden, Sandsteinsockel und
+  Bauernhaus-Formen nur bei Häusern, deren Bautyp „historischer Kern“ belegt ist (Denkmal-Kennung `heritage`,
+  Hofstelle im alten Ortskern). Ein Dorf ist nicht automatisch historisch: Neubaugebiete sehen aus wie deutsche
+  Neubaugebiete (Putz, moderne Dächer, Garagen, Vorgärten), dazu Siedlungen der 1950er–70er, 1980er/90er, 2000er
+  und Neubauten. Gewerbe, Industrie und moderne Ortsränder bekommen eigene Formen.
+- OSM-Karte, Geometrie, Straßen, Kollision und alle Spielsysteme bleiben unverändert (Mehrspieler, Polizei, Rennen,
+  Waffen, Wohnungen).
+- **WebGL2 bleibt voll funktionsfähig und Standard.** WebGPU kommt schrittweise als zuschaltbarer Weg
+  (`?gfx=webgpu`) und wird erst Standard, wenn er gleich gut aussieht und läuft.
+- Neue Optik möglichst über Geometrie und Daten (Vertex-Attribute, Tabellen) statt über neue GLSL-Verzweigungen,
+  damit die spätere TSL-Übersetzung klein bleibt.
+
+**Ausgangslage (Analyse 02.11.2026)**
+- three.js r160 als globales Skript (`js/boot.js` lädt `three.min.js`), `WebGLRenderer`, PCF-Schatten mit einer
+  Schattenkarte; ≈ 1.000 Zeilen eigenes GLSL über `onBeforeCompile` (`world.js`: Fassade, Dach, Straße, Laub, Detail;
+  `landscape.js`: 4 Shader; `post.js`: SSAO, Bloom, Nebel, ACES; `atmosphere.js`; `water.js`). WebGPU kennt
+  `onBeforeCompile` nicht → TSL-Übersetzung nötig; neuere three.js-Versionen gibt es nur als ES-Module.
+- Fast alle Materialien `MeshLambertMaterial`, Texturen zur Laufzeit gemalt (kein KTX2).
+- Umland: Jedes kleine Wohnhaus wird „Landhaus“ (`region.js`, `RURAL_HOUSES`): steiles Satteldach, Läden,
+  Sandsteinsockel, Staketenzaun; **38 % per Zufall Fachwerk** (`world.js`, `facadeShader`). `convert-region.js`
+  speichert nur Typ, Höhe, Dachflag und verwirft `heritage` (1.306), `roof:shape` (5.642), `building:levels` (3.873),
+  `roof:colour` (1.491), `start_date` (455).
+- Kachelaufbau 14–26 ms im Hauptthread (Ruckler), ferne Häuser mit vollem Fassadenshader, 3–4 Mio. Dreiecke,
+  700–800 Zeichenaufrufe.
+
+**Phasen (Reihenfolge nach Freigabe 02.11.2026: Architektur zuerst)**
+
+| Phase | Inhalt | Dateien | Aufwand |
+|---|---|---|---|
+| **1** | **Bautyp-Erkennung + Stilweiche:** jedes Haus im Landkreis bekommt beim Umwandeln einen Bautyp (historischer Kern, Siedlung 50er–70er, EFH 80er/90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft, Nebengebäude, Sonderbau) aus Denkmal-Kennung, Ortskern-Abstand (Kirchen, Ortsmittelpunkte), Parzellen-Regelmäßigkeit, Sackgassen/Wendehämmer, Grundriss, OSM-Merkmalen. Das Spiel wählt danach Dachneigung, Farben, Sockel, Fenster, Läden, Fachwerk (nur belegt) und Gärten | `tools/classify-buildings.js` (neu), `tools/convert-region.js`, `data/region.js`, `js/region.js`, `js/world.js` (`facadeShader`), `js/landscape.js` (`buildVillage`), `tools/arch-stats.js` (neu) | M |
+| 2 | Haustyp-Bibliothek Wohnen: Stadtvilla (flaches Walmdach), Satteldach 30–38°, Krüppelwalm, Pultdach, Flachdach-Würfel, Doppel-/Reihenhaus; Garagen, Carports, Gauben, Balkone, Wintergärten, Solaranlagen; Gärten je Bautyp (Doppelstabmatten, Thuja, Pflaster, Schotter) | `js/archetypes.js` (neu), `region.js`, `landscape.js` | L |
+| 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder: Hallen, Discounter, Tankstellen, Parkplätze, Zäune, Firmenschilder, Stahlhallen, Fahrsilos | `region.js`, `props.js`, `archetypes.js` | M |
+| 4 | Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
+| 5 | three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
+| 6 | WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
+| 7 | PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
+| 8 | Leistung: Kachelbau im Worker, vereinfachte ferne Kacheln (HLOD), `BatchedMesh`, größere Sichtweite, Impostor-Wälder | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
+| 9 | Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege im Umland, Kanaldeckel, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
+| 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
+| 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
+
+**Stand:** Analyse und Fahrplan fertig (02.11.2026). Phase 1 ist vorbereitet und wartet auf Freigabe.
+
+### 7.2 Weitere Vorhaben
 
 - [ ] **Mehrspieler-Ausbau:** Render-Dienst anlegen und Adresse ggf. in `js/mp-config.js` eintragen; gemeinsame Rennen
   (alle an derselben Säule, Server misst Zeiten); gemeinsame Fahndung (Polizei jagt den Gesuchten auch bei den
