@@ -21,7 +21,9 @@
     return;
   }
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // weiche Schatten: three.js ab r180 kennt PCFSoftShadowMap nicht mehr, dort filtert PCF über shadow.radius
+  const softPCF = +THREE.REVISION < 180;
+  renderer.shadowMap.type = softPCF ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
   // Nachbearbeitung (js/post.js): HDR mit MSAA, Umgebungsverdeckung, Luftperspektive, Bloom, filmische Tonwertkurve
   // und Farbkorrektur; setzt Auflösung und Tonwertkurve je Qualitätsstufe (Taste O)
   const post = new PostFX(renderer);
@@ -51,6 +53,7 @@
   const MAX_SHADOW = Math.min(renderer.capabilities.maxTextureSize >= 8192 ? 4096 : 2048, Q.shadow || Infinity);
   let SC = 110;
   sun.shadow.bias = -0.0005;
+  if (!softPCF) sun.shadow.radius = 2;
   const setShadow = q => {
     const px = Math.min(q.shadow, MAX_SHADOW);
     if (sun.shadow.mapSize.x !== px) {

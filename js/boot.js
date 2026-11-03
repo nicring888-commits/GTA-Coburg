@@ -138,7 +138,13 @@
 
   // ---------- Daten und Skripte laden ----------
   // Pflichtteile brechen bei Fehlern ab, optionale Daten fehlen dann nur (das Spiel hat für alle einen Ersatz)
+  // three.js (seit v3.9.0, Grafik-Phase 5): aktuelle Version als ES-Modul, als window.THREE für die Spielskripte bereitgestellt
+  // (WebGLRenderer wie bisher). Ersatz, falls kein CDN das Modul liefert: die alte Skriptfassung r160. Mit ?three=160 lässt
+  // sich die alte Fassung zum Vergleich erzwingen.
+  const THREE_VERSION = '0.186.1';
+  const THREE_MODULES = [`https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/build/three.module.js`, `https://unpkg.com/three@${THREE_VERSION}/build/three.module.js`];
   const THREE_URLS = ['https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js', 'https://unpkg.com/three@0.160.0/build/three.min.js'];
+  const THREE_LEGACY = /[?&]three=160\b/.test(location.search);
   // PeerJS nur für „Online spielen“ ohne eigenen Server; fehlt es, geht der Rest trotzdem
   const PEER_URLS = ['https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];
   const DATA = [
@@ -208,6 +214,18 @@
     })
     : loadScript(src);
 
+  // three.js als ES-Modul (dynamischer Import mit Zeitlimit); gibt true zurück, wenn window.THREE gesetzt ist
+  async function loadThreeModule() {
+    if (THREE_LEGACY) return false;
+    for (const u of THREE_MODULES) {
+      try {
+        const mod = await Promise.race([import(u), new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), TIMEOUT))]);
+        if (mod && mod.WebGLRenderer) { window.THREE = mod; return true; }
+      } catch (e) { console.warn(u, 'nicht geladen:', e.message); }
+    }
+    return false;
+  }
+
   // erste erreichbare Adresse nehmen
   async function loadFirst(urls, check) {
     for (const u of urls) {
@@ -219,7 +237,8 @@
   async function start() {
     mark('laden');
     setText('Lade 3D-Grafik (three.js) …', 0.01);
-    const ok = await loadFirst(THREE_URLS, () => !!window.THREE);
+    const ok = await loadThreeModule() || await loadFirst(THREE_URLS, () => !!window.THREE);
+    if (ok) console.info('three.js r' + window.THREE.REVISION);
     if (!ok) return fail('three.js konnte nicht geladen werden.', 'Bitte Internetverbindung prüfen und neu laden.');
     mark('aufbau'); // ab hier wird viel Speicher gebraucht (Daten auspacken, Welt bauen)
 

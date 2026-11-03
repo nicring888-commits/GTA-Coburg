@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.8.0 „Fassaden je Bautyp, historische Innenstadt“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.9.0 „three.js r186 als ES-Modul“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -33,7 +33,8 @@ Der Nullpunkt der Welt ist der Marktplatz.
 - Notfalls geht auch ein direkter Doppelklick auf `index.html`. Dann fehlen aber die Luftbilder, weil der Browser
   Bilddateien von der Festplatte nicht als Textur erlaubt. Das Spiel nimmt dann die gemalte Bodentextur.
 
-Für three.js (r160, über das CDN jsDelivr, ersatzweise unpkg) wird eine Internetverbindung gebraucht.
+Für three.js (seit v3.9.0 r186 als ES-Modul über das CDN jsDelivr, ersatzweise unpkg; sonst die alte Fassung r160) wird
+eine Internetverbindung gebraucht. Mit `?three=160` in der Adresse lädt das Spiel zum Vergleich die alte Fassung r160.
 
 **Grafikstufen (seit v3.1.2):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
 Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder auf dem Startbildschirm; die Wahl bleibt gespeichert
@@ -139,7 +140,7 @@ und müssen dort bleiben.
 | Datei | Aufgabe |
 |---|---|
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
-| `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
+| `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (seit v3.9.0 `THREE_VERSION` 0.186.1 per `import()` als ES-Modul und stellt es als `window.THREE` bereit; Ersatz `three.min.js` r160, erzwingbar mit `?three=160`; jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
 | `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
@@ -271,6 +272,22 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.9.0 (03.11.2026, Branch `grafik/regionale-architektur`): **three.js r186 als ES-Modul – Phase 5 des
+  Grafik-Fahrplans (7.1).** `js/boot.js` lädt three.js 0.186.1 (vom 24.09.2026; 0.187.0 war erst vier Tage alt) per
+  dynamischem `import()` aus `build/three.module.js` und setzt `window.THREE`; alle Spielskripte bleiben klassische
+  Skripte und unverändert. Renderer weiter `WebGLRenderer` (WebGL2). Fällt das Modul aus, lädt das Spiel wie bisher
+  `three.min.js` r160 (die Skriptfassung gibt es ab r161 nicht mehr). Einzige Anpassung: `PCFSoftShadowMap` gibt es ab
+  r180 nicht mehr, dort `PCFShadowMap` mit `shadow.radius = 2` (`game.js`)
+  - **Getestet (Chromium):** Start ohne Fehler, Konsole ohne Fehler und ohne three.js-Warnungen (nur Compiler-Hinweise
+    des Windows-Treibers zu Rundung und Ableitungen, harmlos). Bildvergleich r160 ↔ r186 bei gleicher Uhrzeit und
+    Kamera: Markt (Tag, Nacht), Netto Untersiemau – gleich bis auf Wolkenstand. Auto fahren, Polizei mit 3 Sternen,
+    Wohnung betreten und verlassen, Regen. Alle eigenen `onBeforeCompile`-Shader (Fassade, Dach, Straße, Laub,
+    Landschaft, Wasser, Himmel, Nachbearbeitung) übersetzen unter r186
+  - **Leistung:** in der Vorschau nicht verlässlich messbar – die Bildzeit springt bei beiden Fassungen zwischen ≈ 9 und
+    33 ms (Takt des Hintergrundfensters, dynamische Auflösung). Ein Vergleich im Vordergrund steht noch aus
+- ⚠️ Grenzen v3.9.0: Weiche Schatten sehen mit PCF und Radius etwas anders aus als das frühere PCFSoft (in den
+  Vergleichsbildern kaum sichtbar). Ohne Internet kein Spiel (wie bisher). Die Leistung ist nicht nachgemessen.
 
 - ✅ v3.8.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Fassaden je Bautyp über Tabellen, historische Innenstadt
   – Phase 4 des Grafik-Fahrplans (7.1).**
@@ -931,7 +948,7 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 2 | Haustyp-Bibliothek und Umgebung (v3.6.0): Dachformen je Bautyp, Gauben, Balkone, Garagen/Carports, Zäune und Einfassungen, Gehsteige, Fußgängerverteilung nach Gegend und Tageszeit | `js/houses.js` (neu), `region.js`, `world.js`, `landscape.js`, `pedestrians.js`, `player.js`, `game.js`, `tools/convert-region.js`, `tools/classify-buildings.js` | L |
 | ✅ 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder (v3.7.0): Hallen je Art mit Fassaden, Toren und Dächern, Discounter mit Glasfront und Vordach, Tankstellen, Parkplätze, Zäune, Firmenschilder, Biogas/Silos, Fahrsilos, Ortstafeln | `js/archetypes.js` (neu), `region.js`, `world.js` (Stil 6/7), `props.js`, `landscape.js`, `boot.js` | M |
 | ✅ 4 | (v3.8.0) Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
-| 5 | three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
+| ✅ 5 | (v3.9.0, r186) three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
 | 6 | WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
 | 7 | PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
 | 8 | Leistung: Kachelbau im Worker, vereinfachte ferne Kacheln (HLOD), `BatchedMesh`, größere Sichtweite, Impostor-Wälder | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
@@ -939,8 +956,8 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–4 (v3.5.0–v3.8.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 5** (three.js aktuell als ES-Modul, WebGL bleibt). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
+**Stand:** Phasen 1–5 (v3.5.0–v3.9.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 6** (WebGPU-Probe `?gfx=webgpu` mit Gelände und Häusern, WebGL2-Rückfall, Messung). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben
