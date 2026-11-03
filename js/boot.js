@@ -160,7 +160,7 @@
   ].filter(Boolean);
   const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'region',
     'vehicle', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
-    'property', 'venues', 'net-p2p', 'net', 'game', 'touch'].map(n => `js/${n}.js`));
+    'property', 'venues', 'net-p2p', 'net', 'gfx-webgpu', 'game', 'touch'].map(n => `js/${n}.js`));
 
   const TIMEOUT = 90000;  // ohne jeden Fortschritt; große Dateien bei langsamer Mobilverbindung
   function loadScript(src) {
@@ -220,7 +220,7 @@
     for (const u of THREE_MODULES) {
       try {
         const mod = await Promise.race([import(u), new Promise((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), TIMEOUT))]);
-        if (mod && mod.WebGLRenderer) { window.THREE = mod; return true; }
+        if (mod && mod.WebGLRenderer) { window.THREE = mod; window.THREE_SRC = u; return true; }
       } catch (e) { console.warn(u, 'nicht geladen:', e.message); }
     }
     return false;

@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.9.0 „three.js r186 als ES-Modul“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.10.0 „WebGPU-Probe“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -35,6 +35,10 @@ Der Nullpunkt der Welt ist der Marktplatz.
 
 Für three.js (seit v3.9.0 r186 als ES-Modul über das CDN jsDelivr, ersatzweise unpkg; sonst die alte Fassung r160) wird
 eine Internetverbindung gebraucht. Mit `?three=160` in der Adresse lädt das Spiel zum Vergleich die alte Fassung r160.
+
+**Grafik-Proben (seit v3.10.0):** `?gfx=webgpu` zeichnet die Szene mit three.js' `WebGPURenderer` (Messanzeige oben
+rechts), `?gfx=webgpu-gl` mit dessen WebGL2-Rückfall, `?gfx=stats` zeigt dieselbe Messanzeige für den normalen WebGL-Weg.
+Ohne Angabe bleibt alles wie bisher (WebGL).
 
 **Grafikstufen (seit v3.1.2):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
 Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder auf dem Startbildschirm; die Wahl bleibt gespeichert
@@ -166,6 +170,7 @@ und müssen dort bleiben.
 | `js/property.js` | Besitz (seit v1.2.0): Wohnungsliste, Haustür an der nächsten Fassade (`placeHome`/`facade`), Autohäuser, Garage mit eigenen Autos (`deliver`/`stow`/`carSold`), gemeinsames Menü (`#menu`), Betreten/Verlassen, Interaktionen und Licht drinnen, Speicherstand |
 | `js/interiors.js` | Innenräume (`Room`): Raumhülle, Fenster mit Ausblick, Möbel aus Quadern mit gemalten Texturen, Kollision als Rechtecke (`collide`, `walker` ersetzt die Welt-Abfragen für die Spielfigur), Kamera innerhalb der Wände (`clampCam`), Stellen zum Benutzen; drei Grundrisse `buildSmallRoom`/`buildModernRoom`/`buildLuxuryRoom` |
 | `js/weapons.js` | Waffen (seit v3.3.0): `WEAPONS` (Werte je Waffe), `WEAPON_SHOPS`, Umrisse fürs HUD, 3D-Modelle (`weaponModel`, in der rechten Hand über `Player.setWeapon`), `Weapons`: Auswahl, Nachladen, Schießen (freies Zielen aus der Kamera oder Zielhilfe `pickTarget`), Strahltest `ray` gegen Passanten und Polizisten (Zylinder), Autos (Quader) und Häuser/Boden (`wallHit`, Schritte von 0,5 m), Wirkung `applyHit`, Nahkampf, Granaten, Pickups (Geld, Waffen), Leuchtspuren, Mündungsfeuer, Schüsse der Polizei (`npcShot`), Waffenladen-Menü, Waffenanzeige, Fadenkreuz und Zielmarkierung |
+| `js/gfx-webgpu.js` | WebGPU-Probe (seit v3.10.0, `GfxProbe`): lädt `three.webgpu.js` vom selben CDN wie `three.module.js` (gemeinsames `three.core.js`), `WebGPURenderer` auf eigener Leinwand unter der durchsichtigen WebGL-Leinwand (Eingabe bleibt dort), blendet ShaderMaterials (Himmel, Wasser) aus, Nebelfarbe als Hintergrund, ohne Umgebungsbild; Messanzeige (Backend, Bildzeit, CPU-Zeit des Zeichnens, Zeichenaufrufe, Dreiecke), `game.gfx.stats`; `measureWebGL` für `?gfx=stats` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
@@ -272,6 +277,33 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.10.0 (03.11.2026, Branch `grafik/regionale-architektur`): **WebGPU-Probe – Phase 6 des Grafik-Fahrplans (7.1).**
+  `js/gfx-webgpu.js` (neu), Anbindung in `game.js` (statt `post.render`, wenn die Probe läuft) und `boot.js`
+  (`window.THREE_SRC`). Standard bleibt WebGL; die Probe ändert nichts, solange `?gfx=` fehlt.
+  - **Was die Probe zeigt:** Gelände mit Luftbild, Häuser (LoD2 und Umland) mit Luftbild-Dächern, Straßen, Bäume,
+    Figuren, Autos, Schatten – mit den Grundmaterialien, die der WebGPURenderer selbst in Node-Materialien übersetzt.
+    Es fehlen alle eigenen Shader-Zusätze (`onBeforeCompile`: Fenster, Fassaden, Hallen, Straßenmarkierungen im Shader,
+    Landschaftsboden, Laub-Wind), Himmel und Wasser (ShaderMaterial, ausgeblendet) und die Nachbearbeitung (SSAO, Bloom,
+    Farbkorrektur). Genau das ist die Arbeit für Phase 11 (TSL)
+  - **Messung** (Chromium, Vorschaufenster, 60-Hz-Takt, gleiche Kamera, Stufe Hoch):
+
+    | Ort | WebGL (Spiel, voll) | WebGPU-Probe (ohne Nachbearbeitung) |
+    |---|---|---|
+    | Markt | 16,7 ms, CPU 6,3 ms, 1.673 Aufrufe, 4,3 Mio. Dreiecke | 23,8 ms, CPU 22,1 ms, 1.884 Aufrufe, 4,9 Mio. |
+    | Neustadt | 16,7 ms, CPU 7,3 ms, 1.227 Aufrufe, 6,6 Mio. | 21,1 ms, CPU 19,5 ms, 1.307 Aufrufe, 6,6 Mio. |
+    | Unterlauter | 16,7 ms, CPU 5,2 ms, 1.009 Aufrufe, 5,4 Mio. | 16,8 ms, CPU 15,3 ms, 1.045 Aufrufe, 5,4 Mio. |
+
+    WebGL2-Rückfall des neuen Renderers (`?gfx=webgpu-gl`, Markt von oben): 16,8 ms, CPU 15,0 ms.
+    **Folgerung:** Die GPU-Seite reicht, aber der neue Renderer braucht je Zeichenaufruf etwa dreimal so viel CPU-Zeit
+    (≈ 12–15 µs statt ≈ 4–6 µs). Bevor WebGPU Standard werden kann, müssen die Zeichenaufrufe deutlich sinken
+    (Phase 8: `BatchedMesh`, vereinfachte ferne Kacheln) und die Shader in TSL übersetzt sein (Phase 11). Die ersten
+    Sekunden nach dem Start sind langsam (Übersetzen der Pipelines, ≈ 3 s für das erste Bild)
+  - Getestet: Start mit `?gfx=webgpu` (Backend WebGPU), `?gfx=webgpu-gl` (WebGL2), `?gfx=stats`, ohne Parameter wie
+    bisher; Steuerung und Spiel laufen weiter, keine Konsolenfehler
+- ⚠️ Grenzen v3.10.0: Nur eine Probe – ohne Fenster, Himmel, Wasser und Nachbearbeitung; Nacht, Laternenlicht und
+  Leuchtschilder nicht angepasst. Die WebGL-Leinwand rechnet im Hintergrund nicht mehr, belegt aber weiter Speicher.
+  Gemessen nur im Vorschaufenster (60-Hz-Takt begrenzt), nicht auf Smartphones.
 
 - ✅ v3.9.0 (03.11.2026, Branch `grafik/regionale-architektur`): **three.js r186 als ES-Modul – Phase 5 des
   Grafik-Fahrplans (7.1).** `js/boot.js` lädt three.js 0.186.1 (vom 24.09.2026; 0.187.0 war erst vier Tage alt) per
@@ -949,15 +981,16 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder (v3.7.0): Hallen je Art mit Fassaden, Toren und Dächern, Discounter mit Glasfront und Vordach, Tankstellen, Parkplätze, Zäune, Firmenschilder, Biogas/Silos, Fahrsilos, Ortstafeln | `js/archetypes.js` (neu), `region.js`, `world.js` (Stil 6/7), `props.js`, `landscape.js`, `boot.js` | M |
 | ✅ 4 | (v3.8.0) Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
 | ✅ 5 | (v3.9.0, r186) three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
-| 6 | WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
+| ✅ 6 | (v3.10.0) WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
 | 7 | PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
 | 8 | Leistung: Kachelbau im Worker, vereinfachte ferne Kacheln (HLOD), `BatchedMesh`, größere Sichtweite, Impostor-Wälder | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
 | 9 | Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege im Umland, Kanaldeckel, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–5 (v3.5.0–v3.9.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 6** (WebGPU-Probe `?gfx=webgpu` mit Gelände und Häusern, WebGL2-Rückfall, Messung). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
+**Stand:** Phasen 1–6 (v3.5.0–v3.10.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 7** (PBR-Materialbibliothek, Texturen als Atlanten/Arrays, KTX2, Budget je
+Qualitätsstufe). Nach der WebGPU-Messung sollte **Phase 8** (weniger Zeichenaufrufe) vor Phase 11 kommen. Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben

@@ -1201,7 +1201,9 @@
     if (world.region && world.region.land) world.region.land.update(camera.position.x, camera.position.z, !property.inside);
     waterTick(dt);
     ui.updateLabels(camera);
-    post.render(scene, camera);
+    // WebGPU-Probe (?gfx=webgpu, js/gfx-webgpu.js) zeichnet statt der WebGL-Kette; ?gfx=stats misst die WebGL-Kette
+    if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color);
+    else { const t0 = performance.now(); post.render(scene, camera); GfxProbe.measureWebGL(renderer, performance.now() - t0); }
   }
 
   addEventListener('resize', () => {
@@ -1212,7 +1214,8 @@
   });
 
   // für Tests in der Konsole
-  window.game = { world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
+  GfxProbe.start(renderer, scene);
+  window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
