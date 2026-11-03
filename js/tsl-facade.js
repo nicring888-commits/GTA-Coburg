@@ -464,6 +464,8 @@ NodeKit.facade = function (nm, tex, detail, archDebug) {
     col.addAssign(v(1, 0.74, 0.45).mul(0.085).mul(A.night).mul(P.shop).mul(P.gvar.mul(0.5).add(0.5)).mul(smoothstep(0.5, 2.5, P.hb).mul(0.4).add(0.6)));
     col.addAssign(P.diff.mul(v(1, 0.58, 0.26)).mul(A.night).mul(0.14).mul(smoothstep(0, 8, P.hb).oneMinus()).mul(P.glass.oneMinus()));
     col.addAssign(v(1, 0.78, 0.48).mul(0.55).mul(A.night).mul(P.lit).mul(P.curtain.mul(-0.3).add(1)));
+    // Spiegelstärke für die Nachbearbeitung (js/tsl-post.js, zweiter Ausgabekanal), grün: Glas (Normale aus dem Bild)
+    property('vec4', 'tslRefl').assign(vec4(0, clamp(P.glass.mul(P.curtain.mul(-0.5).add(1)).mul(P.shop.mul(-0.45).add(1)).mul(P.lit.mul(-0.7).add(1)).mul(P.gvar.mul(0.45).add(0.55)), 0, 1), 0, 1));
     return vec4(col, o.a);
   })();
   // Testansicht: ?fcdbg=G zeigt Glas (rot), flache Fläche ohne Normal Map (grün) und Landhaus (blau)

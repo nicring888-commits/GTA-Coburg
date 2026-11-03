@@ -98,7 +98,7 @@ const NodeKit = {
   },
   // Straßen: Asphaltkörnung, bei Regen dunkler mit Pfützen, Himmelsspiegelung nach Fresnel (World.roadShader)
   road(nm, tex) {
-    const T = this.T, { Fn, texture, positionWorld, cameraPosition, materialColor, smoothstep, normalize, reflect, pow, max, mix, vec3, vec4, output } = T, A = this.A;
+    const T = this.T, { Fn, texture, positionWorld, cameraPosition, materialColor, smoothstep, normalize, reflect, pow, max, mix, clamp, vec3, vec4, output } = T, A = this.A;
     const puddle = Fn(() => {
       const wp = positionWorld.xz;
       const g2 = texture(tex, wp.div(6.5)).r, g3 = texture(tex, wp.div(29)).r;
@@ -115,6 +115,8 @@ const NodeKit = {
       const fres = pow(max(V.y.negate(), 0).oneMinus(), 5).mul(0.97).add(0.03);
       const sky = mix(A.horizon, A.top, pow(max(R.y, 0), 0.6));
       const k = A.wet.mul(fres.mul(0.75).add(0.1)).mul(puddle.mul(0.55).add(0.45)).mul(A.night.mul(-0.6).add(1));
+      // Spiegelstärke für die Nachbearbeitung (js/tsl-post.js liest sie im zweiten Ausgabekanal), rot: nasse Fläche
+      T.property('vec4', 'tslRefl').assign(vec4(clamp(A.wet.mul(puddle.mul(0.65).add(0.35)), 0, 1), 0, 0, 1));
       return vec4(mix(output.rgb, sky, k), output.a);
     })();
   },

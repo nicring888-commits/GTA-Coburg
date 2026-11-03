@@ -137,7 +137,22 @@ const GfxProbe = {
     scene.environment = this.envRT ? this.envRT.texture : null;
     scene.background = fogColor || (scene.fog && scene.fog.color) || null;
     const t0 = performance.now();
-    this.r.render(scene, camera);
+    // Nachbearbeitung als Node-Kette (js/tsl-post.js), solange die Stufe sie hat; bis sie gebaut ist, ohne
+    const post = atmo && atmo.post, q = post && post.q;
+    if (post && post.enabled && q) {
+      const key = post.level;
+      if (this.postKey !== key && !this.postBuilding) {
+        this.postBuilding = true;
+        NodeKit.post.build(this.r, scene, camera, post, q).then(() => { this.postKey = key; }).catch(e => console.warn('WebGPU-Nachbearbeitung:', e.message)).finally(() => { this.postBuilding = false; });
+      }
+    }
+    if (post && post.enabled && this.postKey === (post && post.level) && NodeKit.post.pipe) {
+      NodeKit.post.frame(camera, post.params);
+      NodeKit.post.pipe.render();
+    } else {
+      this.r.toneMapping = THREE.ACESFilmicToneMapping;
+      this.r.render(scene, camera);
+    }
     const cpu = performance.now() - t0;
     scene.environment = env; scene.background = bg;
     for (const o of hidden) o.visible = true;
