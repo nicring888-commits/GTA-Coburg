@@ -12,7 +12,7 @@ const REGION = {
   treesDrop: 1600,
   skirt: 5,           // Schürze an den Kachelrändern gegen Lichtspalten (m)
   roadY: 0.12,
-  budgetMs: 9,        // Bauzeit pro Bild, wenn nichts dringend ist
+  sliceMs: 4,         // Bauzeit pro Bild, wenn nichts dringend ist (Zeitscheiben seit v3.12.0)
   life: 650,          // Laternen, Ladenschilder, Lokale und Fußgänger nur in der Nähe
   lifeDrop: 950,
   townBuildings: 12,  // ab so vielen Häusern gilt eine Kachel als Ort
@@ -133,7 +133,7 @@ class Region {
     this.places = R.places;
     this.ortho = window.COBURG_REGION_ORTHO && location.protocol !== 'file:' ? window.COBURG_REGION_ORTHO : null;
     this._near = [];
-    this.stats = { built: 0, ms: 0 };
+    this.stats = { built: 0, ms: 0, frameMs: 0, maxFrame: 0, maxStep: 0 };
     this.anchors = new Map();       // Kachel -> Objekte, deren Höhe beim Bauen der Kachel nachgeführt wird
     this.lifeOn = new Set();
     this.night = false;
@@ -468,8 +468,12 @@ class Region {
   }
 
   // ---------------- Laden und Abbauen ----------------
-  // Jeden Frame aufrufen: baut fehlende Kacheln in der Nähe (die unter dem Spieler sofort), baut ferne ab
+  // Jeden Frame aufrufen: baut fehlende Kacheln in der Nähe (die unter dem Spieler sofort), baut ferne ab.
+  // Seit v3.12.0 (Grafik-Phase 8) in Zeitscheiben: ein Auftrag (Kachel, Bäume, Ortsleben) ist eine Folge kleiner
+  // Schritte (Generator), pro Bild laufen Schritte bis REGION.sliceMs; eine Kachel kommt erst fertig in die Szene.
+  // Dringendes (unter dem Spieler, Schnellreise) wird weiter sofort ganz gebaut.
   update(px, pz, force) {
+    this.px = px; this.pz = pz;
     const [pi, pj] = this.tileOf(px, pz);
     const reach = Math.ceil(REGION.drop / Math.min(this.tw, this.th)) + 1;
     const want = [];
@@ -481,6 +485,7 @@ class Region {
       if (d < REGION.load && !t) want.push({ ti, tj, key, st, d });
       if (t) {
         if (d > REGION.drop) { this.dispose(t); continue; }
+        if (!t.ready) { if (force || d < 350) this.finishJob(t, 'tile'); continue; }
         const treeOn = this.treesOn.has(key);
         if (!treeOn && d < REGION.trees && t.st === 2) want.push({ ti, tj, key, st, d, trees: true });
         else if (treeOn && d > REGION.treesDrop) this.dropTrees(t);
@@ -494,14 +499,58 @@ class Region {
     if (this.loaded.size > 60 || force) for (const t of [...this.loaded.values()]) if (this.rectDist(t.ti, t.tj, px, pz) > REGION.drop) this.dispose(t);
     want.sort((a, b) => a.d - b.d);
     const t0 = performance.now();
-    for (const w of want) {
-      const urgent = force || w.d < 350;
-      if (!urgent && performance.now() - t0 > REGION.budgetMs) break;
-      if (w.trees) { const t = this.loaded.get(w.key); if (t) this.buildTrees(t); }
-      else if (w.life) { const t = this.loaded.get(w.key); if (t) this.buildLife(t); }
-      else this.buildTile(w);
-      if (!urgent) break; // höchstens eine nicht dringende Kachel pro Bild
+    for (const w of want) if (force || w.d < 350) this.runJob(this.startJob(w), Infinity);
+    // sonst ein Auftrag nach dem anderen, bis die Zeit für dieses Bild um ist
+    const until = performance.now() + REGION.sliceMs;
+    while (performance.now() < until) {
+      if (!this.job) {
+        const w = want.find(w => !(force || w.d < 350));
+        if (!w) break;
+        want.splice(want.indexOf(w), 1);
+        this.job = this.startJob(w);
+        if (!this.job) continue;
+      }
+      if (this.runJob(this.job, until)) this.job = null;
     }
+    this.stats.frameMs = performance.now() - t0;
+    if (this.stats.frameMs > this.stats.maxFrame) this.stats.maxFrame = this.stats.frameMs;
+  }
+  // Auftrag anlegen: { art, Kachel, Schritte }; Kachel, Bäume oder Ortsleben
+  startJob(w) {
+    if (w.trees || w.life) {
+      const t = this.loaded.get(w.key);
+      if (!t || !t.ready || !t.d) return null;
+      if (w.trees) {
+        if (this.treesOn.has(t.key)) return null;
+        this.treesOn.add(t.key);
+        return { kind: 'trees', t, it: this.treeSteps(t), ms: 0 };
+      }
+      if (this.lifeOn.has(t.key)) return null;
+      return { kind: 'life', t, it: (function* (R) { R.buildLife(t); })(this), ms: 0 };
+    }
+    const t = { ti: w.ti, tj: w.tj, key: w.key, st: w.st, x0: this.tileX(w.ti), z0: this.tileZ(w.tj) };
+    t.x1 = t.x0 + this.tw; t.z1 = t.z0 + this.th;
+    this.loaded.set(t.key, t);
+    return { kind: 'tile', t, it: this.tileSteps(t), ms: 0 };
+  }
+  // Schritte ausführen, bis der Auftrag fertig ist (true) oder die Zeit abgelaufen (false)
+  runJob(job, until) {
+    if (!job) return true;
+    for (;;) {
+      const s0 = performance.now(), r = job.it.next(), dt = performance.now() - s0;
+      job.ms += dt;
+      if (dt > this.stats.maxStep) this.stats.maxStep = dt;
+      if (r.done) { if (job.kind === 'tile') { this.stats.built++; this.stats.ms += job.ms; } return true; }
+      if (performance.now() >= until) return false;
+    }
+  }
+  // laufenden Auftrag für diese Kachel sofort zu Ende bringen
+  finishJob(t, kind) {
+    const job = this.job;
+    if (!job || job.t !== t || job.kind !== kind) return false;
+    this.job = null;
+    this.runJob(job, Infinity);
+    return true;
   }
   rectDist(ti, tj, x, z) {
     const x0 = this.tileX(ti), z0 = this.tileZ(tj), x1 = x0 + this.tw, z1 = z0 + this.th;
@@ -515,46 +564,50 @@ class Region {
       if (!st || this.rectDist(ti, tj, x, z) > radius) continue;
       let t = this.loaded.get(key);
       if (!t) t = this.buildTile({ ti, tj, key, st });
+      else if (!t.ready) this.finishJob(t, 'tile');
+      this.finishJob(t, 'trees');
       if (st === 2 && !this.treesOn.has(key) && this.rectDist(ti, tj, x, z) < REGION.trees) this.buildTrees(t);
       if (t.town && !this.lifeOn.has(key) && this.rectDist(ti, tj, x, z) < REGION.life) this.buildLife(t);
     }
   }
 
+  // Kachel sofort ganz bauen
   buildTile(w) {
-    const t0 = performance.now();
-    const t = { ti: w.ti, tj: w.tj, key: w.key, st: w.st, x0: this.tileX(w.ti), z0: this.tileZ(w.tj) };
-    t.x1 = t.x0 + this.tw; t.z1 = t.z0 + this.th;
+    const job = this.startJob(w);
+    this.runJob(job, Infinity);
+    return job.t;
+  }
+  // Kachel in Schritten: zwischen zwei yield gibt update() die Kontrolle ans Bild zurück, wenn die Zeit um ist
+  *tileSteps(t) {
     t.group = new THREE.Group();
     t.edges = []; t.edgeGrid = new U.Grid(16); t.polyGrid = new U.Grid(32); t.roadGrid = new U.Grid(25);
     t.buildings = [];
-    this.makeHeights(t);
-    this.loaded.set(t.key, t);
-    this.makeMaterials(t);
-    this.buildTerrain(t);
+    this.makeHeights(t); yield;
+    this.makeMaterials(t); yield;
+    this.buildTerrain(t); yield;
     if (t.st === 2) {
       t.d = t.d || this.decodeTile(t);
-      this.buildRoads(t);
-      this.buildWater(t);
-      this.buildBuildings(t);
-      this.buildSidewalks(t);
+      this.buildRoads(t); yield;
+      yield* this.waterSteps(t); yield;
+      yield* this.buildingSteps(t);
+      yield* this.sidewalkSteps(t); yield;
       this.buildRails(t);
       t.town = t.buildings.length >= REGION.townBuildings;
       const rr = this.rural.get(t.key);
-      if (this.land && rr && rr.tracks.length) this.land.buildTracks(t, rr.tracks);
-      if (this.land) this.land.buildCanopy(t);
+      if (this.land && rr && rr.tracks.length) { yield; this.land.buildTracks(t, rr.tracks); }
+      if (this.land) { yield; this.land.buildCanopy(t); }
     }
     if (this.land) this.land.tileChanged(t);
     this.world.group.add(t.group);
     for (const a of this.anchors.get(t.key) || []) a.obj.position.y = this.world.heightAt(a.x, a.z) + a.dy;
-    this.stats.built++; this.stats.ms += performance.now() - t0;
-    return t;
+    t.ready = true;
   }
 
   dispose(t) {
+    if (this.job && this.job.t === t) this.job = null; // halb gebauter Auftrag: Reste räumt das Folgende ab
     this.dropTrees(t);
     this.dropLife(t);
-    t.group.traverse(o => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
-    this.world.group.remove(t.group);
+    if (t.group) { t.group.traverse(o => { if (o.isMesh && o.geometry) o.geometry.dispose(); }); this.world.group.remove(t.group); }
     for (const m of t.mats || []) m.dispose();
     if (t.tex) t.tex.dispose();
     if (t.texHd) t.texHd.dispose();
@@ -620,7 +673,7 @@ class Region {
     // Gehölze aus dem Luftbild und die Farbe des Bewuchses brauchen das Foto: jetzt nachholen
     t.photoSmall = null;
     if (this.land) this.land.tileChanged(t);
-    if (this.treesOn.has(t.key) && !t.photoVeg) { this.dropTrees(t); this.buildTrees(t); }
+    if (this.treesOn.has(t.key) && !t.photoVeg) this.rebuildTrees(t);
     if (t.hd === 'an') return; // schärferes Bild liegt schon
     t.terrainMat.map = tex; t.roofMat.map = tex;
   }
@@ -654,7 +707,7 @@ class Region {
           if (t.disposed) return;
           t.photoImg = im; t.photoSmall = null;
           if (this.land) this.land.tileChanged(t);
-          if (this.treesOn.has(t.key) && !t.photoVeg) { this.dropTrees(t); this.buildTrees(t); }
+          if (this.treesOn.has(t.key) && !t.photoVeg) this.rebuildTrees(t);
         };
         im.src = `data/region/ortho/${name}.256.jpg`;
       }
@@ -912,7 +965,8 @@ class Region {
   }
   // Gehsteige an beiden Straßenseiten: Bordstein (Granit, 12 cm), Belag, Absenkung an Einfahrten und vor Kreuzungen,
   // Schürze zum tieferen Gelände. Fußgänger und Spielfigur stehen darauf (walkAt), Bäume und Zäune halten Abstand.
-  buildSidewalks(t) {
+  buildSidewalks(t) { for (const _ of this.sidewalkSteps(t)); }
+  *sidewalkSteps(t) {
     const runs = this.runs.get(t.key);
     t.walkGrid = new U.Grid(16);
     if (!runs) return;
@@ -927,7 +981,9 @@ class Region {
       const x = (b.bb.minX + b.bb.maxX) / 2, z = (b.bb.minZ + b.bb.maxZ) / 2;
       homes.insert({ x, z }, x, z, x, z);
     }
+    let rk = 0;
     for (const run of runs) {
+      if (++rk % 8 === 0) yield;
       const e = this.graph.edges[run.e], wid = WALK_WIDTH[e.h];
       if (!wid || e.deck || e.br) continue;
       const pts = W.resample(e.p.slice(run.k0 * 2, run.k1 * 2 + 2), 4), n = pts.length / 2;
@@ -1168,7 +1224,8 @@ class Region {
   }
 
   // ---------------- Wasser ----------------
-  buildWater(t) {
+  buildWater(t) { for (const _ of this.waterSteps(t)); }
+  *waterSteps(t) {
     if (typeof WaterSet === 'undefined') return;
     const own = this.waterOf(t.ti, t.tj);
     if (!own.areas.length && !own.lines.length) return;
@@ -1177,10 +1234,12 @@ class Region {
     const surf = new Chunks();
     ws.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
     surf.meshes(waterMaterial(), { receive: true }).forEach(m => t.group.add(m));
+    yield;
     ws.edges((ax, az, bx, bz) => {
       t.edges.push(ax, az, bx, bz);
       t.edgeGrid.insert(t.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
     }, (x, z) => this.roadNear(x, z, WATER.roadGap), { x0: t.x0, z0: t.z0, x1: t.x1, z1: t.z1 }, (x, z) => !this.inCore(x, z));
+    yield;
     t.rivers = new U.Grid(20);
     ws.riverPieces(q => {
       q.y = this.heightAt0((q.ax + q.bx) / 2, (q.az + q.bz) / 2) - WATER.surface;
@@ -1332,7 +1391,9 @@ class Region {
   }
 
   // ---------------- Gebäude ----------------
-  buildBuildings(t) {
+  buildBuildings(t) { for (const _ of this.buildingSteps(t)); }
+  // Häuser einer Kachel; gibt alle 20 Häuser die Kontrolle ab (Zeitscheiben, siehe update)
+  *buildingSteps(t) {
     const W = this.world, list = t.d.buildings;
     if (!list.length) return;
     const walls = new Chunks(), plain = new Chunks(), roofs = new Chunks();
@@ -1353,7 +1414,9 @@ class Region {
       if (best) fuelRoof.set(best, q.name);
     }
     t.fuelSites = [];
+    let done = 0;
     for (const b of list) {
+      if (++done % 20 === 0) yield;
       const ring = b.p, n = ring.length / 2;
       let minH = Infinity, maxH = -Infinity;
       for (let i = 0; i < ring.length; i += 2) { const h = W.heightAt0(ring[i], ring[i + 1]); if (h < minH) minH = h; if (h > maxH) maxH = h; }
@@ -1505,6 +1568,7 @@ class Region {
         t.polyGrid.insert(rec, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
       }
     }
+    yield;
     // Fahrsilos an modernen Höfen, Stellplatz-Linien auf Parkplätzen (js/archetypes.js)
     t.silos = [];
     for (const f of agrar) if (rnd() < 0.55) { const p = SiteKit.bunkerSilo(this, t, plain.get(f.c[0], f.c[1]), f, rnd); if (p) t.silos.push(p); }
@@ -1660,10 +1724,19 @@ class Region {
     }
     return this._trees;
   }
-  // Bäume, Büsche und Hecken einer Kachel. Punkte: [x, z, Art (0 Laubbaum, 1 Nadelbaum, 2 Busch), Größe]
+  // Bäume sofort ganz bauen (Spielstart, Schnellreise)
   buildTrees(t) {
-    if (this.treesOn.has(t.key) || !t.d) return;
+    if (this.finishJob(t, 'trees') || this.treesOn.has(t.key) || !t.d) return;
     this.treesOn.add(t.key);
+    this.runJob({ kind: 'trees', t, it: this.treeSteps(t), ms: 0 }, Infinity);
+  }
+  // neu bauen (Luftbild kam nach): in der Nähe sofort, sonst übernimmt update() in Zeitscheiben
+  rebuildTrees(t) {
+    this.dropTrees(t);
+    if (this.px !== undefined && this.rectDist(t.ti, t.tj, this.px, this.pz) < 350) this.buildTrees(t);
+  }
+  // Bäume, Büsche und Hecken einer Kachel in Schritten. Punkte: [x, z, Art (0 Laubbaum, 1 Nadelbaum, 2 Busch), Größe]
+  *treeSteps(t) {
     const pts = [];
     const d = t.d;
     const wet = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0; // keine Bäume im Wasser
@@ -1722,6 +1795,7 @@ class Region {
         }
       }
       budget -= made;
+      yield;
     }
     // Hecken (dicht an dicht Büsche) und Baumreihen aus OSM
     const rr = this.rural.get(t.key);
@@ -1731,10 +1805,12 @@ class Region {
       for (const r of rr.rows) along(r.p, 8, (x, z) => { if (free(x, z, 1)) pts.push([x, z, 0, 0.8 + rT() * 0.45]); });
     }
     // Gärten, Zäune, Einfahrten und Rundballen in den Dörfern
-    if (this.land && t.buildings.length) t.villageMeshes = this.land.buildVillage(t, pts, free);
+    if (this.land && t.buildings.length) { yield; t.villageMeshes = yield* this.land.villageSteps(t, pts, free); }
+    yield;
     // Feldgehölze, Hecken und Einzelbäume, die das Luftbild zeigt, OSM aber nicht kennt
     this.photoVegetation(t, pts, free);
     if (!pts.length) return;
+    yield;
     const A = this.treeAssets(), rnd = U.rng(t.key);
     const leaves = pts.filter(p => p[2] === 0), pines = pts.filter(p => p[2] === 1), bushes = pts.filter(p => p[2] === 2);
     // alles in Gruppen von 250 m, damit nur die nahen Gruppen die detaillierten Formen zeichnen (LOD)
@@ -1750,8 +1826,10 @@ class Region {
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     const greens = ['#5f8d3e', '#4f7d35', '#6a9a45', '#577f3a', '#7a9e4a', '#46703a'];
     const bushGreens = ['#5a7f38', '#6b8c3f', '#4d7334', '#7d9445', '#5f7a3a'];
-    t.trees = []; t.treeGrid = new U.Grid(16);
+    const trees = [], treeGrid = new U.Grid(16);
+    let k = 0;
     for (const p of pts) {
+      if (++k % 1500 === 0) yield;
       const s = p[3];
       q.setFromAxisAngle(up, rnd() * 6.28);
       ps.set(p[0], this.heightAt(p[0], p[1]) - 0.2, p[1]); sc.set(s, s * (0.85 + rnd() * 0.35), s);
@@ -1765,9 +1843,10 @@ class Region {
       const tg = tms.get(gk(p)); tg.m.setMatrixAt(tg.n++, m4);
       const col = new THREE.Color(kind ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
       const g = (kind ? pms : lms).get(gk(p)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col);
-      t.trees.push(p[0], p[1], 0.35 * s);
-      t.treeGrid.insert(t.trees.length / 3 - 1, p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1);
+      trees.push(p[0], p[1], 0.35 * s);
+      treeGrid.insert(trees.length / 3 - 1, p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1);
     }
+    t.trees = trees; t.treeGrid = treeGrid; // Kollision erst, wenn die Bäume zu sehen sind
     if (t.canopy) t.canopy.visible = false;
     t.treeMeshes = [];
     for (const [gs, near, far] of [[lms, A.leaf, A.leafFar], [bms, A.bush, A.bushFar], [pms, A.pine, A.pineFar], [tms, A.trunk, A.trunkFar]]) for (const g of gs.values()) {
@@ -1811,6 +1890,7 @@ class Region {
     }
   }
   dropTrees(t) {
+    if (this.job && this.job.t === t && this.job.kind === 'trees') this.job = null;
     if (!this.treesOn.has(t.key)) return;
     this.treesOn.delete(t.key);
     if (t.canopy) t.canopy.visible = true;

@@ -804,7 +804,8 @@ Landscape.prototype.villageAssets = function () {
 };
 // Gärten um Wohnhäuser: Zaun zur Straße mit Tor und Einfahrt, an den anderen Seiten Hecke oder Lattenzaun,
 // Obstbäume und Büsche im Garten (gehen als Punkte an buildTrees). Rundballen an Scheunen.
-Landscape.prototype.buildVillage = function (t, pts, free) {
+// Generator (Zeitscheiben, js/region.js): gibt alle 25 Häuser die Kontrolle ab, liefert am Ende die Meshes
+Landscape.prototype.villageSteps = function* (t, pts, free) {
   const R = this.region, A = this.villageAssets(), rnd = U.rng(t.key * 101 + 9);
   const fences = { picket: [], rail: [], mesh: [], wall: [], privacy: [], site: [] }, bales = [];
   const drive = new Bucket(), drive2 = new Bucket(), white = new THREE.Color('#ffffff');
@@ -823,7 +824,7 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
   const houses = t.buildings.filter(b => (GARDEN_HOUSES.has(b.t) || FARM_TYPES.has(b.t)) && !(b.a >= 7 && b.a !== 9));
   let houseNo = 0;
   for (const b of houses) {
-    houseNo++;
+    if (++houseNo % 25 === 0) yield;
     const cx = (b.bb.minX + b.bb.maxX) / 2, cz = (b.bb.minZ + b.bb.maxZ) / 2;
     if (FARM_TYPES.has(b.t)) {
       // Rundballen neben Scheunen
@@ -943,4 +944,8 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
   if (g2) { const m = new THREE.Mesh(g2, this.trackMaterial(2)); meshes.push(m); }
   for (const m of meshes) { m.castShadow = !!m.isInstancedMesh; m.receiveShadow = true; if (m.isInstancedMesh) m.computeBoundingSphere(); t.group.add(m); }
   return meshes;
+};
+Landscape.prototype.buildVillage = function (t, pts, free) {
+  const it = this.villageSteps(t, pts, free);
+  for (;;) { const r = it.next(); if (r.done) return r.value; }
 };
