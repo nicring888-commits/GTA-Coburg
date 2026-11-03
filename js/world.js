@@ -1043,8 +1043,36 @@ class World {
       // mit Umland nur die Stücke innerhalb des Innenstadt-Geländes (außen zeichnet js/region.js)
       const pieces = this.region ? this.clipToCore(pts) : [pts];
       for (const pts of pieces) this.roadRibbon(r, pts, style, col, hidden, chunks, marks, white);
+      // Kanaldeckel, Gullys und Flickstellen (seit v3.13.0; eigener Zufall, damit die Straßenfarben bleiben)
+      if (r.k === 'road' && !hidden && !this.lowBridges.has(r)) for (const pts of pieces) this.roadDetails(pts, r.w / 2, r.w, !!r.o, col, marks, U.rng(U.hashStr(r.p[0] + ',' + r.p[1]) + pts.length), { y: style.y + 0.015, hf: (x, z) => this.roadHeightAt(x, z), town: () => true, posts: null });
     }
+    this.cityNodeMarks(marks, white);
     this.finishRoads(chunks, marks);
+  }
+  // Zebrastreifen, Fußgängerfurten und Mini-Kreisel der Innenstadt aus OSM (data/roadnodes.js, seit v3.13.0): auf die
+  // nächste Fahrbahn (bis 6 m) gerastet, quer über ihre ganze Breite. Kreuzungsflächen und Haltlinien an Kreuzungen gibt
+  // es hier nicht (die Innenstadt hat kein Knotennetz; das Luftbild zeigt die Kreuzungen)
+  cityNodeMarks(marks, col) {
+    const N = window.COBURG_ROADNODES;
+    if (!N) return;
+    const y = ROAD_STYLE.road.y + 0.025, hf = (x, z) => this.roadHeightAt(x, z), q = [];
+    const inCity = (x, z) => this.region ? this.region.inCore(x, z) : x >= this.bounds.minX && x <= this.bounds.maxX && z >= this.bounds.minZ && z <= this.bounds.maxZ;
+    for (let i = 0; i < N.n.length; i += 3) {
+      const x = N.n[i] / 10, z = N.n[i + 1] / 10, k = N.n[i + 2];
+      if ((k > 1 && k !== 5) || !inCity(x, z)) continue;
+      let best = null, bd = 6;
+      for (const sg of this.roadGrid.query(x, z, 6, q)) {
+        if (sg.k !== 'road' || this.lowBridges.has(sg.src)) continue;
+        const c = U.closestOnSeg(x, z, sg.ax, sg.az, sg.bx, sg.bz), d = Math.hypot(c[0] - x, c[1] - z);
+        if (d < bd) { bd = d; best = { sg, c }; }
+      }
+      if (!best) continue;
+      const { sg, c } = best;
+      if (k === 5) { this.markDisc(marks, c[0], c[1], 2.2, y, col, hf); continue; }
+      const l = Math.hypot(sg.bx - sg.ax, sg.bz - sg.az) || 1;
+      if (sg.w < 4) continue;
+      this.crossingMarks(marks, k, c[0], c[1], (sg.bx - sg.ax) / l, (sg.bz - sg.az) / l, sg.w / 2, y, col, hf, !!(sg.src && sg.src.o));
+    }
   }
 
   // Böschung unter den Fahrbahnkanten L/R ([x, y, z]), wo das Gelände tiefer liegt als die Fahrbahn (an Gewässern,
@@ -1281,6 +1309,102 @@ class World {
   }
 
   // Gestrichelte Linie (Länge dash, Lücke gap, halbe Breite hw) entlang der Polylinie
+  // Straßendetails eines Abschnitts (seit v3.13.0, Grafik-Phase 9): innerorts (opt.town) Kanaldeckel in der Fahrspur und
+  // Gullys am Rand, überall Flickstellen (ausgebesserte Rechtecke, Leitungsgräben), außerorts Leitpfosten an beiden Seiten
+  // (opt.posts: alle 50 m, in Kurven 25 m, als [x, z, Winkel, Seite]). pts: Mittellinie (alle 4 m), Höhe opt.hf + opt.y
+  roadDetails(pts, half, width, oneway, col, marks, rnd, opt) {
+    const W = this, n = pts.length / 2, y = opt.y, hf = opt.hf, posts = opt.posts;
+    if (n < 2) return;
+    const iron = this._ironCol || (this._ironCol = new THREE.Color('#2e2f30')), grate = this._grateCol || (this._grateCol = new THREE.Color('#252524'));
+    const patchDark = col.clone().multiplyScalar(0.78), patchLight = col.clone().multiplyScalar(1.12);
+    let acc = 0, nextMh = 10 + rnd() * 30, nextGully = 6 + rnd() * 12, nextPatch = 15 + rnd() * 60, nextPost = 20 + rnd() * 30;
+    for (let i = 0; i + 1 < n; i++) {
+      const ax = pts[i * 2], az = pts[i * 2 + 1], bx = pts[i * 2 + 2], bz = pts[i * 2 + 3], l = Math.hypot(bx - ax, bz - az);
+      if (l < 0.01) continue;
+      const ux = (bx - ax) / l, uz = (bz - az) / l, a0 = acc;
+      acc += l;
+      const at = d => [ax + ux * (d - a0), az + uz * (d - a0)];
+      const town = opt.town(ax, az);
+      if (town && width >= 4) {
+        while (nextMh < acc) {
+          const [x, z] = at(nextMh), o = oneway || width < 5 ? 0 : (rnd() < 0.5 ? -1 : 1) * half * 0.45;
+          W.markDisc(marks, x - uz * o, z + ux * o, 0.31, y + 0.003, iron, hf);
+          nextMh += 35 + rnd() * 25;
+        }
+        while (nextGully < acc) {
+          const [x, z] = at(nextGully);
+          for (const side of [-1, 1]) W.markQuad(marks, x, z, ux, uz, -0.25, 0.25, side * (half - 0.5), side * (half - 0.15), y + 0.003, grate, hf);
+          nextGully += 18 + rnd() * 10;
+        }
+      } else { nextMh = Math.max(nextMh, acc); nextGully = Math.max(nextGully, acc); }
+      while (nextPatch < acc) {
+        const [x, z] = at(nextPatch), c = rnd() < 0.6 ? patchDark : patchLight;
+        if (rnd() < 0.3) {
+          // Leitungsgraben: schmaler Streifen entlang der Spur
+          const len = 8 + rnd() * 22, o = (rnd() - 0.5) * half;
+          W.markQuad(marks, x, z, ux, uz, 0, Math.min(len, acc - nextPatch + 4), o - 0.3, o + 0.3, y, c, hf);
+        } else {
+          const w = 0.8 + rnd() * 2.2, d = 0.8 + rnd() * 2.5, o = (rnd() - 0.5) * (half * 2 - w);
+          W.markQuad(marks, x, z, ux, uz, -d / 2, d / 2, o - w / 2, o + w / 2, y, c, hf);
+        }
+        nextPatch += 40 + rnd() * 110;
+      }
+      // Leitpfosten außerorts (Kurve: Richtungswechsel zum nächsten Stück über 4°)
+      if (posts && !town) {
+        const j = Math.min(n - 2, i + 1), vx = pts[j * 2 + 2] - pts[j * 2], vz = pts[j * 2 + 3] - pts[j * 2 + 1], vl = Math.hypot(vx, vz) || 1;
+        const curve = Math.abs(ux * vz / vl - uz * vx / vl) > 0.07;
+        while (nextPost < acc) {
+          const [x, z] = at(nextPost), ang = Math.atan2(uz, ux);
+          for (const side of [-1, 1]) posts.push(x - uz * side * (half + 0.6), z + ux * side * (half + 0.6), ang, side);
+          nextPost += curve ? 25 : 50;
+        }
+      } else nextPost = Math.max(nextPost, acc);
+    }
+  }
+  // ---------------- Markierungen an Querungen und Kreuzungen (seit v3.13.0, Grafik-Phase 9) ----------------
+  // Rechteck im Rahmen einer Straße: Mitte (x, z), Richtung (ux, uz) entlang der Fahrbahn; s0..s1 entlang, o0..o1 quer
+  // (positiv = links der Richtung), Höhe hf(x, z) + y
+  markQuad(chunks, x, z, ux, uz, s0, s1, o0, o1, y, col, hf) {
+    const P = (s, o) => { const px = x + ux * s - uz * o, pz = z + uz * s + ux * o; return [px, hf(px, pz) + y, pz]; };
+    const b = chunks.get(x, z), a = P(s0, o0), c = P(s1, o0), d = P(s1, o1), e = P(s0, o1);
+    b.tri(a, c, d, col, null, null, null, 0, 1, 0);
+    b.tri(a, d, e, col, null, null, null, 0, 1, 0);
+  }
+  // Querung über die ganze Fahrbahn (Breite 2·half): kind 0 Zebrastreifen (Streifen 0,5 m, Abstand 0,5 m, 4 m breit),
+  // kind 1 Fußgängerfurt an der Ampel (zwei Reihen Blöcke 0,5 × 0,5 m im Abstand von 4 m, Haltlinien 1,5 m davor je
+  // Fahrtrichtung rechts); oneway: Fahrtrichtung nur entlang (ux, uz)
+  crossingMarks(chunks, kind, x, z, ux, uz, half, y, col, hf, oneway) {
+    const w = half - 0.3;
+    if (w < 1) return;
+    if (kind === 0) {
+      const n = Math.max(2, Math.floor((2 * w + 0.5) / 1.0)), o0 = -((n - 1) * 1.0 + 0.5) / 2;
+      for (let i = 0; i < n; i++) this.markQuad(chunks, x, z, ux, uz, -2, 2, o0 + i, o0 + i + 0.5, y, col, hf);
+      return;
+    }
+    for (const s of [-2, 2]) for (let o = -w; o + 0.5 <= w + 0.01; o += 1.0) this.markQuad(chunks, x, z, ux, uz, s - 0.25, s + 0.25, o, o + 0.5, y, col, hf);
+    // Haltlinien: Verkehr in +u fährt rechts (o < 0) und hält vor s = -2; Gegenrichtung links vor s = +2
+    if (oneway) this.markQuad(chunks, x, z, ux, uz, -4.1, -3.6, -w, w, y, col, hf);
+    else {
+      this.markQuad(chunks, x, z, ux, uz, -4.1, -3.6, -w, -0.15, y, col, hf);
+      this.markQuad(chunks, x, z, ux, uz, 3.6, 4.1, 0.15, w, y, col, hf);
+    }
+  }
+  // Haltlinie (durchgehend) bzw. Wartelinie (Blöcke 0,5 m, Lücke 0,25 m), 0,5 m breit, quer über o0..o1 bei s0
+  stopLine(chunks, give, x, z, ux, uz, s0, o0, o1, y, col, hf) {
+    if (!give) { this.markQuad(chunks, x, z, ux, uz, s0, s0 + 0.5, o0, o1, y, col, hf); return; }
+    for (let o = o0; o + 0.4 <= o1; o += 0.75) this.markQuad(chunks, x, z, ux, uz, s0, s0 + 0.5, o, Math.min(o + 0.5, o1), y, col, hf);
+  }
+  // Mittelinsel eines Mini-Kreisels: weiße Scheibe
+  markDisc(chunks, x, z, r, y, col, hf) {
+    const b = chunks.get(x, z), c = [x, hf(x, z) + y, z];
+    for (let k = 0; k < 16; k++) {
+      const a1 = k / 16 * Math.PI * 2, a2 = (k + 1) / 16 * Math.PI * 2;
+      const p1 = [x + Math.cos(a1) * r, 0, z + Math.sin(a1) * r], p2 = [x + Math.cos(a2) * r, 0, z + Math.sin(a2) * r];
+      p1[1] = hf(p1[0], p1[2]) + y; p2[1] = hf(p2[0], p2[2]) + y;
+      b.tri(c, p1, p2, col, null, null, null, 0, 1, 0);
+    }
+  }
+
   dashes(pts, dash, gap, hw, y, chunks, col, hf) {
     let acc = 0, on = true, startX = pts[0], startZ = pts[1];
     const emit = (ax, az, bx, bz) => {

@@ -1153,14 +1153,24 @@ class Region {
     const rnd = U.rng(t.key);
     const white = new THREE.Color('#e9e6dc');
     const y = REGION.roadY;
+    const posts = []; // Leitpfosten der Kachel
     let ty = performance.now();
     for (const run of runs) {
       if (performance.now() - ty > 2) { yield; ty = performance.now(); }
       const e = this.graph.edges[run.e];
-      const raw = e.p.slice(run.k0 * 2, run.k1 * 2 + 2);
+      let raw = e.p.slice(run.k0 * 2, run.k1 * 2 + 2);
       for (let k = 0; k + 2 < raw.length; k += 2) {
         const ax = raw[k], az = raw[k + 1], bx = raw[k + 2], bz = raw[k + 3];
         t.roadGrid.insert({ ax, az, bx, bz, n: e.n, k: 'road', h: e.h, w: e.w }, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
+      }
+      // an Kreuzungen (eigene Fläche) zurücknehmen, nach Bogenlänge auf der ganzen Kante (die Rücknahme kann in eine
+      // Nachbarkachel reichen)
+      const Ja = this.junction(e.a), Jb = this.junction(e.b);
+      if (Ja || Jb) {
+        const cum = this.edgeCum(e), len = cum[cum.length - 1];
+        const s0 = Math.max(cum[run.k0], Ja ? this.armD(Ja, run.e, true) : 0), s1 = Math.min(cum[run.k1], len - (Jb ? this.armD(Jb, run.e, false) : 0));
+        if (s1 - s0 < 0.3) continue;
+        raw = this.sliceEdge(e, s0, s1);
       }
       const pts = W.resample(raw, 4), n = pts.length / 2, half = e.w / 2;
       const col = U.color(/motorway|trunk/.test(e.h) ? '#45484c' : '#3d4045', 0.08, rnd);
@@ -1200,8 +1210,8 @@ class Region {
       // runde Enden an echten Kantenenden (Kreuzungen)
       const ends = [];
       if (B) { /* Brückenenden liegen auf dem Gelände, die Kreuzung zeichnet die Nachbarstraße */ }
-      else if (run.k0 === 0) ends.push(0);
-      if (!B && run.k1 === e.p.length / 2 - 1) ends.push(n - 1);
+      else if (run.k0 === 0 && !Ja) ends.push(0);
+      if (!B && run.k1 === e.p.length / 2 - 1 && !Jb) ends.push(n - 1);
       for (const ei of ends) {
         const x = pts[ei * 2], z = pts[ei * 2 + 1], b = roads.get(x, z);
         const c = [x, roadAt(x, z) + y, z];
@@ -1224,9 +1234,36 @@ class Region {
         if (e.o) { if (e.w >= 7) W.dashes(pts, 6, 12, 0.07, y + 0.02, marks, white, hf); }
         else for (const o of [-0.14, 0.14]) W.dashes(this.offsetLine(pts, o), 1e9, 1, 0.06, y + 0.02, marks, white, hf);
       } else if (e.w >= 5.5 && !e.o && !/residential|living_street/.test(e.h)) W.dashes(pts, 3, 6, 0.07, y + 0.02, marks, white, hf);
+      // Kanaldeckel, Gullys, Flickstellen, Leitpfosten (nicht auf Brücken)
+      if (!B) this.roadDetails(t, e, pts, half, col, marks, U.rng(run.e * 7 + run.k0 * 13 + 1), posts);
       // Leitplanken an großen Straßen und auf Brücken/Rampen: erst nach den Häusern (Ortsdurchfahrten erkennen)
       if (big || B) (t.railJobs || (t.railJobs = [])).push({ e, run, pts, sAt, B, big });
     }
+    // Kreuzungsflächen der Knoten in dieser Kachel: Fächer vom Knoten zum Rand, mit Zwischenring (folgt dem Gelände)
+    t.junctions = [];
+    const seen = new Set(), jc = U.color('#3e4146', 0.04, rnd);
+    for (const run of runs) for (const nd of [this.graph.edges[run.e].a, this.graph.edges[run.e].b]) {
+      if (seen.has(nd)) continue;
+      seen.add(nd);
+      const J = this.junction(nd);
+      if (!J || J.x < t.x0 || J.x >= t.x1 || J.z < t.z0 || J.z >= t.z1) continue;
+      t.junctions.push(J);
+      const ring = this.junctionRing(J), b = roads.get(J.x, J.z), v = (q, f) => {
+        const px = J.x + (q[0] - J.x) * f, pz = J.z + (q[1] - J.z) * f;
+        return [px, this.heightAt0(px, pz) + y, pz];
+      };
+      const c = [J.x, this.heightAt0(J.x, J.z) + y, J.z];
+      for (let i = 0; i < ring.length; i++) {
+        const q0 = ring[i], q1 = ring[(i + 1) % ring.length];
+        const m0 = v(q0, 0.5), m1 = v(q1, 0.5), o0 = v(q0, 1), o1 = v(q1, 1);
+        b.tri(c, m0, m1, jc, null, null, null, 0, 1, 0);
+        b.tri(m0, o0, o1, jc, null, null, null, 0, 1, 0);
+        b.tri(m0, o1, m1, jc, null, null, null, 0, 1, 0);
+      }
+    }
+    yield;
+    this.nodeMarks(t, marks, white);
+    this.postMesh(t, posts);
     const [rm, mm] = this.roadMaterials();
     if (t.bridgeParts) t.bridgeParts.meshes(this.world.buildingMaterials().plain, { cast: true, receive: true }).forEach(m => t.group.add(m));
     roads.meshes(rm, { receive: true }).forEach(m => t.group.add(m));
@@ -1284,8 +1321,245 @@ class Region {
     if (!e.cum) { const p = e.p, c = [0]; for (let i = 1; i < p.length / 2; i++) c.push(c[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1])); e.cum = c; }
     return e.cum;
   }
-  // Abstand vom Knoten, ab dem der Gehsteig beginnt (Kreuzung: Fahrbahn der Querstraße plus Übergang)
+  // Kreuzung am Knoten nd (seit v3.13.0, Grafik-Phase 9): Arme je einmündender Straße, nach Winkel sortiert, mit
+  // Rücknahme d (ab da beginnen Fahrbahn und Gehsteig; aus dem Winkel zu den Nachbararmen, damit sich die Fahrbahnen
+  // nicht überlappen, plus 2,5 m Eckradius) und den Ecken L/R am Ende der Rücknahme. null: keine eigene Fläche (weniger als
+  // drei Straßen, Brücke, Innenstadt, zu kurze Straße) – dann bleiben die runden Enden.
+  junction(nd) {
+    const memo = this._junc || (this._junc = new Map());
+    if (memo.has(nd)) return memo.get(nd);
+    let J = null;
+    const x = this.graph.nodes[nd * 2], z = this.graph.nodes[nd * 2 + 1], list = this.nodeEdges(nd);
+    if (list.length >= 3 && !this.inCore(x, z)) {
+      const arms = [];
+      let ok = true;
+      for (const ei of list) {
+        const e = this.graph.edges[ei];
+        // Brücken, Autobahnen und Kraftfahrstraßen (Ein- und Ausfahrten mit Markierung bis zur Spitze) behalten die alten Enden
+        if (e.deck || /motorway|trunk/.test(e.h)) { ok = false; break; }
+        for (const atA of [true, false]) {
+          if ((atA ? e.a : e.b) !== nd) continue;
+          const p = e.p, n = p.length / 2, P = i => atA ? [p[i * 2], p[i * 2 + 1]] : [p[(n - 1 - i) * 2], p[(n - 1 - i) * 2 + 1]];
+          const cum = this.edgeCum(e), len = cum[cum.length - 1];
+          const q = this.alongEnd(P, n, Math.min(6, len / 2));
+          const dl = Math.hypot(q[0] - x, q[1] - z) || 1;
+          arms.push({ ei, e, atA, P, n, len, half: e.w / 2, dx: (q[0] - x) / dl, dz: (q[1] - z) / dl });
+        }
+      }
+      if (ok && arms.length >= 3) {
+        for (const a of arms) a.ang = Math.atan2(a.dz, a.dx);
+        arms.sort((a, b) => a.ang - b.ang);
+        for (const a of arms) {
+          let d = 0;
+          for (const o of arms) {
+            if (o === a) continue;
+            const c = U.clamp(a.dx * o.dx + a.dz * o.dz, -1, 1), phi = Math.acos(c);
+            if (phi < 0.44) { ok = false; break; } // spitzer Abzweig (unter 25°): keine eigene Fläche
+            d = Math.max(d, o.half + 2.5);
+            // so weit überlappen die beiden auseinanderlaufenden Fahrbahnstreifen, dazu der Eckradius
+            if (phi < 2.6) d = Math.max(d, (o.half + a.half * c) / Math.max(0.25, Math.sin(phi)) + 2.5);
+          }
+          if (!ok) break;
+          a.d = Math.min(d, 26);
+          if (a.len < a.d * 2 + 2) { ok = false; break; }
+          const [px, pz, tx, tz] = this.alongEnd(a.P, a.n, a.d, true);
+          a.px = px; a.pz = pz; a.tx = tx; a.tz = tz;
+          a.L = [px - tz * a.half, pz + tx * a.half]; a.R = [px + tz * a.half, pz - tx * a.half];
+        }
+        if (ok) J = { nd, x, z, arms };
+      }
+    }
+    memo.set(nd, J);
+    return J;
+  }
+  // ---------------- Markierungen (seit v3.13.0, Grafik-Phase 9) ----------------
+  // Straßenknoten aus OSM (data/roadnodes.js, tools/convert-road-nodes.js) im Umkreis r: { x, z, k } mit k 0 Zebrastreifen,
+  // 1 Fußgängerfurt, 2 Ampel, 3 Stopp, 4 Vorfahrt achten, 5 Mini-Kreisel
+  roadNodesNear(x, z, r) {
+    if (!this._rnGrid) {
+      this._rnGrid = new U.Grid(100);
+      const N = window.COBURG_ROADNODES;
+      if (N) for (let i = 0; i < N.n.length; i += 3) { const q = { x: N.n[i] / 10, z: N.n[i + 1] / 10, k: N.n[i + 2] }; this._rnGrid.insert(q, q.x, q.z, q.x, q.z); }
+    }
+    return this._rnGrid.query(x, z, r, []).filter(q => Math.hypot(q.x - x, q.z - z) <= r);
+  }
+  // nächste Fahrbahn (keine Brücke) bis max m: Kante, Lage auf ihr (Bogenlänge s), Richtung, Abstand
+  snapRoad(x, z, max) {
+    let best = null;
+    for (const code of this.netGrid.query(x, z, max, this._snq || (this._snq = []))) {
+      const ei = Math.floor(code / 4096), e = this.graph.edges[ei], k = (code % 4096) * 2;
+      if (e.deck) continue;
+      const c = U.closestOnSeg(x, z, e.p[k], e.p[k + 1], e.p[k + 2], e.p[k + 3]), d = Math.hypot(c[0] - x, c[1] - z);
+      if (d > max || (best && d >= best.d)) continue;
+      const l = Math.hypot(e.p[k + 2] - e.p[k], e.p[k + 3] - e.p[k + 1]) || 1;
+      best = { ei, e, d, x: c[0], z: c[1], ux: (e.p[k + 2] - e.p[k]) / l, uz: (e.p[k + 3] - e.p[k + 1]) / l,
+        s: this.edgeCum(e)[k / 2] + Math.hypot(c[0] - e.p[k], c[1] - e.p[k + 1]) };
+    }
+    return best;
+  }
+  // Rang der Straßenart für die Vorfahrt ohne OSM-Angabe (gleicher Rang: rechts vor links, keine Linie)
+  roadRank(h) {
+    return { primary: 5, primary_link: 5, secondary: 4, secondary_link: 4, tertiary: 3, tertiary_link: 3, unclassified: 2,
+      residential: 1, living_street: 1, service: 0 }[h] ?? 1;
+  }
+  // Querungen, Mini-Kreisel und Linien an den Kreuzungen einer Kachel in den Markierungs-Topf
+  nodeMarks(t, marks, col) {
+    const W = this.world, y = REGION.roadY + 0.025, hf = (x, z) => this.heightAt0(x, z);
+    // Zebrastreifen und Fußgängerfurten: auf die Fahrbahn rasten, aus der Kreuzungsfläche herausschieben
+    for (const q of this.roadNodesNear((t.x0 + t.x1) / 2, (t.z0 + t.z1) / 2, Math.max(this.tw, this.th))) {
+      if (q.x < t.x0 || q.x >= t.x1 || q.z < t.z0 || q.z >= t.z1 || this.inCore(q.x, q.z)) continue;
+      if (q.k === 5) { const J = this.nearJunction(q.x, q.z, 8); if (J) W.markDisc(marks, J.x, J.z, 2.2, y, col, hf); continue; }
+      if (q.k > 1) continue;
+      const r = this.snapRoad(q.x, q.z, 6);
+      if (!r || r.e.w < 4 || /motorway|trunk|service|track/.test(r.e.h)) continue;
+      const cum = this.edgeCum(r.e), len = cum[cum.length - 1];
+      const Ja = this.junction(r.e.a), Jb = this.junction(r.e.b);
+      const lo = (Ja ? this.armD(Ja, r.ei, true) : 0) + 4.6, hi = len - (Jb ? this.armD(Jb, r.ei, false) : 0) - 4.6;
+      if (hi < lo) continue;
+      const s = U.clamp(r.s, lo, hi), p = this.edgePoint(r.e, s);
+      W.crossingMarks(marks, q.k, p[0], p[1], p[2], p[3], r.e.w / 2, y, col, hf, !!r.e.o);
+    }
+    // Kreuzungen: Haltlinien an Ampeln und Stoppschildern, Wartelinien an Vorfahrt-achten-Schildern bzw. an
+    // untergeordneten Straßen (nur wenn mindestens zwei Arme höheren Rangs durchgehen)
+    for (const J of t.junctions || []) {
+      const near = this.roadNodesNear(J.x, J.z, 32);
+      const signals = near.some(q => q.k === 2 || q.k === 1);
+      const ranks = J.arms.map(a => this.roadRank(a.e.h)), top = Math.max(...ranks), nTop = ranks.filter(r => r === top).length;
+      J.arms.forEach((a, i) => {
+        let line = signals ? 'stop' : null;
+        if (!line) {
+          // Schild an diesem Arm: vor der Kreuzung (vorwärts entlang des Arms) und höchstens 4 m neben der Fahrbahnmitte
+          for (const q of near) {
+            if (q.k !== 3 && q.k !== 4) continue;
+            const dx = q.x - J.x, dz = q.z - J.z, along = dx * a.dx + dz * a.dz, across = Math.abs(dx * a.dz - dz * a.dx);
+            if (along > 0 && across < a.half + 4) line = q.k === 3 ? 'stop' : 'give';
+          }
+        }
+        if (!line && nTop >= 2 && ranks[i] < top && ranks[i] > 0) line = 'give';
+        if (!line) return;
+        // ankommende Spur: links des Arms (Rechtsverkehr); Einbahnstraße nur, wenn sie zur Kreuzung hin führt
+        const one = !!a.e.o;
+        if (one && a.atA) return;
+        const o0 = one ? -a.half + 0.25 : 0.15, o1 = a.half - 0.25;
+        W.stopLine(marks, line === 'give', a.px, a.pz, a.tx, a.tz, 0.4, o0, o1, y, col, hf);
+      });
+    }
+  }
+  // Straßendetails eines Abschnitts (seit v3.13.0, Grafik-Phase 9, World.roadDetails): innerorts Kanaldeckel und Gullys,
+  // überall Flickstellen, außerorts an Landstraßen Leitpfosten (posts: [x, z, Winkel, Seite] je Pfosten)
+  roadDetails(t, e, pts, half, col, marks, rnd, posts) {
+    if (/motorway|trunk|track|path|foot/.test(e.h)) return;
+    this.world.roadDetails(pts, half, e.w, !!e.o, col, marks, rnd, { y: REGION.roadY + 0.015, hf: (x, z) => this.heightAt0(x, z),
+      town: (x, z) => this.builtUp(x, z, e.h) || this.inSettlement(t, x, z), posts: /primary|secondary|tertiary|unclassified/.test(e.h) && !/link/.test(e.h) ? posts : null });
+  }
+  // Liegt (x, z) in einem Wohn-, Gewerbe-, Industriegebiet oder Hof der Kachel (bis 12 m daneben)? Dort keine Leitpfosten
+  inSettlement(t, x, z) {
+    if (!t._settle) t._settle = ((t.d && t.d.areas) || []).filter(a => /^(residential|commercial|industrial|retail|farmyard|construction)$/.test(a.k)).map(a => ({ a, bb: U.polyBBox(a.p) }));
+    for (const [dx, dz] of [[0, 0], [12, 0], [-12, 0], [0, 12], [0, -12]]) {
+      const px = x + dx, pz = z + dz;
+      for (const { a, bb } of t._settle) if (px >= bb.minX && px <= bb.maxX && pz >= bb.minZ && pz <= bb.maxZ && U.pointInPoly(px, pz, a.p)) return true;
+    }
+    return false;
+  }
+  // Leitpfosten einer Kachel als Instanzen: weißer Pfosten (1 m über dem Boden), schwarzes Band, Rückstrahler
+  postMesh(t, posts) {
+    const N = posts.length / 4;
+    if (!N) return;
+    if (!this._postGeo) {
+      const box = (w, h, d, x, y, z, c) => { const g = new THREE.BoxGeometry(w, h, d).translate(x, y, z).toNonIndexed(); const col = new Float32Array(g.attributes.position.count * 3); const cc = new THREE.Color(c); for (let i = 0; i < col.length; i += 3) { col[i] = cc.r; col[i + 1] = cc.g; col[i + 2] = cc.b; } g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.deleteAttribute('uv'); return g; };
+      const merge = list => { const P = [], Nn = [], C = []; for (const g of list) { P.push(...g.attributes.position.array); Nn.push(...g.attributes.normal.array); C.push(...g.attributes.color.array); } const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeBoundingSphere(); return g; };
+      // x = Fahrtrichtung: Rechteck-Rückstrahler auf der Stirnseite −x (zum Verkehr, der den Pfosten rechts hat), zwei runde auf +x
+      this._postGeo = merge([box(0.1, 1.15, 0.12, 0, 0.425, 0, '#f2f1ec'), box(0.104, 0.28, 0.124, 0, 0.78, 0, '#1b1b1b'),
+        box(0.01, 0.1, 0.06, -0.053, 0.8, 0, '#f3d9a0'), box(0.01, 0.03, 0.03, 0.053, 0.8, -0.03, '#f2f2f2'), box(0.01, 0.03, 0.03, 0.053, 0.8, 0.03, '#f2f2f2')]);
+      this._postMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    }
+    const m = new THREE.InstancedMesh(this._postGeo, this._postMat, N), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    for (let i = 0; i < N; i++) {
+      const x = posts[i * 4], z = posts[i * 4 + 1], ang = posts[i * 4 + 2], side = posts[i * 4 + 3];
+      // Seite −1 liegt rechts der Richtung (Rechteck gegen die Richtung), Seite 1 links: umgedreht
+      q.setFromAxisAngle(up, -ang + (side > 0 ? Math.PI : 0));
+      m.setMatrixAt(i, m4.compose(p.set(x, this.heightAt0(x, z) - 0.15, z), q, one));
+    }
+    m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere();
+    t.group.add(m);
+  }
+  // Kreuzung (mit eigener Fläche) am nächsten Knoten bis max m
+  nearJunction(x, z, max) {
+    const r = this.snapRoad(x, z, max);
+    if (!r) return null;
+    for (const nd of [r.e.a, r.e.b]) { const J = this.junction(nd); if (J && Math.hypot(J.x - x, J.z - z) < max) return J; }
+    return null;
+  }
+  // Punkt und Richtung auf der Kante bei Bogenlänge s: [x, z, tx, tz]
+  edgePoint(e, s) {
+    const p = e.p, cum = this.edgeCum(e), n = p.length / 2;
+    let i = 0;
+    while (i + 2 < n && cum[i + 1] < s) i++;
+    const l = cum[i + 1] - cum[i] || 1, f = U.clamp((s - cum[i]) / l, 0, 1), tx = (p[i * 2 + 2] - p[i * 2]) / l, tz = (p[i * 2 + 3] - p[i * 2 + 1]) / l;
+    return [p[i * 2] + (p[i * 2 + 2] - p[i * 2]) * f, p[i * 2 + 1] + (p[i * 2 + 3] - p[i * 2 + 1]) * f, tx, tz];
+  }
+  // Rücknahme der Kante ei an der Kreuzung J (atA: Anfang der Kante)
+  armD(J, ei, atA) { for (const a of J.arms) if (a.ei === ei && a.atA === atA) return a.d; return 0; }
+  // Stück der Kante zwischen den Bogenlängen s0 und s1 als Punktliste [x, z, …]
+  sliceEdge(e, s0, s1) {
+    const p = e.p, cum = this.edgeCum(e), out = [], n = p.length / 2;
+    const at = s => { let i = 0; while (i + 2 < n && cum[i + 1] < s) i++; const l = cum[i + 1] - cum[i], f = l > 0 ? U.clamp((s - cum[i]) / l, 0, 1) : 0; return [p[i * 2] + (p[i * 2 + 2] - p[i * 2]) * f, p[i * 2 + 1] + (p[i * 2 + 3] - p[i * 2 + 1]) * f]; };
+    out.push(...at(s0));
+    for (let i = 0; i < n; i++) if (cum[i] > s0 + 0.05 && cum[i] < s1 - 0.05) out.push(p[i * 2], p[i * 2 + 1]);
+    out.push(...at(s1));
+    return out;
+  }
+  // Punkt im Abstand s entlang einer Linie (Punkte P(i), i < n), optional mit Richtung [x, z, tx, tz]
+  alongEnd(P, n, s, dir) {
+    let acc = 0;
+    for (let i = 0; i + 1 < n; i++) {
+      const a = P(i), b = P(i + 1), l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (acc + l >= s || i + 2 === n) {
+        const f = l > 0 ? U.clamp((s - acc) / l, 0, 1) : 0, tx = l > 0 ? (b[0] - a[0]) / l : 1, tz = l > 0 ? (b[1] - a[1]) / l : 0;
+        const pt = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        return dir ? [pt[0], pt[1], tx, tz] : pt;
+      }
+      acc += l;
+    }
+    return dir ? [P(0)[0], P(0)[1], 1, 0] : P(0);
+  }
+  // Rand der Kreuzungsfläche: je Arm die Ecken R und L, zwischen zwei Armen ein Bogen (quadratische Bézierkurve, Stützpunkt
+  // im Schnitt der beiden Fahrbahnränder; laufen sie fast parallel, eine Gerade). off: Rand um so viel nach außen versetzt
+  junctionRing(J, off = 0) {
+    const out = [], A = J.arms;
+    const corner = (a, side) => {
+      const s = side * (a.half + off); // side 1: links (L), -1: rechts (R)
+      return [a.px - a.tz * s, a.pz + a.tx * s];
+    };
+    for (let i = 0; i < A.length; i++) {
+      const a = A[i], b = A[(i + 1) % A.length];
+      out.push(corner(a, -1), ...this.junctionFillet(a, b, off).slice(0, -1));
+    }
+    return out;
+  }
+  // Bogen von der linken Ecke des Arms a zur rechten Ecke des nächsten Arms b (beide um off nach außen versetzt), 7 Punkte
+  junctionFillet(a, b, off) {
+    const p0 = [a.px - a.tz * (a.half + off), a.pz + a.tx * (a.half + off)], p1 = [b.px + b.tz * (b.half + off), b.pz - b.tx * (b.half + off)];
+    // Schnitt der Linien p0 + u·(a.dx, a.dz) und p1 + v·(b.dx, b.dz)
+    const den = a.dx * b.dz - a.dz * b.dx;
+    let c = null;
+    if (Math.abs(den) > 0.15) {
+      const u = ((p1[0] - p0[0]) * b.dz - (p1[1] - p0[1]) * b.dx) / den;
+      const v = ((p1[0] - p0[0]) * a.dz - (p1[1] - p0[1]) * a.dx) / den;
+      if (u < 0.5 && v < 0.5 && u > -40 && v > -40) c = [p0[0] + a.dx * u, p0[1] + a.dz * u];
+    }
+    const out = [], steps = 6;
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
+      if (c) out.push([(1 - t) * (1 - t) * p0[0] + 2 * (1 - t) * t * c[0] + t * t * p1[0], (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * c[1] + t * t * p1[1]]);
+      else out.push([p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t]);
+    }
+    return out;
+  }
+  // Abstand vom Knoten, ab dem der Gehsteig beginnt (Kreuzung: wie die Fahrbahn, sonst Querstraße plus Übergang)
   nodeTrim(nd, e) {
+    const J = this.junction(nd);
+    if (J) { let d = 0; for (const a of J.arms) if (a.e === e) d = Math.max(d, a.d); if (d) return d; }
     if (this.nodeDeg(nd) < 3) return 0;
     let w = 0;
     for (const ei of this.nodeEdges(nd)) { const o = this.graph.edges[ei]; if (o !== e) w = Math.max(w, o.w / 2); }
@@ -1314,10 +1588,19 @@ class Region {
       if (++rk % 8 === 0) yield;
       const e = this.graph.edges[run.e], wid = WALK_WIDTH[e.h];
       if (!wid || e.deck || e.br) continue;
-      const pts = W.resample(e.p.slice(run.k0 * 2, run.k1 * 2 + 2), 4), n = pts.length / 2;
-      if (n < 2) continue;
       const cum = this.edgeCum(e), total = cum[cum.length - 1], half = e.w / 2;
-      const sAt = [cum[run.k0]];
+      // an Kreuzungen mit eigener Fläche genau an der Rücknahme beginnen (dort schließt die Gehweg-Ecke an)
+      const Ja = this.junction(e.a), Jb = this.junction(e.b);
+      let raw = e.p.slice(run.k0 * 2, run.k1 * 2 + 2), s0 = cum[run.k0];
+      if (Ja || Jb) {
+        s0 = Math.max(s0, Ja ? this.armD(Ja, run.e, true) : 0);
+        const s1 = Math.min(cum[run.k1], total - (Jb ? this.armD(Jb, run.e, false) : 0));
+        if (s1 - s0 < 1) continue;
+        raw = this.sliceEdge(e, s0, s1);
+      }
+      const pts = W.resample(raw, 4), n = pts.length / 2;
+      if (n < 2) continue;
+      const sAt = [s0];
       for (let i = 1; i < n; i++) sAt.push(sAt[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]));
       const trimA = this.nodeTrim(e.a, e), trimB = this.nodeTrim(e.b, e);
       const nrm = [];
@@ -1337,8 +1620,14 @@ class Region {
         for (let i = 1; i < n - 1; i++) if (!on[i]) { let j = i; while (j < n && !on[j]) j++; if (j < n && j - i <= 3 && on[i - 1]) for (let k = i; k < j; k++) on[k] = 1; i = j; }
         for (let i = 0; i < n; i++) if (on[i]) { let j = i; while (j < n && on[j]) j++; if (j - i < 5) for (let k = i; k < j; k++) on[k] = 0; i = j; }
         // Kreuzungen frei, davor abgesenkt (Übergang)
-        for (let i = 0; i < n; i++) if (sAt[i] < trimA || total - sAt[i] < trimB) on[i] = 0;
-        for (let i = 0; i < n; i++) if (on[i] && ((i > 0 && !on[i - 1]) || (i < n - 1 && !on[i + 1]))) low[i] = 1;
+        for (let i = 0; i < n; i++) if (sAt[i] < trimA - 0.05 || total - sAt[i] < trimB - 0.05) on[i] = 0;
+        // Enden an Kreuzungsflächen bleiben oben (dort geht es in die Gehweg-Ecke), sonst abgesenkt
+        const atJa = i => Ja && i === 0 && sAt[0] < trimA + 0.1, atJb = i => Jb && i === n - 1 && total - sAt[n - 1] < trimB + 0.1;
+        for (let i = 0; i < n; i++) if (on[i] && ((i > 0 && !on[i - 1]) || (i < n - 1 && !on[i + 1])) && !atJa(i) && !atJb(i)) low[i] = 1;
+        // Gehsteig-Enden an Kreuzungen merken (Seite bezogen auf den Arm: 1 links, -1 rechts)
+        const ends = this._walkEnds || (this._walkEnds = new Map());
+        if (on[0] && atJa(0)) ends.set(e.a + '|' + run.e + '|1|' + side, wid);
+        if (on[n - 1] && atJb(n - 1)) ends.set(e.b + '|' + run.e + '|0|' + (-side), wid);
         // Einfahrten: Häuser und Garagen an dieser Seite bis 30 m hinter dem Gehsteig, je eines an der nächsten Stelle
         const best = new Map();
         for (let i = 0; i < n; i++) {
@@ -1384,6 +1673,35 @@ class Region {
           built++;
         }
       }
+    }
+    // Gehweg-Ecken an den Kreuzungsflächen der Kachel: zwischen zwei Armen, wenn an beiden Seiten ein Gehsteig ankommt
+    const ends = this._walkEnds || new Map();
+    for (const J of t.junctions || []) for (let i = 0; i < J.arms.length; i++) {
+      const a = J.arms[i], b = J.arms[(i + 1) % J.arms.length];
+      const wa = ends.get(J.nd + '|' + a.ei + '|' + (a.atA ? 1 : 0) + '|1'), wb = ends.get(J.nd + '|' + b.ei + '|' + (b.atA ? 1 : 0) + '|-1');
+      if (!wa || !wb) continue;
+      const wid = (wa + wb) / 2, C0 = this.junctionFillet(a, b, 0), C1 = this.junctionFillet(a, b, SIDEWALK.curb), C2 = this.junctionFillet(a, b, SIDEWALK.curb + wid);
+      const geo = C0.map((p0, k) => {
+        const p1 = C1[k], p2 = C2[k], hr = hAt(p0[0], p0[1]) + y0, top = hr + SIDEWALK.h, ground = hAt(p2[0], p2[1]);
+        return { p0, p1, p2, hr, top, outer: U.clamp(ground + 0.03, top, top + 0.25), ground };
+      });
+      const v = (p, y) => [p[0], y, p[1]];
+      for (let k = 0; k + 1 < geo.length; k++) {
+        const A = geo[k], B = geo[k + 1];
+        let nx = A.p0[0] - A.p1[0], nz = A.p0[1] - A.p1[1];
+        const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl; // zur Fahrbahn
+        walkB.tri(v(A.p0, A.hr - 0.04), v(B.p0, B.hr - 0.04), v(B.p0, B.top), colC, null, null, null, nx, 0, nz);
+        walkB.tri(v(A.p0, A.hr - 0.04), v(B.p0, B.top), v(A.p0, A.top), colC, null, null, null, nx, 0, nz);
+        walkB.tri(v(A.p0, A.top), v(B.p0, B.top), v(B.p1, B.top), colC, null, null, null, 0, 1, 0);
+        walkB.tri(v(A.p0, A.top), v(B.p1, B.top), v(A.p1, A.top), colC, null, null, null, 0, 1, 0);
+        walkB.tri(v(A.p1, A.top), v(B.p1, B.top), v(B.p2, B.outer), colS, null, null, null, 0, 1, 0);
+        walkB.tri(v(A.p1, A.top), v(B.p2, B.outer), v(A.p2, A.outer), colS, null, null, null, 0, 1, 0);
+        if (A.ground < A.outer - 0.05 || B.ground < B.outer - 0.05) {
+          walkB.tri(v(A.p2, A.outer), v(B.p2, B.outer), v(B.p2, Math.min(B.ground, B.outer) - 0.3), colS, null, null, null, -nx, 0, -nz);
+          walkB.tri(v(A.p2, A.outer), v(B.p2, Math.min(B.ground, B.outer) - 0.3), v(A.p2, Math.min(A.ground, A.outer) - 0.3), colS, null, null, null, -nx, 0, -nz);
+        }
+      }
+      built++;
     }
     const g = walkB.geometry();
     if (g) { const m = new THREE.Mesh(g, W.buildingMaterials().plain); m.receiveShadow = true; t.group.add(m); }
