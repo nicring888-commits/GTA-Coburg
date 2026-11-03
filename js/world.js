@@ -693,7 +693,10 @@ class World {
             vec3 sky = mix(uSkyHorizon, uSkyTop, pow(max(Rf.y, 0.0), 0.6));
             outgoingLight = mix(outgoingLight, sky, uWet * (0.1 + 0.75 * fres) * (0.45 + 0.55 * rPuddle) * (1.0 - uNight * 0.6));
           }
-          #include <opaque_fragment>`);
+          #include <opaque_fragment>
+          // Spiegelstärke für die Nachbearbeitung (js/post.js, seit v3.15.0): Alpha 1 … 2 = waagrechte nasse Fläche (das
+          // HDR-Bild speichert Werte über 1; Laub und Durchsichtiges schreiben höchstens 1)
+          gl_FragColor.a = 1.0 + clamp(uWet * (0.35 + 0.65 * rPuddle), 0.0, 1.0);`);
     };
     mat.customProgramCacheKey = () => 'road';
     return mat;
@@ -2059,7 +2062,9 @@ class World {
             outgoingLight += diffuseColor.rgb * vec3(1.0, 0.58, 0.26) * uNight * 0.14 * (1.0 - smoothstep(0.0, 8.0, hb)) * (1.0 - fGlass);
             outgoingLight += vec3(1.0, 0.78, 0.48) * 0.55 * uNight * fLit * (1.0 - fCurtain * 0.3);
           }
-          #include <opaque_fragment>`)
+          #include <opaque_fragment>
+          // Spiegelstärke für die Nachbearbeitung (js/post.js, seit v3.15.0): Alpha 3 … 4 = Glas (Normale aus der Tiefe)
+          if (fGlass > 0.02) gl_FragColor.a = 3.0 + clamp(fGlass * (1.0 - fCurtain * 0.5) * (1.0 - fShop * 0.45) * (1.0 - fLit * 0.7) * (0.55 + 0.45 * fGlassVar), 0.0, 1.0);`)
         .replace('#include <normal_fragment_maps>', `
           #ifdef USE_NORMALMAP_TANGENTSPACE
             vec3 mapN = texture2D(normalMap, fUv).xyz * 2.0 - 1.0;

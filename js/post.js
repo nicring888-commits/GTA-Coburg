@@ -5,8 +5,8 @@
 'use strict';
 
 const POST_QUALITY = {
-  ultra: { name: 'Ultra', msaa: 4, ratio: 2, ao: 16, bloom: true, post: true, shadow: 4096, minScale: 0.7 },
-  hoch: { name: 'Hoch', msaa: 4, ratio: 1.5, ao: 10, bloom: true, post: true, shadow: 4096, minScale: 0.6 },
+  ultra: { name: 'Ultra', msaa: 4, ratio: 2, ao: 16, bloom: true, post: true, shadow: 4096, minScale: 0.7, ssr: 40 },
+  hoch: { name: 'Hoch', msaa: 4, ratio: 1.5, ao: 10, bloom: true, post: true, shadow: 4096, minScale: 0.6, ssr: 28 },
   mittel: { name: 'Mittel', msaa: 2, ratio: 1, ao: 0, bloom: true, post: true, shadow: 2048, minScale: 0.6 },
   niedrig: { name: 'Niedrig', msaa: 0, ratio: 0.85, ao: 0, bloom: false, post: false, shadow: 2048, minScale: 0.6 },
 };
@@ -219,7 +219,8 @@ class PostFX {
       varying vec2 vUv;
       ${POST_COMMON}
       uniform sampler2D tColor, tAO, tBloom;
-      uniform mat4 uCamWorld;
+      uniform mat4 uCamWorld, uProj;
+      uniform vec2 uSceneTexel;
       uniform vec3 uFogCol, uSunDir, uSunCol;
       uniform float uFogDensity, uFogBase, uFogFall, uExposure, uBloom, uNight, uWet, uTime, uAO, uSunVis, uCloud, uCloudT;
       uniform vec2 uRes;
@@ -229,6 +230,37 @@ class PostFX {
         vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(cHash(i), cHash(i + vec2(1.0, 0.0)), f.x), mix(cHash(i + vec2(0.0, 1.0)), cHash(i + vec2(1.0, 1.0)), f.x), f.y);
       }
+      // Spiegelungen (seit v3.15.0, Grafik-Phase 10c): Strahl im Blickraum durch das Tiefenbild, Treffer mit 5 Halbierungen
+      // verfeinert; ohne Treffer bleibt die Himmelsspiegelung der Materialien. Alpha des Szenenbilds: 1 … 2 nasse Straße
+      // (Normale nach oben), 3 … 4 Glas (Normale aus der Tiefe), sonst höchstens 1
+      #ifdef USE_SSR
+      vec2 toUv(vec3 p) { vec4 c = uProj * vec4(p, 1.0); return c.xy / c.w * 0.5 + 0.5; }
+      vec4 ssr(vec3 P, vec3 N) {
+        vec3 V = normalize(P), R = reflect(V, N);
+        if (R.z > 0.6) return vec4(0.0); // zur Kamera zurück: nicht im Bild
+        float st = clamp(-P.z * 0.025, 0.12, 2.5), t = 0.0;
+        vec3 q = P + N * 0.05;
+        float jit = ign(gl_FragCoord.xy);
+        for (int i = 0; i < SSR_STEPS; i++) {
+          float s = st * (1.0 + (i == 0 ? jit : 0.0));
+          q += R * s; t += s; st *= 1.11;
+          vec2 uv = toUv(q);
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || q.z > -0.3) break;
+          float sz = viewPosAt(uv).z;
+          if (q.z < sz && sz - q.z < max(0.6, s * 2.5)) {
+            // Treffer: Halbierungen zwischen letztem Punkt davor und dahinter
+            vec3 a = q - R * s, b = q;
+            for (int k = 0; k < 5; k++) { vec3 m = (a + b) * 0.5; if (m.z < viewPosAt(toUv(m)).z) b = m; else a = m; }
+            uv = toUv(b);
+            if (texture2D(tDepth, uv).r >= 0.99999) break;
+            vec2 e = smoothstep(0.0, 0.08, uv) * smoothstep(1.0, 0.92, uv);
+            float fade = e.x * e.y * (1.0 - smoothstep(0.0, 0.6, R.z)) * (1.0 - smoothstep(120.0, 260.0, t));
+            return vec4(texture2D(tColor, uv).rgb, fade);
+          }
+        }
+        return vec4(0.0);
+      }
+      #endif
       float cloudShadow(vec3 wp) {
         // Wolkendecke in 1.500 m Höhe, entlang der Sonnenrichtung auf den Boden projiziert; Wind 9 m/s aus Westsüdwest
         vec2 q = (wp.xz + uSunDir.xz * (1500.0 - wp.y) / max(uSunDir.y, 0.2) - vec2(9.0, 3.5) * uCloudT) / 1150.0;
@@ -256,11 +288,34 @@ class PostFX {
       void main() {
         vec3 col = texture2D(tColor, vUv).rgb;
         float d = texture2D(tDepth, vUv).r;
+        vec3 dbgSSR = vec3(0.0);
         if (d < 0.99999) {
           vec3 vp = viewPosAt(vUv);
           #ifdef USE_AO
             float ao = texture2D(tAO, vUv).r;
             col *= mix(1.0, ao, uAO);
+          #endif
+          #ifdef USE_SSR
+            float ra = texture2D(tColor, vUv).a;
+            if (ra > 1.02) {
+              vec3 N;
+              float rs;
+              if (ra < 2.5) { N = normalize(transpose(mat3(uCamWorld)) * vec3(0.0, 1.0, 0.0)); rs = clamp(ra - 1.0, 0.0, 1.0); }
+              else {
+                vec2 tx = uSceneTexel;
+                vec3 pr = viewPosAt(vUv + vec2(tx.x, 0.0)), pl = viewPosAt(vUv - vec2(tx.x, 0.0));
+                vec3 pu = viewPosAt(vUv + vec2(0.0, tx.y)), pd = viewPosAt(vUv - vec2(0.0, tx.y));
+                vec3 dx = abs(pr.z - vp.z) < abs(vp.z - pl.z) ? pr - vp : vp - pl;
+                vec3 dy = abs(pu.z - vp.z) < abs(vp.z - pd.z) ? pu - vp : vp - pd;
+                N = normalize(cross(dx, dy));
+                if (dot(N, vp) > 0.0) N = -N;
+                rs = clamp(ra - 3.0, 0.0, 1.0);
+              }
+              vec4 hit = ssr(vp, N);
+              float fres = 0.04 + 0.96 * pow(1.0 - max(dot(-normalize(vp), N), 0.0), 5.0);
+              col = mix(col, hit.rgb, hit.a * rs * mix(0.25, 1.0, fres) * 0.9);
+              dbgSSR = vec3(rs * step(ra, 2.5), hit.a * rs, rs * step(2.5, ra));
+            }
           #endif
           // Luftperspektive: Höhennebel (dichter in Tälern), zur Sonne hin warm aufgehellt
           vec3 wp = (uCamWorld * vec4(vp, 1.0)).xyz;
@@ -298,6 +353,9 @@ class PostFX {
         // Körnung gegen Farbstufen
         col += (ign(gl_FragCoord.xy + fract(uTime * 7.3) * 113.0) - 0.5) / 160.0;
         gl_FragColor = vec4(col, 1.0);
+        #ifdef DEBUG_SSR
+          gl_FragColor = vec4(dbgSSR, 1.0); // rot: nasse Fläche, blau: Glas, grün: Treffer
+        #endif
         #ifdef DEBUG_AO
           gl_FragColor = vec4(texture2D(tAO, vUv).rrr, 1.0);
         #endif
@@ -307,6 +365,7 @@ class PostFX {
       uFogCol: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Color() },
       uFogDensity: { value: 0.001 }, uFogBase: { value: 0 }, uFogFall: { value: 1 / 160 }, uExposure: { value: 1 },
       uBloom: { value: 0.08 }, uNight: { value: 0 }, uWet: { value: 0 }, uTime: { value: 0 }, uAO: { value: 0.85 },
+      uProj: { value: new THREE.Matrix4() }, uSceneTexel: { value: new THREE.Vector2() },
       uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() }, uCloud: { value: 0.2 }, uCloudT: { value: 0 },
     });
   }
@@ -376,17 +435,19 @@ class PostFX {
     }
     // Zusammensetzen auf den Bildschirm
     const c = this.compMat, u = c.uniforms;
-    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0);
+    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0);
     if (c.userData.key !== want) {
       c.userData.key = want;
       c.defines = {};
       if (q.ao) c.defines.USE_AO = '';
       if (q.bloom) c.defines.USE_BLOOM = '';
       if (this.debugAO) c.defines.DEBUG_AO = '';
+      if (q.ssr && !this.noSSR) { c.defines.USE_SSR = ''; c.defines.SSR_STEPS = q.ssr; }
+      if (this.debugSSR) c.defines.DEBUG_SSR = '';
       c.needsUpdate = true;
     }
     u.tColor.value = T.scene.texture; u.tDepth.value = depth; u.tAO.value = T.ao.texture; u.tBloom.value = T.b1.texture;
-    u.uInvProj.value.copy(camera.projectionMatrixInverse); u.uCamWorld.value.copy(camera.matrixWorld);
+    u.uInvProj.value.copy(camera.projectionMatrixInverse); u.uCamWorld.value.copy(camera.matrixWorld); u.uProj.value.copy(camera.projectionMatrix); u.uSceneTexel.value.set(1 / T.w, 1 / T.h);
     u.uFogCol.value.copy(P.fogCol); u.uSunDir.value.copy(P.sunDir); u.uSunCol.value.copy(P.sunCol);
     u.uFogDensity.value = P.fogDensity; u.uFogBase.value = P.fogBase;
     u.uExposure.value = this.exposure; u.uNight.value = P.night; u.uWet.value = P.wet; u.uSunVis.value = P.sunVis;
