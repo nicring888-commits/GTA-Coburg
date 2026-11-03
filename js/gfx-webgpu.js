@@ -80,7 +80,8 @@ const GfxProbe = {
   },
   // Messanzeige für den WebGL-Weg (?gfx=stats): gleiche Werte aus renderer.info (nach der Nachbearbeitung zählt
   // three.js nur den letzten Durchgang, deshalb Zeichenaufrufe und Dreiecke der Szene aus world.renderer.info.memory nicht)
-  measureWebGL(renderer, cpu) {
+  // post: PostFX mit GPU-Zeiten je Durchgang (seit v3.18.0) und Zeichenaufrufen/Dreiecken des Szenen-Durchgangs
+  measureWebGL(renderer, cpu, post) {
     if (!this.statsOnly) return;
     if (!this.panel) {
       this.panel = document.createElement('div');
@@ -89,9 +90,9 @@ const GfxProbe = {
       document.body.appendChild(this.panel);
       this.stats.backend = 'WebGL (Spiel)';
     }
-    this.tick(cpu, null);
+    this.tick(cpu, post && post.sceneInfo ? { calls: post.sceneInfo.calls, triangles: post.sceneInfo.tris } : null, post && post.gpu);
   },
-  tick(cpu, info) {
+  tick(cpu, info, gpu) {
     const now = performance.now(), S = this.stats;
     this.acc = this.acc || { t: now, n: 0, cpu: 0 };
     this.acc.n++; this.acc.cpu += cpu;
@@ -99,7 +100,10 @@ const GfxProbe = {
       S.ms = +((now - this.acc.t) / this.acc.n).toFixed(1); S.cpu = +(this.acc.cpu / this.acc.n).toFixed(1);
       if (info) { S.calls = info.drawCalls !== undefined ? info.drawCalls : info.calls; S.tris = info.triangles; }
       this.acc = { t: now, n: 0, cpu: 0 };
-      this.panel.textContent = `${info ? 'WebGPU-Probe' : 'Messung'} · ${S.backend}\nBild ${S.ms} ms (${(1000 / S.ms).toFixed(0)} fps), CPU ${S.cpu} ms` +
+      if (gpu) S.gpu = gpu;
+      const G = S.gpu, names = { scene: 'Szene', ao: 'AO', bloom: 'Bloom', rays: 'Strahlen', comp: 'Bild' };
+      this.panel.textContent = `${this.ready ? 'WebGPU-Probe' : 'Messung'} · ${S.backend}\nBild ${S.ms} ms (${(1000 / S.ms).toFixed(0)} fps), CPU ${S.cpu} ms` +
+        (G ? `\nGPU ${G.total} ms (` + Object.keys(names).filter(k => G[k] !== undefined).map(k => `${names[k]} ${G[k]}`).join(' · ') + ')' : '') +
         (info ? `\nZeichenaufrufe ${S.calls} · Dreiecke ${(S.tris / 1e6).toFixed(2)} Mio.` : '');
     }
     S.frames++;

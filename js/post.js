@@ -27,6 +27,68 @@ const POST_COMMON = `
   }
   float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }`;
 
+// GPU-Zeit je Durchgang (seit v3.18.0, Grafik-Phase G0): EXT_disjoint_timer_query_webgl2, nur wenn PostFX.timing an
+// ist (?gfx=stats, js/bench.js). Ergebnisse kommen einige Bilder später; ms = Mittel über die letzten 30 Bilder,
+// median() = Median je Durchgang über die gesammelten Bilder (robust gegen einzelne Störungen, für Messläufe).
+class GpuTimer {
+  constructor(gl) {
+    this.gl = gl;
+    this.ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    this.free = []; this.open = []; this.cur = null;
+    this.acc = {}; this.n = 0; this.ms = null;
+    this.f = {}; this.hist = [];
+  }
+  begin(name) {
+    if (!this.ext) return;
+    this.end();
+    const q = this.free.pop() || this.gl.createQuery();
+    this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, q);
+    this.cur = { q, name };
+  }
+  end() {
+    if (!this.cur) return;
+    this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
+    this.open.push(this.cur); this.cur = null;
+  }
+  // nach dem letzten Durchgang eines Bildes: fertige Abfragen einsammeln
+  frame() {
+    if (!this.ext) return;
+    this.end();
+    this.open.push({ frameEnd: true });
+    const gl = this.gl, disjoint = gl.getParameter(this.ext.GPU_DISJOINT_EXT);
+    while (this.open.length) {
+      const o = this.open[0];
+      if (o.frameEnd) {
+        this.open.shift();
+        if (Object.keys(this.f).length) { this.hist.push(this.f); if (this.hist.length > 240) this.hist.shift(); }
+        this.f = {};
+        if (++this.n >= 30) this.flush();
+        continue;
+      }
+      if (!gl.getQueryParameter(o.q, gl.QUERY_RESULT_AVAILABLE)) break;
+      const ns = gl.getQueryParameter(o.q, gl.QUERY_RESULT);
+      if (!disjoint) { this.acc[o.name] = (this.acc[o.name] || 0) + ns / 1e6; this.f[o.name] = (this.f[o.name] || 0) + ns / 1e6; }
+      this.free.push(o.q); this.open.shift();
+    }
+  }
+  flush() {
+    const ms = { total: 0 };
+    for (const k in this.acc) { ms[k] = +(this.acc[k] / this.n).toFixed(2); ms.total += this.acc[k] / this.n; }
+    ms.total = +ms.total.toFixed(2);
+    this.ms = ms; this.acc = {}; this.n = 0;
+  }
+  median() {
+    if (!this.hist.length) return null;
+    const med = a => { a.sort((x, y) => x - y); return +a[a.length >> 1].toFixed(2); }, out = {};
+    const keys = new Set(); for (const f of this.hist) for (const k in f) keys.add(k);
+    for (const k of keys) out[k] = med(this.hist.map(f => f[k] || 0));
+    // Summe der Mediane: andere Programme auf der GPU (Fenster, Browser) verlängern einzelne Durchgänge zufällig
+    out.total = +Object.values(out).reduce((a, b) => a + b, 0).toFixed(2);
+    out.frames = this.hist.length;
+    return out;
+  }
+}
+
 class PostFX {
   constructor(renderer) {
     this.renderer = renderer;
@@ -426,16 +488,30 @@ class PostFX {
     }
   }
 
+  // GPU-Zeiten (null ohne timing oder ohne Erweiterung) und Zeichenaufrufe/Dreiecke des Szenen-Durchgangs
+  get gpu() { return this.timer && this.timer.ms; }
+
   render(scene, camera) {
     const r = this.renderer;
-    if (!this.enabled) { r.setRenderTarget(null); r.render(scene, camera); return; }
+    const G = this.timing ? (this.timer || (this.timer = new GpuTimer(r.getContext()))) : null;
+    const info = r.info.render, S = this.sceneInfo || (this.sceneInfo = { calls: 0, tris: 0 });
+    if (!this.enabled) {
+      if (G) G.begin('scene');
+      r.setRenderTarget(null); r.render(scene, camera);
+      S.calls = info.calls; S.tris = info.triangles;
+      if (G) G.frame();
+      return;
+    }
     const T = this.ensureTargets(), P = this.params, q = this.q;
+    if (G) G.begin('scene');
     r.setRenderTarget(T.scene);
     r.render(scene, camera);
+    S.calls = info.calls; S.tris = info.triangles;
     const depth = T.scene.depthTexture;
 
     // Umgebungsverdeckung
     if (q.ao) {
+      if (G) G.begin('ao');
       const m = this.aoMat;
       if (m.defines.AO_SAMPLES !== q.ao) { m.defines.AO_SAMPLES = q.ao; m.needsUpdate = true; }
       const u = m.uniforms;
@@ -450,6 +526,7 @@ class PostFX {
     }
     // Bloom
     if (q.bloom) {
+      if (G) G.begin('bloom');
       const bu = this.brightMat.uniforms;
       bu.tColor.value = T.scene.texture; bu.uTexel.value.set(1 / T.w, 1 / T.h); bu.uExposure.value = this.exposure;
       bu.uThreshold.value = P.night > 0.5 ? 0.8 : 1.05;
@@ -479,6 +556,7 @@ class PostFX {
         const sx = v.x * 0.5 + 0.5, sy = v.y * 0.5 + 0.5, off = Math.max(0, Math.abs(v.x) - 1, Math.abs(v.y) - 1);
         rays = P.sunVis * U.smoothstep(0.1, 0.45, facing) * (1 - U.smoothstep(0.2, 1.2, off)) * (0.6 + 0.6 * P.golden);
         if (rays > 0.01) {
+          if (G) G.begin('rays');
           const mu = this.raysMaskMat.uniforms;
           mu.tDepth.value = depth; mu.uInvProj.value.copy(camera.projectionMatrixInverse); mu.tColor.value = T.scene.texture;
           mu.uCamWorld.value.copy(camera.matrixWorld); mu.uSunDir.value.copy(P.sunDir);
@@ -491,6 +569,7 @@ class PostFX {
       }
     }
     // Zusammensetzen auf den Bildschirm
+    if (G) G.begin('comp');
     const c = this.compMat, u = c.uniforms;
     const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0);
     if (c.userData.key !== want) {
@@ -516,5 +595,6 @@ class PostFX {
     u.uTime.value = performance.now() / 1000;
     u.uRes.value.set(this.size.x, this.size.y);
     this.pass(c, null);
+    if (G) G.frame();
   }
 }

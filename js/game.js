@@ -992,6 +992,8 @@
   let lastTown = null;
   function loop(now) {
     requestAnimationFrame(loop);
+    // Messlauf (js/bench.js) zeichnet selbst: Spiel anhalten
+    if (window.game && window.game.hold) { last = now; return; }
     const dt = Math.min(0.05, (now - last) / 1000);
     if (started) post.adapt(now - last);
     last = now;
@@ -1284,7 +1286,7 @@
     // WebGPU-Probe (?gfx=webgpu, js/gfx-webgpu.js) zeichnet statt der WebGL-Kette; ?gfx=stats misst die WebGL-Kette
     hideFar();
     if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color, property.inside ? null : atmo);
-    else { const t0 = performance.now(); post.render(scene, camera); GfxProbe.measureWebGL(renderer, performance.now() - t0); }
+    else { const t0 = performance.now(); post.render(scene, camera); GfxProbe.measureWebGL(renderer, performance.now() - t0, post); }
     for (const o of farHidden) o.visible = true;
     farHidden.length = 0;
   }
@@ -1298,9 +1300,10 @@
 
   // für Tests in der Konsole
   GfxProbe.start(renderer, scene);
+  post.timing = GfxProbe.statsOnly;
   window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, bench: typeof Bench !== 'undefined' ? Bench : null, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); netStep(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };

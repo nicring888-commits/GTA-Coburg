@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GTA Coburg – Vorher/Nachher</title>
+<!-- Vergleich zweier Messläufe aus js/bench.js (seit v3.18.0, Grafik-Phase G0); nur über node server.js -->
+<style>
+  :root { --bg: #111317; --panel: #1b1e24; --text: #e6e8ec; --dim: #9aa1ad; --good: #6fd08c; --bad: #ff7a6b; --line: #2b2f37; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, Segoe UI, sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  h1 { font-size: 16px; margin: 0 12px 0 0; }
+  select, input { background: #0d0f12; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  main { padding: 16px; display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 620px), 1fr)); }
+  figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .cmp { position: relative; aspect-ratio: var(--ar, 16 / 10); user-select: none; cursor: ew-resize; background: #000; }
+  .cmp img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cmp .after { clip-path: inset(0 0 0 var(--cut, 50%)); }
+  .cmp .bar { position: absolute; top: 0; bottom: 0; left: var(--cut, 50%); width: 2px; background: #fff8; }
+  .cmp .tag { position: absolute; top: 6px; padding: 1px 6px; border-radius: 4px; background: #000a; font-size: 12px; }
+  figcaption { padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--dim); }
+  figcaption b { color: var(--text); }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  #sum { color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vorher/Nachher</h1>
+  <label>Vorher <select id="a"></select></label>
+  <label>Nachher <select id="b"></select></label>
+  <label>Uhrzeit <select id="t"><option value="">alle</option></select></label>
+  <label>Wetter <select id="w"><option value="">alle</option></select></label>
+  <span id="sum"></span>
+</header>
+<main id="grid"></main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let runs = {}, data = {};
+const load = l => data[l] ? Promise.resolve(data[l]) : fetch(`shots/${l}/results.json`).then(r => r.ok ? r.json() : { shots: [] }).then(j => (data[l] = j));
+const fmt = (a, b, unit, lowGood = true) => {
+  if (a == null || b == null) return b == null ? '–' : `${b}${unit}`;
+  const d = b - a, cls = Math.abs(d) < Math.abs(a) * 0.03 ? '' : (d < 0) === lowGood ? 'good' : 'bad';
+  return `${b}${unit} <span class="${cls}">(${d >= 0 ? '+' : ''}${(+d.toFixed(2))})</span>`;
+};
+async function draw() {
+  const A = await load($('a').value), B = await load($('b').value), T = $('t').value, W = $('w').value;
+  const byKey = s => `${s.id}|${s.time}|${s.weather}`, old = new Map(A.shots.map(s => [byKey(s), s]));
+  const list = B.shots.filter(s => (!T || String(s.time) === T) && (!W || s.weather === W));
+  if (B.size) document.documentElement.style.setProperty('--ar', `${B.size[0]} / ${B.size[1]}`);
+  let ga = 0, gb = 0, n = 0;
+  $('grid').innerHTML = list.map(s => {
+    const o = old.get(byKey(s)) || {};
+    if (o.gpu && s.gpu) { ga += o.gpu.total; gb += s.gpu.total; n++; }
+    return `<figure><div class="cmp">
+        <img src="shots/${$('a').value}/${s.file}" alt=""><img class="after" src="shots/${$('b').value}/${s.file}" alt="">
+        <div class="bar"></div><span class="tag" style="left:6px">${$('a').value}</span><span class="tag" style="right:6px">${$('b').value}</span>
+      </div><figcaption><b>${s.id} · ${s.time} Uhr · ${s.weather}</b>
+        <span>GPU ${fmt(o.gpu && o.gpu.total, s.gpu && s.gpu.total, ' ms')}</span>
+        <span>CPU ${fmt(o.cpu, s.cpu, ' ms')}</span>
+        <span>Aufrufe ${fmt(o.calls, s.calls, '')}</span>
+        <span>Dreiecke ${fmt(o.tris && +(o.tris / 1e6).toFixed(2), s.tris && +(s.tris / 1e6).toFixed(2), ' M')}</span></figcaption></figure>`;
+  }).join('');
+  $('sum').innerHTML = n ? `GPU im Mittel: ${(ga / n).toFixed(2)} → ${fmt(+(ga / n).toFixed(2), +(gb / n).toFixed(2), ' ms')} · ${list.length} Bilder` : `${list.length} Bilder`;
+  for (const c of document.querySelectorAll('.cmp')) {
+    const move = e => { const r = c.getBoundingClientRect(), x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left; c.style.setProperty('--cut', `${Math.max(0, Math.min(100, x / r.width * 100))}%`); };
+    c.addEventListener('pointermove', move); c.addEventListener('touchmove', move, { passive: true });
+  }
+}
+fetch('/api/bench-list').then(r => r.json()).then(async j => {
+  runs = j;
+  const labels = Object.keys(runs).filter(l => runs[l].includes('results.json'));
+  for (const s of ['a', 'b']) $(s).innerHTML = labels.map(l => `<option>${l}</option>`).join('');
+  if (labels.length > 1) $('b').value = labels[labels.length - 1];
+  const any = labels.length ? await load(labels[labels.length - 1]) : { shots: [] };
+  for (const [sel, key] of [['t', 'time'], ['w', 'weather']]) for (const v of [...new Set(any.shots.map(s => s[key]))]) $(sel).insertAdjacentHTML('beforeend', `<option>${v}</option>`);
+  for (const s of ['a', 'b', 't', 'w']) $(s).onchange = draw;
+  draw();
+});
+</script>
+</body>
+</html>
