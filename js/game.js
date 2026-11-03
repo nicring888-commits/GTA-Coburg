@@ -116,6 +116,8 @@
   const headlight = new THREE.SpotLight('#fff1d0', 0, 70, 0.55, 0.5, 1.2);
   headlight.castShadow = false;
   scene.add(headlight, headlight.target);
+  // Scheinwerferkegel aller anderen Autos (js/carlights.js, seit v3.15.0)
+  const carLights = new CarLights(scene);
 
   // ---------- Spielstand (bleibt im Browser gespeichert) ----------
   const SAVE_KEY = 'gta-coburg-v1';
@@ -1267,6 +1269,10 @@
       headlight.position.set(car.x + fx * 2.2, car.y + 0.8, car.z + fz * 2.2);
       headlight.target.position.set(car.x + fx * 20, car.y - 1, car.z + fz * 20);
     } else headlight.intensity = 0;
+    if (!property.inside) {
+      const w = atmo.w, drivenCars = traffic.cars.concat(police.cars(), races.cars(), net.remoteCars, mode === 'drive' ? [car] : []);
+      carLights.update(drivenCars, mode === 'drive' ? car : null, atmo.night, U.clamp(w.rain + (1 - w.vis) * 0.8, 0, 1), atmo.wet, camera.position);
+    } else carLights.update([], null, 0, 0, 0, camera.position);
     if (!property.inside) { atmo.update(dt, camera); syncNight(); }
     peds.draw(camera.position.x, camera.position.z);
     world.updateTreeLod(camera.position.x, camera.position.z);
