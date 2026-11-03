@@ -633,6 +633,7 @@ class World {
 
   // Shader-Ergänzung: Detailrauschen in Weltkoordinaten über die Grundfarbe legen
   addDetail(mat, detail) {
+    mat.userData.tsl = nm => NodeKit.detail(nm, detail); // WebGPU (js/tsl-materials.js)
     mat.onBeforeCompile = sh => {
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.uWet = ATMO.uniforms.uWet;
@@ -664,6 +665,7 @@ class World {
   roadShader(mat) {
     if (!this._roadDetail) this._roadDetail = this.makeDetailTexture();
     const detail = this._roadDetail;
+    mat.userData.tsl = nm => NodeKit.road(nm, detail); // WebGPU (js/tsl-materials.js)
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, ATMO.uniforms);
       sh.uniforms.detailMap = { value: detail };
@@ -707,6 +709,7 @@ class World {
   leafShader(mat) {
     if (mat.userData.leaf) return;
     mat.userData.leaf = true;
+    mat.userData.tsl = nm => NodeKit.leaf(nm); // WebGPU (js/tsl-materials.js)
     mat.onBeforeCompile = sh => {
       sh.uniforms.uWet = ATMO.uniforms.uWet;
       sh.uniforms.uTime = ATMO.uniforms.uTime;
@@ -742,6 +745,7 @@ class World {
     if (mat.userData.roof) return mat;
     mat.userData.roof = true;
     const detail = this._roadDetail || (this._roadDetail = this.makeDetailTexture());
+    mat.userData.tsl = nm => NodeKit.roof(nm, detail); // WebGPU (js/tsl-materials.js)
     mat.onBeforeCompile = sh => {
       sh.uniforms.detailMap = { value: detail };
       sh.uniforms.uWet = ATMO.uniforms.uWet;

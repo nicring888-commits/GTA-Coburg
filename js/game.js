@@ -1281,7 +1281,7 @@
     ui.updateLabels(camera);
     // WebGPU-Probe (?gfx=webgpu, js/gfx-webgpu.js) zeichnet statt der WebGL-Kette; ?gfx=stats misst die WebGL-Kette
     hideFar();
-    if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color);
+    if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color, property.inside ? null : atmo);
     else { const t0 = performance.now(); post.render(scene, camera); GfxProbe.measureWebGL(renderer, performance.now() - t0); }
     for (const o of farHidden) o.visible = true;
     farHidden.length = 0;

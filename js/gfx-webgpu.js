@@ -1,9 +1,10 @@
 // WebGPU-Probe (seit v3.10.0, Grafik-Fahrplan Phase 6): mit ?gfx=webgpu zeichnet three.js' WebGPURenderer dieselbe Szene
 // wie das Spiel (Gelände, Häuser, Bäume, Figuren, Autos), ?gfx=webgpu-gl erzwingt dessen WebGL2-Rückfall. Spiellogik,
 // Eingabe (auf der unsichtbaren WebGL-Leinwand darüber) und alle Daten bleiben gleich. Der WebGPURenderer übersetzt die
-// Materialien selbst in Node-Materialien; eigene Shader-Erweiterungen (onBeforeCompile: Fassaden, Dächer, Straßen,
-// Landschaft) und ShaderMaterials (Himmel, Wasser, Nachbearbeitung) kennt er nicht – die Probe zeigt deshalb die
-// Grundmaterialien, der Himmel wird zur Nebelfarbe. Phase 11 übersetzt diese Shader in TSL.
+// Materialien selbst in Node-Materialien; eigene Shader-Erweiterungen (onBeforeCompile) und ShaderMaterials kennt er nicht.
+// Seit v3.16.0 (Phase 11) gibt es dafür TSL-Fassungen (js/tsl-materials.js): Die Probe hängt sich in die Umwandlung
+// (NodeLibrary.fromMaterial) und ruft material.userData.tsl auf; ShaderMaterials mit Node-Zwilling (Himmel, Regen) werden
+// beim Zeichnen getauscht, die übrigen (noch nicht übersetzt) ausgeblendet. Das Umgebungsbild rechnet der eigene PMREM.
 // Messanzeige oben rechts: Backend, Bildzeit (Mittel über 1 s), Zeichenaufrufe, Dreiecke; game.gfx.stats für Tests.
 'use strict';
 
@@ -24,6 +25,17 @@ const GfxProbe = {
       const mod = await import(url);
       const r = new mod.WebGPURenderer({ antialias: true, forceWebGL: this.forceGL });
       await r.init();
+      NodeKit.init(mod);
+      // Material-Weiche: nach der Umwandlung in ein Node-Material die TSL-Fassung des eigenen Shaders einsetzen
+      const lib = r.library, from = lib.fromMaterial.bind(lib);
+      lib.fromMaterial = m => {
+        const nm = from(m);
+        if (nm && nm !== m && m.userData && m.userData.tsl) {
+          try { m.userData.tsl(nm, NodeKit); } catch (e) { console.warn('TSL-Fassung fehlgeschlagen:', m.type, e.message); }
+        }
+        return nm;
+      };
+      this.pmrem = new mod.PMREMGenerator(r);
       r.setPixelRatio(Math.min(devicePixelRatio, 1.5));
       r.setSize(innerWidth, innerHeight);
       r.shadowMap.enabled = true;
@@ -78,22 +90,42 @@ const GfxProbe = {
   },
   fail(msg) { this.stats.backend = 'nicht verfügbar'; console.warn('WebGPU-Probe:', msg, '– das Spiel zeichnet weiter mit WebGL'); },
 
-  // Szene zeichnen; Himmelskuppel, Wasser und andere ShaderMaterials ausblenden, Umgebungsbild (WebGL-Rendertarget) weglassen
-  render(scene, camera, fogColor) {
-    const hidden = [];
+  // Umgebungsbild aus der Himmelskuppel (Node-Zwilling) mit dem PMREM des WebGPURenderers, wenn sich der Himmel geändert hat
+  updateEnv(atmo) {
+    if (!atmo || !this.pmrem || atmo.envKey === this.envKey) return;
+    const twin = NodeKit.twin(atmo.skyMat);
+    if (!twin) return;
+    this.envKey = atmo.envKey;
+    const old = atmo.envDome.material;
+    atmo.envDome.material = twin;
+    const rt = this.pmrem.fromScene(atmo.envScene, 0.02, 0.1, 500);
+    atmo.envDome.material = old;
+    if (this.envRT) this.envRT.dispose();
+    this.envRT = rt;
+  },
+  // Szene zeichnen; ShaderMaterials gegen ihren Node-Zwilling tauschen (ohne Zwilling ausblenden), Umgebungsbild aus
+  // updateEnv statt des WebGL-Rendertargets
+  render(scene, camera, fogColor, atmo) {
+    const hidden = [], swapped = [];
     if (!this.skip || ++this.skipAge > 120) {
       this.skip = []; this.skipAge = 0;
       scene.traverse(o => { if (o.material && (o.material.isShaderMaterial || o.material.isRawShaderMaterial)) this.skip.push(o); });
     }
-    for (const o of this.skip) if (o.visible) { o.visible = false; hidden.push(o); }
+    for (const o of this.skip) {
+      if (!o.visible) continue;
+      const tw = NodeKit.twin(o.material);
+      if (tw) { swapped.push([o, o.material]); o.material = tw; } else { o.visible = false; hidden.push(o); }
+    }
+    this.updateEnv(atmo);
     const env = scene.environment, bg = scene.background;
-    scene.environment = null;
+    scene.environment = this.envRT ? this.envRT.texture : null;
     scene.background = fogColor || (scene.fog && scene.fog.color) || null;
     const t0 = performance.now();
     this.r.render(scene, camera);
     const cpu = performance.now() - t0;
     scene.environment = env; scene.background = bg;
     for (const o of hidden) o.visible = true;
+    for (const [o, m] of swapped) o.material = m;
     // Messung: Bildzeit aus dem Abstand der Bilder, Zeichenaufrufe und Dreiecke des letzten Bildes
     this.tick(cpu, this.r.info.render);
   },

@@ -57,6 +57,7 @@ class Atmosphere {
       hemiSky: new THREE.Color(), hemiGround: new THREE.Color(), tmp: new THREE.Color(), cloud: new THREE.Color(), shade: new THREE.Color(),
     };
     this.skyMat = this.makeSkyMaterial();
+    this.skyMat.userData.node = kit => kit.sky(this.skyMat); // Node-Zwilling für WebGPU (js/tsl-materials.js)
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(3000, 48, 24), this.skyMat);
     this.dome.frustumCulled = false; this.dome.renderOrder = -10;
     this.scene.add(this.dome);
@@ -179,6 +180,7 @@ class Atmosphere {
         varying float vA;
         void main() { gl_FragColor = vec4(uColor, 0.2 * uAmount * vA); }`,
     });
+    m.userData.node = kit => kit.rain(m);
     const rain = new THREE.LineSegments(g, m);
     rain.frustumCulled = false; rain.visible = false; rain.renderOrder = 10;
     return rain;
