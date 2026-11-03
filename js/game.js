@@ -66,9 +66,47 @@
     sun.shadow.camera.updateProjectionMatrix();
     sun.shadow.normalBias = px > 2048 ? 0.4 : px < 2048 ? 0.8 : 0.6;
   };
-  post.onChange = setShadow;
-  setShadow(post.q);
   scene.add(sun, sun.target);
+  // Gestaffelte Schatten (seit v3.15.0, Grafik-Phase 10a): ein zweites Richtungslicht ohne eigene Helligkeit liefert eine
+  // grobe Schattenkarte bis ≈ 700 m vor der Kamera; der Lichtbaustein von three.js nimmt für die Sonne innen die scharfe
+  // Karte, am Rand und außerhalb die grobe (weich überblendet). Die grobe Karte wird nur alle 0,8 s neu gezeichnet.
+  const CSM = { far: 720, size: 2048, every: 0.8, t: 0, on: false, patched: false };
+  CSM.patched = (() => {
+    const key = 'lights_fragment_begin', src = THREE.ShaderChunk[key];
+    const re = /directLight\.color \*= \( directLight\.visible && receiveShadow \) \? getShadow\( directionalShadowMap\[ i \], ([^;]*?), vDirectionalShadowCoord\[ i \] \) : 1\.0;/;
+    const m = src.match(re);
+    if (!m) return false;
+    const args = m[1], far = args.replace(/directionalLightShadow\./g, 'directionalLightShadows[ 1 ].');
+    THREE.ShaderChunk[key] = src.replace(re, `
+      #if NUM_DIR_LIGHT_SHADOWS == 2 && UNROLLED_LOOP_INDEX == 0
+        vec3 csmP = vDirectionalShadowCoord[ 0 ].xyz / vDirectionalShadowCoord[ 0 ].w;
+        float csmW = smoothstep( 0.5, 0.43, max( abs( csmP.x - 0.5 ), abs( csmP.y - 0.5 ) ) );
+        float csmNear = csmW > 0.0 ? getShadow( directionalShadowMap[ 0 ], ${args}, vDirectionalShadowCoord[ 0 ] ) : 1.0;
+        float csmFar = csmW < 1.0 ? getShadow( directionalShadowMap[ 1 ], ${far}, vDirectionalShadowCoord[ 1 ] ) : 1.0;
+        directLight.color *= ( directLight.visible && receiveShadow ) ? mix( csmFar, csmNear, csmW ) : 1.0;
+      #elif NUM_DIR_LIGHT_SHADOWS == 2 && UNROLLED_LOOP_INDEX == 1
+        directLight.color = vec3( 0.0 ); // grobe Karte: nur Schatten, kein Licht
+      #else
+        ${m[0]}
+      #endif`);
+    return true;
+  })();
+  const sunFar = new THREE.DirectionalLight('#ffffff', 0);
+  sunFar.shadow.autoUpdate = false;
+  sunFar.shadow.bias = -0.0015; sunFar.shadow.normalBias = 1.6;
+  if (!softPCF) sunFar.shadow.radius = 1;
+  sunFar.shadow.mapSize.set(CSM.size, CSM.size);
+  Object.assign(sunFar.shadow.camera, { left: -CSM.far, right: CSM.far, top: CSM.far, bottom: -CSM.far, near: 10, far: 4000 });
+  sunFar.shadow.camera.updateProjectionMatrix();
+  // nur auf den großen Stufen (Ultra, Hoch); sonst ist das Licht nicht in der Szene und alles bleibt wie bisher
+  const setCSM = q => {
+    const on = CSM.patched && q.shadow >= 4096 && MAX_SHADOW >= 4096;
+    if (on === CSM.on) return;
+    CSM.on = on; sunFar.castShadow = on;
+    if (on) { scene.add(sunFar, sunFar.target); sunFar.shadow.needsUpdate = true; } else scene.remove(sunFar, sunFar.target);
+  };
+  post.onChange = q => { setShadow(q); setCSM(q); };
+  post.onChange(post.q);
   // Himmel, Wolken, Tageszeit, Wetter und Spiegelungen (js/atmosphere.js) steuern ab jetzt Sonne, Himmelslicht und
   // Nebel; SUN_DIR wird dabei mit dem Sonnenstand gedreht
   const atmo = new Atmosphere({ scene, renderer, sun, hemi, sunDir: SUN_DIR });
@@ -632,7 +670,7 @@
   let hiddenOutdoor = null;
   function setIndoor(room) {
     if (room) {
-      const keep = new Set([property.indoorRoot, player.group, sun, sun.target, hemi]);
+      const keep = new Set([property.indoorRoot, player.group, sun, sun.target, sunFar, sunFar.target, hemi]);
       hiddenOutdoor = scene.children.filter(o => o.visible && !keep.has(o));
       for (const o of hiddenOutdoor) o.visible = false;
       audio.engine(false, 0, 0); audio.siren(0); audio.crowd(0); audio.horn(false);
@@ -1212,6 +1250,17 @@
     const sx = Math.round(t.x / texel) * texel, sz = Math.round(t.z / texel) * texel;
     sun.target.position.set(sx, t.y, sz);
     sun.position.set(sx + SUN_DIR.x * 300, t.y + SUN_DIR.y * 300, sz + SUN_DIR.z * 300);
+    // grobe Schattenkarte: Mitte ein Stück vor der Kamera, auf 20 m gerastet, nur alle CSM.every Sekunden neu (dazwischen
+    // bleibt das Licht stehen, damit Karte und Matrix zusammenpassen)
+    if (CSM.on && !property.inside && (CSM.t -= dt) <= 0) {
+      CSM.t = CSM.every;
+      const fx = -camera.matrixWorld.elements[8], fz = -camera.matrixWorld.elements[10], fl = Math.hypot(fx, fz) || 1;
+      const cx = Math.round((camera.position.x + fx / fl * CSM.far * 0.5) / 20) * 20, cz = Math.round((camera.position.z + fz / fl * CSM.far * 0.5) / 20) * 20;
+      sunFar.target.position.set(cx, t.y, cz);
+      sunFar.position.set(cx + SUN_DIR.x * 2000, t.y + SUN_DIR.y * 2000, cz + SUN_DIR.z * 2000);
+      sunFar.target.updateMatrixWorld(); sunFar.updateMatrixWorld();
+      sunFar.shadow.needsUpdate = true;
+    }
     if (mode === 'drive' && night) {
       const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
       headlight.intensity = 60;
@@ -1243,7 +1292,7 @@
   GfxProbe.start(renderer, scene);
   window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
-    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
+    get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); netStep(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
