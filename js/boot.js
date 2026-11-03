@@ -145,6 +145,7 @@
     { src: 'data/coburg.js', need: true, what: 'Stadtplan' },
     { src: 'data/ortho/tiles.js', what: 'Luftbilder' },
     Q.lod2 && { src: 'data/lod2.js', what: '3D-Gebäude' },
+    Q.lod2 && { src: 'data/facades.js', what: 'Fassaden' },
     { src: 'data/shops.js', what: 'Läden' },
     { src: 'data/region.js', what: 'Landkreis' },
     { src: 'data/region/ortho.js', what: 'Luftbilder Landkreis' },

@@ -84,6 +84,21 @@ const ARCH_ROOF = {
   4: { pitch: [30, 42], oE: 0.7, oG: 0.5, under: ['#5b3f2a', '#6a4a30', '#e9e5dc'], chimney: 0.7 },
   5: { pitch: [24, 38], oE: 0.55, oG: 0.35, under: ['#ecebe7', '#3a3c3f', '#ecebe7'], chimney: 0.2 },
 };
+// Fassaden je Bautyp (seit v3.8.0, Grafik-Phase 4): Wandbaustoff und Fensterart mit Anteilen. Der Fassadenshader
+// (js/world.js) liest die Wahl aus dem Wandprofil (Stil + 8 × Bautyp + 128 × Fachwerk + 256 × Baustoff + 2048 × Fensterart).
+// Baustoff: 0 Putz, 1 Klinker, 2 Holz im Obergeschoss bzw. Giebel, 3 Faserzement-Schindeln im Giebel, 4 Schiefer im
+// Obergeschoss und Giebel, 5 Klinkersockel, 6 Holzhaus. Fensterart: 1 Holz weiß mit Klappläden, 2 Holz weiß,
+// 3 Kunststoff weiß mit Rollladen, 4 Holz braun mit Rollladen, 5 anthrazit mit Raffstore, 6 weiß bodentief mit Rollladen,
+// 7 anthrazit bodentief mit Raffstore. Fachwerkhäuser bleiben verputzt (Gefache).
+const FACADE_KIT = {
+  1: { mat: [[0, 0.86], [4, 0.1], [2, 0.04]], win: [[1, 0.42], [2, 0.38], [3, 0.14], [4, 0.06]] },       // alter Dorfkern
+  2: { mat: [[0, 0.9], [4, 0.1]], win: [[1, 0.48], [2, 0.4], [3, 0.12]] },                               // Kleinstadtkern
+  3: { mat: [[0, 0.7], [3, 0.16], [5, 0.1], [1, 0.04]], win: [[3, 0.72], [2, 0.16], [4, 0.12]] },        // Siedlung 1950er–70er
+  4: { mat: [[0, 0.5], [2, 0.3], [5, 0.12], [1, 0.08]], win: [[3, 0.42], [4, 0.46], [6, 0.12]] },        // EFH 1970er–90er
+  5: { mat: [[0, 0.7], [2, 0.18], [1, 0.08], [6, 0.04]], win: [[5, 0.3], [7, 0.3], [6, 0.25], [3, 0.15]] },  // Neubau
+};
+const KLINKER_WALLS = ['#b9705c', '#a0533f', '#9b5a45', '#c98a6a', '#d9c29a', '#8e4b3a'];
+const WOOD_WALLS = ['#7a5a3c', '#8b6a48', '#6b5a4a', '#a08a6a', '#5e5a55'];
 const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, cemetery: 1 / 300, allotments: 1 / 600,
   scrub: 1 / 380, residential: 1 / 1700, meadow: 1 / 5000, farmyard: 1 / 2500 };
 const tileKey = (ti, tj) => (ti + 512) * 1024 + (tj + 512);
@@ -1339,12 +1354,19 @@ class Region {
       const top = Math.max(minH + eaveH, maxH + (garage || shed ? 1.4 : 2.2)), base = isCanopy ? top - 0.6 : minH - 2;
       const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
       const pick = list => list[Math.floor(rnd() * list.length)];
-      const hex = hk >= 0 ? SiteKit.hallWall(hk, rnd) : tank ? (b.t === 'digester' ? pick(['#8f9a8c', '#b5b8b2', '#6f7f6c']) : b.t === 'slurry_tank' ? '#a9a59c' : '#d2d5d4')
+      let kit = null;
+      if (rural) {
+        const K = FACADE_KIT[arch] || FACADE_KIT[1], kr = U.rng((Math.floor(cx * 3.1) * 7919 + Math.floor(cz * 2.3)) & 0x7fffffff);
+        const ch = list => { let x = kr(); for (const [k, p] of list) if ((x -= p) <= 0) return k; return list[list.length - 1][0]; };
+        kit = { mat: b.fw ? 0 : ch(K.mat), win: ch(K.win), kr };
+      }
+      const hex = kit && kit.mat === 1 ? KLINKER_WALLS[Math.floor(kit.kr() * KLINKER_WALLS.length)] : kit && kit.mat === 6 ? WOOD_WALLS[Math.floor(kit.kr() * WOOD_WALLS.length)]
+        : hk >= 0 ? SiteKit.hallWall(hk, rnd) : tank ? (b.t === 'digester' ? pick(['#8f9a8c', '#b5b8b2', '#6f7f6c']) : b.t === 'slurry_tank' ? '#a9a59c' : '#d2d5d4')
         : farm ? pick(agNeu ? AGRAR_NEU_WALLS : BARN_WALLS) : indus ? pick(INDUSTRIE_WALLS) : hall ? '#c5c1b7'
         : garage ? pick(GARAGE_WALLS[era]) : shed && /shed|hut|allotment_house|yes/.test(b.t) ? pick(SHED_WALLS)
         : neben ? pick(NEBEN_WALLS) : PLAIN_TYPES.has(b.t) ? '#a7a39a'
         : /church|chapel|cathedral/.test(b.t) ? '#e6dfcc' : b.t === 'castle' ? '#d8ccae' : pick(ARCH_WALLS[arch] || RURAL_FACADES);
-      const styleCode = 8 * arch + 128 * (b.fw || 0);
+      const styleCode = 8 * arch + 128 * (b.fw || 0) + (kit ? 256 * kit.mat + 2048 * kit.win : 0);
       const wallCol = U.color(hex, 0.1, rnd);
       const wb = plainType && !garage ? plain.get(cx, cz) : walls.get(cx, cz), pb = plain.get(cx, cz);
       // Dachform (js/houses.js) vor den Wänden festlegen: Pultdach hebt die hohe Wand an, Flachdach bekommt eine Attika

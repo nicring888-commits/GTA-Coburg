@@ -61,6 +61,20 @@ const LANDMARK_LOD2 = {
   Rathaus: { parts: [{ x: -9.3, z: 62.4, r: 4.5, minY: 19, c: '#5f9a86' }] },
   Stadthaus: {},                          // nur vormerken: Erker in props.js
 };
+// Fassaden der Innenstadt (seit v3.8.0, Grafik-Phase 4) nach Lage und OSM-Merkmalen (data/facades.js aus
+// tools/convert-facades.js): Fensterart 0 wie bisher, 1 Sandstein-Gewände, 2 Putzfaschen mit Klappläden, 3 Gründerzeit
+// (Sandstein-Erdgeschoss mit Rundbögen, Segmentbögen, kräftige Gesimse), 4 Barock/Denkmal (Sandstein-Gewände, Läden,
+// Eckquader), 5 ochsenblutrote Gewände (Stadthaus). Baustoff 1 Klinker über dem Erdgeschoss, 3 Sandsteinquader.
+// Die Farben folgen recherche/referenz-coburg.md (Sandstein #cbb99a, Läden dunkelgrün #3d4a3a oder grau).
+const CITY_KIT = {
+  altDenkmal: [[1, 0.35], [2, 0.3], [4, 0.35]], alt: [[0, 0.55], [2, 0.25], [1, 0.2]],
+  grzDenkmal: [[3, 0.8], [4, 0.2]], grz: [[3, 0.5], [0, 0.5]],
+  sonstDenkmal: [[1, 0.5], [3, 0.3], [2, 0.2]], sonst: [[0, 1]],
+};
+// Fachwerk nur an belegten Häusern (Punkt im Grundriss, Quelle recherche/referenz-coburg.md)
+const FACHWERK_BELEGT = [{ x: 43, z: 39, n: 'Hofapotheke (Markt 15)' }];
+// feste Fensterart einzelner Wahrzeichen (Punkt im Grundriss)
+const CITY_WIN_FIXED = [{ x: 28.2, z: -18.5, win: 5 }];   // Stadthaus: ochsenblutrote Fensterrahmen und Gewände
 // Altstadt mit Steinweg und Steintor (Spielkoordinaten, grob)
 const ALTSTADT_BOX = { minX: -175, maxX: 340, minZ: -470, maxZ: 360 };
 // Gebäudetypen, die ohne Angabe ein geneigtes (Walm-)Dach bekommen
@@ -1429,6 +1443,16 @@ class World {
             return a < 1.5 ? vec3(0.85, 0.2, 0.12) : a < 2.5 ? vec3(0.9, 0.45, 0.12) : a < 3.5 ? vec3(0.9, 0.8, 0.25)
               : a < 4.5 ? vec3(0.3, 0.7, 0.3) : a < 5.5 ? vec3(0.2, 0.5, 0.95) : a < 6.5 ? vec3(0.62, 0.35, 0.8) : vec3(0.3, 0.8, 0.85);
           }
+          // Fensterarten der Wohnhäuser im Umland (FACADE_KIT in region.js): 1 Holz weiß + Klappläden, 2 Holz weiß,
+          // 3 Kunststoff weiß + Rollladen, 4 Holz braun + Rollladen, 5 anthrazit + Raffstore, 6 weiß + bodentief + Rollladen,
+          // 7 anthrazit + bodentief + Raffstore. Rahmenfarbe, Behang (0 keiner, 1 Klappläden, 2 Rollladen, 3 Raffstore),
+          // Teilung (0 keine, 1 Mittelpfosten, 2 Pfosten und Kämpfer), bodentief im Erdgeschoss
+          vec3 winFrame(float k) {
+            return k < 2.5 ? vec3(0.9, 0.9, 0.87) : k < 3.5 ? vec3(0.93, 0.93, 0.91) : k < 4.5 ? vec3(0.36, 0.23, 0.13)
+              : k < 5.5 ? vec3(0.2, 0.21, 0.22) : k < 6.5 ? vec3(0.93, 0.93, 0.91) : vec3(0.2, 0.21, 0.22);
+          }
+          float winShut(float k) { return k < 1.5 ? 1.0 : k < 2.5 ? 0.0 : k < 4.5 ? 2.0 : k < 5.5 ? 3.0 : k < 6.5 ? 2.0 : 3.0; }
+          float winDiv(float k) { return k < 2.5 ? 2.0 : k < 4.5 ? 1.0 : k < 5.5 ? 0.0 : k < 6.5 ? 1.0 : 0.0; }
           float fGlass = 0.0, fShop = 0.0, fCurtain = 0.0, fGlassVar = 0.0, fFlat = 0.0, fLit = 0.0, fRural = 0.0;
           vec2 fUv = vec2(0.0), fUvG = vec2(0.0);
           // Oberkante der Wand an der Stelle u (Linienzug links – First – rechts aus dem Wandprofil)
@@ -1443,12 +1467,15 @@ class World {
             float bh2 = fh(qc.gb * 1.31 + 7.7);
             vec2 kk = vec2(bh2 < 0.3 ? 1.1 : bh2 < 0.72 ? 1.0 : 0.89, fract(bh2 * 13.7) < 0.35 ? 1.07 : fract(bh2 * 13.7) < 0.75 ? 1.0 : 0.9);
             bool hasProf = vProfA.z - vProfA.x > 0.25;
-            // Stil (0 Stadt, 1/2 Wohnhaus, 3 ohne Fenster) + 8 × Bautyp (tools/classify-buildings.js) + 128 × Fachwerk
+            // Stil (0 Stadt, 1/2 Wohnhaus, 3 ohne Fenster, 4/5 Garage, 6/7 Halle) + 8 × Bautyp (tools/classify-buildings.js)
+            // + 128 × Fachwerk + 256 × Wandbaustoff + 2048 × Fensterart (seit v3.8.0 aus den Tabellen FACADE_KIT in
+            // region.js bzw. CITY_KIT in world.js; 0 = wie bisher)
             float styleRaw = hasProf ? vProfA.w : 0.0;
-            float archF = floor(styleRaw / 8.0 + 0.01);
-            float fwBit = step(15.5, archF);
-            float arch = archF - 16.0 * fwBit;
-            float style = styleRaw - 8.0 * archF;
+            float winK = floor(styleRaw / 2048.0 + 0.001), sr = styleRaw - 2048.0 * winK;
+            float matK = floor(sr / 256.0 + 0.001); sr -= 256.0 * matK;
+            float fwBit = floor(sr / 128.0 + 0.001); sr -= 128.0 * fwBit;
+            float arch = floor(sr / 8.0 + 0.001);
+            float style = sr - 8.0 * arch;
             bool histA = arch < 2.5;                            // historischer Kern (und ältere Daten)
             bool sied = abs(arch - 3.0) < 0.5, efh = abs(arch - 4.0) < 0.5, neu = abs(arch - 5.0) < 0.5;
             float uAl = vMapUv.x * 12.8;                        // Meter entlang der Wand (System der Wand-UV)
@@ -1589,6 +1616,9 @@ class World {
                 tall = fl < 0.5 && fh(vec2(s * 3.1, wseed * 5.0)) < 0.45;
                 if (tall) { ww = mix(1.0, 2.2, fract(bh * 3.9)); whh = 2.15; }
               }
+              // Fensterart aus der Tabelle: bodentiefe Fenster nur bei Art 6/7
+              if (winK > 5.5) { tall = fl < 0.5 && fh(vec2(s * 3.1, wseed * 5.0)) < 0.55; if (tall) { ww = mix(1.0, 2.2, fract(bh * 3.9)); whh = 2.15; } }
+              else if (winK > 0.5 && tall) { tall = false; ww = mix(1.0, 1.9, fract(bh * 5.3)); whh = mix(1.3, 1.5, fract(bh * 9.1)); }
               if (!histA && attic) { ww = min(ww, 1.0); whh = 1.0; }
               float sill = attic ? 0.65 : tall ? 0.05 : 0.88;
               bool isDoor = style > 1.5 && fl < 0.5 && abs(s - vProfC.y) < 0.5;
@@ -1609,7 +1639,7 @@ class World {
                 // schmale Fensterbank aus Aluminium bzw. Beton
                 if (!histA && !isDoor && !tall && q.y < 0.0 && q.y > -0.05 && q.x > -0.05 && q.x < wsz.x + 0.05) { diffuseColor.rgb = (sied ? vec3(0.62, 0.6, 0.56) : vec3(0.55, 0.56, 0.57)) * sampledDiffuseColor.rgb; relief = 0.85; }
                 // Fensterläden (an knapp der Hälfte der Häuser)
-                if (histA && !isDoor && !attic && fract(bh * 2.3) < 0.45 && q.y > 0.0 && q.y < wsz.y && ((q.x < -fb && q.x > -fb - wsz.x * 0.5) || (q.x > wsz.x + fb && q.x < wsz.x + fb + wsz.x * 0.5))) {
+                if (!isDoor && !attic && (winK > 0.5 ? winK < 1.5 : histA && fract(bh * 2.3) < 0.45) && q.y > 0.0 && q.y < wsz.y && ((q.x < -fb && q.x > -fb - wsz.x * 0.5) || (q.x > wsz.x + fb && q.x < wsz.x + fb + wsz.x * 0.5))) {
                   vec3 shC = fract(bh * 7.7) < 0.35 ? vec3(0.16, 0.26, 0.17) : fract(bh * 7.7) < 0.65 ? vec3(0.3, 0.19, 0.11) : vec3(0.3, 0.35, 0.4);
                   float lp = q.y / 0.07, louv = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
                   diffuseColor.rgb = shC * (0.85 + 0.25 * louv);
@@ -1635,8 +1665,9 @@ class World {
                   else {
                     float fr = 0.06;
                     float bord = step(min(min(q2.x, wsz.x - q2.x), min(q2.y, wsz.y - q2.y)), fr);
-                    float mull = neu && wsz.x < 1.3 ? 0.0 : step(abs(q2.x - wsz.x * 0.5), 0.03);
-                    float trans = neu || tall || (efh && fract(bh * 2.7) < 0.5) ? 0.0 : step(abs(q2.y - wsz.y * 0.64), 0.03);
+                    float dv = winK > 0.5 ? winDiv(winK) : -1.0;
+                    float mull = (dv > -0.5 ? dv < 0.5 || wsz.x < 0.95 : neu && wsz.x < 1.3) ? 0.0 : step(abs(q2.x - wsz.x * 0.5), 0.03);
+                    float trans = (dv > -0.5 ? dv < 1.5 || tall : neu || tall || (efh && fract(bh * 2.7) < 0.5)) ? 0.0 : step(abs(q2.y - wsz.y * 0.64), 0.03);
                     frame = max(bord, max(mull, trans));
                     frame = mix(frame, 0.32, smoothstep(0.02, 0.05, fwidth(q2.x)));   // aus der Ferne gemittelt
                     glass = 1.0 - frame;
@@ -1644,12 +1675,14 @@ class World {
                     if (neu) frameC = fract(bh * 4.9) < 0.6 ? vec3(0.2, 0.21, 0.22) : vec3(0.92, 0.92, 0.9);
                     else if (efh) frameC = fract(bh * 4.9) < 0.5 ? vec3(0.36, 0.23, 0.13) : vec3(0.9, 0.9, 0.88);
                     else if (sied) frameC = vec3(0.9, 0.9, 0.87);
+                    if (winK > 0.5) frameC = winFrame(winK);
                     fLit = glass * step(0.5, fh(vec2(s, fl) + bh * 3.0));
                     // Rollladen bzw. Raffstore teils heruntergelassen (Nachkriegszeit und Neubau)
                     float rk = fh(vec2(s * 1.3 + fl * 2.1, wseed * 11.0));
-                    if (!histA && rk < 0.3 && q2.y > wsz.y * (1.0 - rk / 0.3 * 0.85)) {
-                      vec3 rC = neu ? vec3(0.3, 0.31, 0.32) : efh && fract(bh * 4.9) < 0.5 ? vec3(0.4, 0.27, 0.16) : vec3(0.8, 0.79, 0.75);
-                      float lp = q2.y / 0.045, lam = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
+                    float shT = winK > 0.5 ? winShut(winK) : histA ? 0.0 : neu ? 3.0 : 2.0, rq = shT > 2.5 ? 0.4 : 0.3;
+                    if (shT > 1.5 && rk < rq && q2.y > wsz.y * (1.0 - rk / rq * 0.85)) {
+                      vec3 rC = shT > 2.5 ? vec3(0.3, 0.31, 0.32) : frameC.r < 0.5 ? vec3(0.4, 0.27, 0.16) : vec3(0.8, 0.79, 0.75);
+                      float lp = q2.y / (shT > 2.5 ? 0.03 : 0.045), lam = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
                       diffuseColor.rgb = rC * (0.85 + 0.2 * lam) * sampledDiffuseColor.rgb;
                       glass = 0.0; frame = 0.0; fLit = 0.0; relief = 0.85 + 0.15 * lam;
                     }
@@ -1678,10 +1711,34 @@ class World {
               // Fachwerk im Obergeschoss und Giebel (gut ein Drittel der Häuser): Ständer an den Feldern und neben den
               // Fenstern, Riegel an Schwelle, Brüstung, Sturz und Rähm, Streben in fensterlosen Feldern
               // Holzverschalung: Giebel an Häusern der 1970er–90er, Akzentflächen im Obergeschoss an Neubauten
-              bool boards = (efh && fract(bh * 12.7) < 0.35 && vWPos.y > eave + 0.15) ||
-                (neu && fract(bh * 11.3) < 0.28 && fl > 0.5 && fract(wseed * 3.7) < 0.5);
+              // Wandbaustoff aus der Tabelle (FACADE_KIT): 1 Klinker, 2 Holz oben bzw. im Giebel, 3 Faserzement-Schindeln im
+              // Giebel, 4 Schiefer im Obergeschoss und Giebel, 5 Klinkersockel, 6 Holz ganz (ohne Tabelle wie bisher)
+              bool upper = vWPos.y > eave + 0.15, ogz = fl > 0.5 || upper;
+              bool boards = matK > 0.5 ? (abs(matK - 2.0) < 0.5 && (neu ? fl > 0.5 && fract(wseed * 3.7) < 0.5 : upper)) || abs(matK - 6.0) < 0.5
+                : (efh && fract(bh * 12.7) < 0.35 && upper) || (neu && fract(bh * 11.3) < 0.28 && fl > 0.5 && fract(wseed * 3.7) < 0.5);
+              if (!inOpen && glass < 0.5 && reveal < 0.5) {
+                if (abs(matK - 1.0) < 0.5 && h > sock || abs(matK - 5.0) < 0.5 && h < 0.95) {
+                  // Klinker: Läufer mit halbem Versatz, Mörtelfugen (Klinkersockel in festem Rotbraun bzw. Gelb)
+                  float kyB = h / 0.083, rowB = floor(kyB), kxB = uLoc / 0.25 + 0.5 * mod(rowB, 2.0);
+                  float mB = max(step(fract(kyB), 0.15), step(fract(kxB), 0.05));
+                  mB = mix(mB, 0.2, smoothstep(0.03, 0.09, fwidth(kyB)));
+                  vec3 kC = matK < 1.5 ? wallBase : (fract(bh * 3.7) < 0.7 ? vec3(0.55, 0.28, 0.2) : vec3(0.78, 0.66, 0.46)) * sampledDiffuseColor.rgb;
+                  diffuseColor.rgb = mix(kC * (0.9 + 0.2 * fh(vec2(floor(kxB), rowB))), vec3(0.7, 0.69, 0.66) * sampledDiffuseColor.rgb, mB);
+                  frame = 0.0; relief = 1.0 - 0.15 * mB;
+                } else if (abs(matK - 3.0) < 0.5 && upper || abs(matK - 4.0) < 0.5 && ogz && h > sock) {
+                  // Faserzement-Schindeln (rechteckig, grau) bzw. Schiefer (Schuppen mit runder Unterkante, blaugrau)
+                  bool sl = matK > 3.5;
+                  float ch = sl ? 0.17 : 0.2, rS = floor(h / ch), xS = uLoc / (sl ? 0.24 : 0.4) + 0.5 * mod(rS, 2.0), fy = fract(h / ch), fx = fract(xS);
+                  float edge = sl ? step(fy, 0.12 + 0.35 * pow(abs(fx - 0.5) * 2.0, 2.0)) : max(step(fy, 0.08), step(fx, 0.03));
+                  edge = mix(edge, 0.25, smoothstep(0.03, 0.08, fwidth(h / ch)));
+                  vec3 sC = sl ? vec3(0.33, 0.35, 0.38) : (fract(bh * 6.1) < 0.6 ? vec3(0.58, 0.58, 0.56) : vec3(0.48, 0.42, 0.37));
+                  diffuseColor.rgb = sC * (0.9 + 0.15 * fh(vec2(floor(xS), rS))) * (1.0 - 0.35 * edge) * sampledDiffuseColor.rgb;
+                  frame = 0.0; relief = 1.0 - 0.2 * edge;
+                }
+              }
               if (boards && !inOpen && h > sock) {
-                vec3 bC = neu ? (fract(bh * 5.9) < 0.5 ? vec3(0.62, 0.45, 0.3) : vec3(0.22, 0.23, 0.24)) : vec3(0.42, 0.28, 0.16);
+                vec3 bC = abs(matK - 6.0) < 0.5 ? wallBase / max(sampledDiffuseColor.rgb, vec3(0.01))
+                  : neu ? (fract(bh * 5.9) < 0.5 ? vec3(0.62, 0.45, 0.3) : vec3(0.22, 0.23, 0.24)) : vec3(0.42, 0.28, 0.16);
                 float bd = fract(uLoc / (neu ? 0.14 : 0.11));
                 diffuseColor.rgb = bC * (0.82 + 0.18 * step(0.08, bd)) * sampledDiffuseColor.rgb;
                 relief = 0.9 + 0.1 * step(0.08, bd);
@@ -1717,6 +1774,36 @@ class World {
                 if (texture2D(facadeDepth, fUvG).r < 0.5) { reveal = 1.0; glass = 0.0; frame = 0.0; relief = 1.0; }
                 else { vec4 fm2 = texture2D(facadeMask, fUvG); glass = fm2.r; frame = fm2.g; relief = fm2.b; }
               }
+              // ----- Fensterart der Innenstadt (seit v3.8.0, Tabelle CITY_KIT): 1 Bürgerhaus mit Sandstein-Gewände,
+              // 2 Putzfaschen und Klappläden, 3 Gründerzeit (Sandstein-Erdgeschoss mit Rundbögen, Segmentbögen darüber,
+              // kräftige Gesimse), 4 Barock/Denkmal (Sandstein-Gewände, Läden, Eckquader), 5 ochsenblutrote Gewände (Stadthaus)
+              float gew = 0.0;
+              vec3 gewC = winK > 4.5 ? vec3(0.62, 0.2, 0.15) : winK > 1.5 && winK < 2.5 ? wallBase * 1.1 : vec3(0.8, 0.73, 0.6) * sampledDiffuseColor.rgb;
+              bool grz = winK > 2.5 && winK < 3.5;
+              float ox0 = 0.3125 * bw, ox1 = 0.6875 * bw, oy0 = 0.297 * fH, oy1 = 0.836 * fH;
+              bool inOp = loc.x > ox0 && loc.x < ox1 && loc.y > oy0 && loc.y < oy1;
+              if (winK > 0.5 && winOK) {
+                if (frame > 0.3 && !inOp) gew = 1.0;
+                // Bogen über der Öffnung: Rundbogen im Erdgeschoss, Segmentbogen darüber (Gründerzeit)
+                if (grz) {
+                  float rad = (ox1 - ox0) * 0.5, sg = cell.y < 0.5 ? rad : rad * 0.28;
+                  float Rr = (rad * rad + sg * sg) / (2.0 * sg), cyA = oy1 - Rr, dA = length(vec2(loc.x - (ox0 + ox1) * 0.5, loc.y - cyA));
+                  if (loc.y > oy1 - sg && loc.x > ox0 - 0.2 && loc.x < ox1 + 0.2 && loc.y < oy1 + 0.25) {
+                    if (dA > Rr + 0.15) { gew = 0.0; frame = 0.0; glass = 0.0; reveal = 0.0; relief = 1.0; }
+                    else if (dA > Rr) { gew = 1.0; frame = 1.0; glass = 0.0; reveal = 0.0; relief = 0.95; }
+                  }
+                }
+                // Klappläden neben dem Gewände (dunkelgrün, grau oder braun, mit Lamellen)
+                if ((winK > 1.5 && winK < 2.5 || winK > 3.5 && winK < 4.5) && loc.y > oy0 && loc.y < oy1) {
+                  float sw = (ox1 - ox0) * 0.5;
+                  if ((loc.x < ox0 - 0.15 && loc.x > ox0 - 0.15 - sw) || (loc.x > ox1 + 0.15 && loc.x < ox1 + 0.15 + sw)) {
+                    vec3 shC = fract(bh * 7.7) < 0.55 ? vec3(0.22, 0.29, 0.22) : fract(bh * 7.7) < 0.8 ? vec3(0.4, 0.42, 0.42) : vec3(0.32, 0.21, 0.13);
+                    float lp = loc.y / 0.07, louv = mix(0.5, step(0.5, fract(lp)), 1.0 - smoothstep(0.25, 0.6, fwidth(lp)));
+                    diffuseColor.rgb = shC * (0.85 + 0.25 * louv) * sampledDiffuseColor.rgb;
+                    glass = 0.0; frame = 0.0; gew = 0.0; reveal = 0.0; relief = 0.8 + 0.2 * louv;
+                  }
+                }
+              }
               // Schaufenster im Erdgeschoss der Altstadt
               shop = vWPos.x > shopBox.x && vWPos.x < shopBox.z && vWPos.z > shopBox.y && vWPos.z < shopBox.w && bh < 0.82 && h > -0.3 && h < 3.1 && W > 2.2;
               if (shop) {
@@ -1734,13 +1821,52 @@ class World {
               } else if (h < 0.45 && h > -2.5) {
                 // Sockel aus Stein
                 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.39) * sampledDiffuseColor.rgb, 0.75);
-                glass = 0.0; frame = 0.0; relief = 1.0; reveal = 0.0; fFlat = 1.0;
+                glass = 0.0; frame = 0.0; relief = 1.0; reveal = 0.0; fFlat = 1.0; gew = 0.0;
+              } else if (glass < 0.5 && frame < 0.5 && reveal < 0.5) {
+                vec3 sand = vec3(0.8, 0.73, 0.6) * sampledDiffuseColor.rgb;
+                // Gründerzeit: Erdgeschoss aus Sandstein mit Lagerfugen (Bossenquader); Sandsteinbau ganz aus Quadern
+                if ((grz && h < fH - 0.1) || (matK > 2.5 && matK < 3.5)) {
+                  float jy = step(fract(h / (grz ? 0.42 : 0.5)), grz ? 0.07 : 0.04);
+                  float jx = grz ? 0.0 : step(fract((uLoc + step(0.5, fract(h / 1.0)) * 0.5) / 1.0), 0.025);
+                  diffuseColor.rgb = sand * (1.0 - 0.3 * min(jy + jx, 1.0)); relief = 1.0 - 0.25 * jy;
+                }
+                // Klinker über dem Erdgeschoss (Läufer mit halbem Versatz, Mörtelfugen), aus der Ferne gemittelt
+                else if (matK > 0.5 && matK < 1.5 && h > fH - 0.1) {
+                  float kyB = h / 0.083, rowB = floor(kyB), kxB = uLoc / 0.25 + 0.5 * mod(rowB, 2.0);
+                  float mB = max(step(fract(kyB), 0.15), step(fract(kxB), 0.05));
+                  mB = mix(mB, 0.2, smoothstep(0.03, 0.09, fwidth(kyB)));
+                  diffuseColor.rgb = mix(diffuseColor.rgb * (0.92 + 0.16 * fh(vec2(floor(kxB), rowB))), vec3(0.72, 0.7, 0.66) * sampledDiffuseColor.rgb, mB);
+                }
+                // Eckquader aus Sandstein (Barock, Denkmal)
+                if (winK > 3.5 && winK < 4.5 && h > 0.45 && h < eave - base) {
+                  float bi = floor(h / 0.38), wq = mod(bi, 2.0) < 0.5 ? 0.55 : 0.32;
+                  if (uLoc < wq || uLoc > W - wq) diffuseColor.rgb = sand * (1.0 - 0.3 * step(fract(h / 0.38), 0.06));
+                }
+                // Fachwerk (nur belegte Häuser, Fachwerk-Bit): rotbraunes Gebälk auf Putz über dem Erdgeschoss –
+                // Schwelle und Rähm je Geschoss, Brüstungs- und Sturzriegel, Ständer an den Achsen und neben den Fenstern
+                if (fwBit > 0.5 && h > fH && vWPos.y < eave - 0.1) {
+                  float b2 = 0.1, ly = loc.y, lx = loc.x;
+                  float beam = step(ly, 0.2) + step(fH - 0.12, ly) + step(abs(ly - (oy0 - 0.1)), b2) + step(abs(ly - (oy1 + 0.1)), b2);
+                  beam += step(lx, b2) + step(bw - b2, lx) + step(abs(lx - (ox0 - 0.12)), b2 * 0.9) + step(abs(lx - (ox1 + 0.12)), b2 * 0.9);
+                  beam += step(abs((lx / ox0) * (oy0 - 0.15) - ly), 0.11) * step(lx, ox0 - 0.2) * step(ly, oy0 - 0.15);
+                  diffuseColor.rgb = mix(vec3(0.93, 0.9, 0.83) * sampledDiffuseColor.rgb, vec3(0.5, 0.2, 0.14) * sampledDiffuseColor.rgb, min(beam, 1.0));
+                }
               }
               if (reveal > 0.5) diffuseColor.rgb = mix(wallBase, frameC * sampledDiffuseColor.rgb, 0.5) * (0.5 + 0.18 * smoothstep(2.2, 0.9, loc.y));
-              diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
-              // Geschossgesims (an etwa zwei Dritteln der Häuser), nur unterhalb der Traufe
+              // Gewände (Steinrahmen außen um die Öffnung) in eigener Farbe, Flügelrahmen weiter in der Rahmenfarbe
+              if (gew > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, gewC, frame);
+              else diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
               float fl = fract(h / fH) * fH;
-              if (bh > 0.33 && h > 2.0 && !shop && vWPos.y < eave - 0.2) {
+              // Gründerzeit: kräftige Gesimse aus Sandstein über jedem Geschoss und ein Traufgesims mit Schattenkante
+              if (grz && !shop && h > 1.0) {
+                vec3 sand = vec3(0.8, 0.73, 0.6) * sampledDiffuseColor.rgb;
+                float band = step(fl, 0.26) * step(0.02, fl) * step(vWPos.y, eave - 0.6);
+                float cor = step(eave - 0.55, vWPos.y) * step(vWPos.y, eave + 0.02);
+                diffuseColor.rgb = mix(diffuseColor.rgb, sand, max(band, cor));
+                relief *= 1.0 - 0.35 * (step(0.26, fl) * (1.0 - smoothstep(0.26, 0.4, fl)) + step(eave - 0.75, vWPos.y) * step(vWPos.y, eave - 0.55));
+              }
+              // Geschossgesims (an etwa zwei Dritteln der Häuser), nur unterhalb der Traufe
+              else if (bh > 0.33 && h > 2.0 && !shop && vWPos.y < eave - 0.2) {
                 float band = step(0.02, fl) * step(fl, 0.16);
                 diffuseColor.rgb = mix(diffuseColor.rgb, frameC * 1.05, band * 0.85);
                 relief *= 1.0 - 0.3 * step(0.16, fl) * (1.0 - smoothstep(0.16, 0.3, fl));
@@ -1951,8 +2077,12 @@ class World {
     this.lod2Grid = new U.Grid(32);           // LoD2-Grundrisse, um doppelte OSM-Häuser zu erkennen
     this.landmarkLod2 = [];                   // Wahrzeichen für Details (Torbögen, Uhren, Erker in props.js)
     const flatRoofCol = U.color('#7c7973', 0, rnd);
-    let count = 0;
+    let count = 0, idx = -1;
+    // Fassaden-Merkmale aus OSM (data/facades.js), nur wenn sie zu data/lod2.js passen
+    const FD = window.COBURG_FACADES && window.COBURG_FACADES.n === this.lod2.buildings.length ? window.COBURG_FACADES.b : null;
+    this.dormerCount = 0;
     for (const b of this.lod2.buildings) {
+      idx++;
       const ox = b.o[0], oz = b.o[1], v = b.v, nv = v.length / 3;
       const X = new Float64Array(nv), Y = new Float64Array(nv), Z = new Float64Array(nv);
       let maxY = 0;
@@ -1981,7 +2111,12 @@ class World {
       for (let i = 0; i < nv; i++) { RY[i] = y0 + Y[i]; WY[i] = Y[i] <= 0.05 ? bottom : RY[i]; }
 
       const plainType = PLAIN_TYPES.has(b.t) || /^31001_246/.test(b.k || '') || (!b.t && area < 30 && maxY < 4.5);
-      const wallCol = U.color(this.wallColorHex(b, plainType, rnd, ox, oz), 0.1, rnd);
+      let wallHex = this.wallColorHex(b, plainType, rnd, ox, oz);
+      // Fassaden-Bausatz (CITY_KIT) mit eigenem Zufall aus der Lage, damit Farben und Dächer gleich bleiben
+      const kit = plainType ? null : this.cityKit(b, FD ? FD[idx] : 0, foot, ox, oz, wallHex);
+      if (kit && kit.hex) wallHex = kit.hex;
+      const wallCol = U.color(wallHex, 0.1, rnd);
+      const kitCode = kit ? 2048 * kit.win + 256 * kit.mat + 128 * kit.fw : 0;
       const roofCol = U.color(TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)], 0.12, rnd);
       const lm = LANDMARK_LOD2[b.n];
       const wb = plainType || (lm && lm.wall) ? plain.get(ox, oz) : walls.get(ox, oz);
@@ -2010,7 +2145,7 @@ class World {
           const u = uMn + (uMx - uMn) * k / 4, x = X[i0] + tx * (u - u0w), z = Z[i0] + tz * (u - u0w);
           gnd = Math.max(gnd, this.heightAt(x, z));
         }
-        const pr = polyProfile(P2, Math.min(gnd, y0 + 3));
+        const pr = polyProfile(P2, Math.min(gnd, y0 + 3), kitCode);
         let col = lmWall || wallCol;
         if (lmUpper) { let ym = 0; for (const i of rings[0]) ym += Y[i]; if (ym / rings[0].length > lm.upper.y) col = lmUpper; }
         this.triPoly(rings, X, WY, Z, n, (i, j, k) => wb.tri(p(i), p(j), p(k), col, uv(i), uv(j), uv(k), n[0], n[1], n[2], pr));
@@ -2027,6 +2162,8 @@ class World {
         if (part || (lm && lm.roof)) { col = U.color(part ? part.c : lm.roof, 0.03, rnd); target = { b: plain.get(ox, oz) }; }
         const p = i => [X[i], RY[i], Z[i]];
         this.triPoly(rings, X, RY, Z, n, (i, j, k) => this.roofTri(target, p(i), p(j), p(k), col, n[0], n[1], n[2]));
+        // Gauben auf steilen Dachflächen alter Häuser (Altstadt, Gründerzeit, Denkmäler)
+        if (kit && kit.dormers && !lm && maxY < 26) this.dormerCount += this.lodDormers(rings[0], X, RY, Z, n, target, plain.get(ox, oz), wallCol, col, kit);
       }
       // Kollision und Abfragen
       for (const rings of foot) {
@@ -2050,6 +2187,93 @@ class World {
       count++;
     }
     this.lod2Count = count;
+  }
+
+  // Fassaden-Bausatz eines LoD2-Hauses (CITY_KIT): Lage (Gründerzeitstraße, Altstadt, sonst), Denkmal und Baustoff aus
+  // OSM; Fachwerk nur an belegten Häusern. Gibt { win, mat, fw, hex, dormers, rnd } oder null zurück.
+  cityKit(b, F, foot, ox, oz, hex) {
+    const kr = U.rng((Math.floor(ox * 3.7) * 7919 + Math.floor(oz * 2.9)) & 0x7fffffff);
+    const ch = list => { let x = kr(); for (const [k, p] of list) if ((x -= p) <= 0) return k; return list[list.length - 1][0]; };
+    if (/church|chapel|cathedral|castle|industrial|warehouse|retail|supermarket|garage/.test(b.t || '')) return null;
+    const her = F & 1, omat = (F >> 1) & 7, lv = F >> 4, pal = this.facadePalette(ox, oz);
+    const zone = pal === FACADES_GRUENDERZEIT ? 'grz' : pal === FACADES_ALTSTADT ? 'alt' : 'sonst';
+    const ring = foot[0][0], inFoot = q => U.pointInPoly(q.x, q.z, ring);
+    let win = ch(CITY_KIT[zone + (her ? 'Denkmal' : '')]);
+    if (zone === 'grz' && !her && lv && lv < 3) win = 0;          // ein-, zweigeschossige Bauten in Gründerzeitstraßen: schlicht
+    const fixed = CITY_WIN_FIXED.find(inFoot);
+    if (fixed) win = fixed.win;
+    const fw = FACHWERK_BELEGT.some(inFoot) ? 1 : 0;
+    let mat = 0, outHex = null;
+    if (omat === 1 || (win === 3 && /^#b9705c$/i.test(hex))) mat = 1;
+    else if (omat === 3 || (win === 3 && /^#cbb99a$/i.test(hex))) { mat = 3; outHex = '#cbb99a'; }
+    if (omat === 1 && !/^#b9705c$/i.test(hex)) outHex = '#b9705c';
+    if (fw) { mat = 0; win = 1; outHex = '#f1ece0'; }
+    const dormers = zone !== 'sonst' || her ? (her || win > 0 ? 0.65 : 0.3) : 0;
+    return { win, mat, fw, hex: outHex, dormers, rnd: kr };
+  }
+
+  // Gauben auf einer steilen LoD2-Dachfläche (seit v3.8.0): Fläche 35–65° geneigt, ≥ 6 m lang, ≥ 3 m hoch; eine Reihe
+  // Schlepp- bzw. Satteldachgauben (bei hohen Dächern eine zweite, kleinere), nur wo die Gaube ganz auf der Fläche liegt.
+  // Front mit Fenster und Wangen in der Wandfarbe, Dach mit Luftbild. Gibt die Zahl der Gauben zurück.
+  lodDormers(ring, X, RY, Z, n, rt, pb, wallCol, roofCol, kit) {
+    const r = kit.rnd;
+    if (r() > kit.dormers || n[1] < 0.42 || n[1] > 0.82) return 0;
+    let hx = n[0], hz = n[2];
+    const hl = Math.hypot(hx, hz), tn = hl / n[1];
+    hx /= hl; hz /= hl;
+    const ax = -hz, az = hx;
+    const S = ring.map(i => X[i] * ax + Z[i] * az), T = ring.map(i => X[i] * hx + Z[i] * hz), Yv = ring.map(i => RY[i]);
+    let sMin = Infinity, sMax = -Infinity, yTop = -Infinity, yEave = Infinity, tTop = 0;
+    for (let k = 0; k < ring.length; k++) {
+      sMin = Math.min(sMin, S[k]); sMax = Math.max(sMax, S[k]);
+      if (Yv[k] > yTop) { yTop = Yv[k]; tTop = T[k]; }
+      yEave = Math.min(yEave, Yv[k]);
+    }
+    const rise = yTop - yEave, len = sMax - sMin;
+    if (rise < 3 || len < 6) return 0;
+    const poly = []; for (let k = 0; k < ring.length; k++) poly.push(S[k], T[k]);
+    const inside = (s, t) => U.pointInPoly(s, t, poly);
+    const P = (s, t, y) => [ax * s + hx * t, y, az * s + hz * t];
+    const tAt = y => tTop + (yTop - y) / tn;
+    const sattel = kit.win === 3 || r() < 0.35, frameC = new THREE.Color('#ece9e2'), glass = new THREE.Color('#1c2228');
+    const nOut = [hx, 0, hz];
+    const cheekL = [-ax, 0, -az], cheekR = [ax, 0, az];
+    let built = 0;
+    const rows = rise > 7 && r() < 0.45 ? [[0.28, 1.0], [0.62, 0.75]] : [[0.3, 1.0]];
+    for (const [fr, sc] of rows) {
+      const yF = yEave + fr * rise, hD = Math.min(1.45, 0.42 * rise) * sc, w = (sattel ? 1.3 : 1.6) * sc;
+      if (hD < 0.9) continue;
+      const tF = tAt(yF), yFT = yF + hD;
+      const cnt = U.clamp(Math.floor((len - 2) / 3.4 * (sc < 1 ? 0.6 : 1)), 1, 4), sp = Math.min(3.4, (len - 2) / cnt), sMid = (sMin + sMax) / 2;
+      // Tiefe bis zum Hauptdach: Schleppdach 0,27 geneigt, Satteldachgaube bis zum First der Gaube
+      const k = 0.27, yR = yFT + w / 2 * 0.9;
+      const dB = sattel ? (yR - yF) / tn : hD / Math.max(tn - k, 0.15);
+      for (let c = 0; c < cnt; c++) {
+        const sc0 = sMid + (c - (cnt - 1) / 2) * sp, s0 = sc0 - w / 2, s1 = sc0 + w / 2;
+        if (!inside(s0 - 0.5, tF + 0.3) || !inside(s1 + 0.5, tF + 0.3) || !inside(s0 - 0.5, tF - dB - 0.3) || !inside(s1 + 0.5, tF - dB - 0.3)) continue;
+        // Front mit Fenster (Rahmen und Glas leicht davor)
+        HouseKit.quad(pb, P(s0, tF, yF - 0.1), P(s1, tF, yF - 0.1), P(s1, tF, yFT), P(s0, tF, yFT), wallCol, nOut);
+        const fi = 0.2, wy0 = yF + 0.2, wy1 = yFT - 0.2;
+        HouseKit.quad(pb, P(s0 + fi, tF + 0.02, wy0), P(s1 - fi, tF + 0.02, wy0), P(s1 - fi, tF + 0.02, wy1), P(s0 + fi, tF + 0.02, wy1), frameC, nOut);
+        HouseKit.quad(pb, P(s0 + fi + 0.07, tF + 0.03, wy0 + 0.07), P(s1 - fi - 0.07, tF + 0.03, wy0 + 0.07), P(s1 - fi - 0.07, tF + 0.03, wy1 - 0.07), P(s0 + fi + 0.07, tF + 0.03, wy1 - 0.07), glass, nOut);
+        const o = 0.18;
+        if (!sattel) {
+          const yB = yFT + k * dB;
+          HouseKit.rquad(this, rt, P(s0 - o, tF + o, yFT - o * k), P(s1 + o, tF + o, yFT - o * k), P(s1 + o, tF - dB, yB), P(s0 - o, tF - dB, yB), roofCol, [hx, 1.4, hz]);
+          pb.tri(P(s0, tF, yF), P(s0, tF, yFT), P(s0, tF - dB, yB), wallCol, null, null, null, ...cheekL);
+          pb.tri(P(s1, tF, yF), P(s1, tF, yFT), P(s1, tF - dB, yB), wallCol, null, null, null, ...cheekR);
+        } else {
+          const dE = hD / tn;
+          HouseKit.rquad(this, rt, P(s0 - o, tF + o, yFT - o * 0.9), P(sc0, tF + o, yR), P(sc0, tF - dB, yR), P(s0 - o, tF - dE, yFT - o * 0.9), roofCol, [-ax + hx * 0.3, 1, -az + hz * 0.3]);
+          HouseKit.rquad(this, rt, P(s1 + o, tF + o, yFT - o * 0.9), P(sc0, tF + o, yR), P(sc0, tF - dB, yR), P(s1 + o, tF - dE, yFT - o * 0.9), roofCol, [ax + hx * 0.3, 1, az + hz * 0.3]);
+          pb.tri(P(s0, tF, yFT), P(s1, tF, yFT), P(sc0, tF, yR), wallCol, null, null, null, ...nOut);
+          pb.tri(P(s0, tF, yF), P(s0, tF, yFT), P(s0, tF - dE, yFT), wallCol, null, null, null, ...cheekL);
+          pb.tri(P(s1, tF, yF), P(s1, tF, yFT), P(s1, tF - dE, yFT), wallCol, null, null, null, ...cheekR);
+        }
+        built++;
+      }
+    }
+    return built;
   }
 
   // Indexliste mit -1 als Trenner -> Ringe [außen, ...Löcher]

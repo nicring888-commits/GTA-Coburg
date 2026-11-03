@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.7.0 „Gewerbe, Industrie, Höfe, Ortsränder“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.8.0 „Fassaden je Bautyp, historische Innenstadt“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -168,6 +168,7 @@ und müssen dort bleiben.
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
+| `data/facades.js` | **Erzeugt** von `tools/convert-facades.js` (seit v3.8.0): je LoD2-Haus Denkmal, Baustoff und Geschosse aus OSM als `window.COBURG_FACADES` (23 KB; fehlt sie, gibt es keine Denkmal-Fassaden) |
 | `data/shops.js` | **Erzeugt** von `tools/convert-shops.js` aus `recherche/pois-coburg.json`: Läden und Lokale als `window.COBURG_SHOPS` ([Name, Art, x, z, geprüft]) |
 | `data/raw/` | Rohdaten: `coburg.osm.json`, `relations.osm.json`, `elevation.json` |
 | `data/raw/lod2/` | LoD2-Rohdaten: 9 CityGML-Kacheln `{ost}_{nord}.gml` (UTM 32N, ≈ 430 MB, werden vom Spiel nicht geladen) |
@@ -179,6 +180,7 @@ und müssen dort bleiben.
 | `tools/convert-region.js` | → `data/region.js` (11 MB): Gelände (Int16, base64), Kachelzustände, Straßennetz, je Kachel Häuser, zugeschnittene Flächen, Bäume, Gewässer, Gleise; Orte. Seit v3.5.0 mit Bautyp je Haus (Flags Bit 2–5, Fachwerk Bit 6), schreibt `data/raw/region/arch-report.json` und `roof-jobs.json` |
 | `tools/classify-buildings.js` | Bautyp-Erkennung (seit v3.5.0): historischer Kern (Dorf/Hof bzw. Kleinstadt), Siedlung 1950er–70er, Einfamilienhaus 1970er–90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft alt/modern, Nebengebäude, Sonderbau. Merkmale: Denkmal (`heritage`, `ref:BLfD`), Baujahr, Dachform, Geschosse, Baustoff, Flächennutzung, Abstand zu Kirche/Ortsmittelpunkt (relativ zur Ortsgröße), zusammenhängende Siedlung, Gleichförmigkeit der Nachbarhäuser (Größe, Ausrichtung zur Straße, Abstand zur Straße), Lage direkt an der Gasse, Hofstellen, Sackgassen und Spielstraßen, Grundriss (schmal = Siedlungshaus, Würfel = Neubau, Winkel = 70er–90er), Dachfarbe aus dem Luftbild; Glättung je Straßenzug. Fachwerk nur bei historischem Bautyp mit Beleg (Baustoff `timber_framing`, Denkmal) bzw. starken historischen Merkmalen |
 | `tools/roof-colors.ps1` | Dachfarbe je Haus aus den Luftbildern (PowerShell/.NET, weil Node keinen JPEG-Leser hat) → `data/raw/region/roof-colors.json`; optional, ohne Datei arbeitet die Erkennung ohne Dachfarbe |
+| `tools/convert-facades.js` | Fassaden-Merkmale der Innenstadt (seit v3.8.0): LoD2-Haus → OSM-Gebäude unter seinem Mittelpunkt (`heritage`/`historic`, `building:material`, `building:levels`) → `data/facades.js`; nach `convert-lod2.js` ausführen |
 | `tools/arch-stats.js` | Verteilung der Bautypen je Gemeinde und Prüfungen (Denkmäler, Fachwerk nur historisch) aus `arch-report.json`; `--md datei` schreibt sie als Tabelle (`recherche/bautypen-statistik.md`) |
 | `tools/utm.js` | Umrechnung UTM 32N (EPSG:25832) ↔ Länge/Breite (Krüger-Reihen, millimetergenau) |
 | `tools/fetch-osm.js` | Lädt die OSM-Daten über die Overpass-API (mit Ausweichservern) |
@@ -212,6 +214,7 @@ node tools/fetch-ortho.js     # bei geändertem Ausschnitt vorher den Ordner dat
 node tools/fetch-lod2.js      # lädt nur fehlende oder geänderte Kacheln
 node tools/convert-lod2.js    # nach jedem convert.js neu ausführen (Geländebezug und OSM-Namen)
 node tools/convert-shops.js   # nach Änderungen an recherche/pois-coburg.json
+node tools/convert-facades.js # nach convert-lod2.js (Denkmal, Baustoff, Geschosse je LoD2-Haus)
 # Umland (Landkreis), nach convert.js:
 node tools/fetch-region-osm.js        # Overpass, oft überlastet: dauert 1–2 Stunden
 node tools/fetch-region-elevation.js
@@ -268,6 +271,39 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.8.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Fassaden je Bautyp über Tabellen, historische Innenstadt
+  – Phase 4 des Grafik-Fahrplans (7.1).**
+  - **Wandprofil erweitert:** Stil + 8 × Bautyp + 128 × Fachwerk + 256 × Wandbaustoff + 2048 × Fensterart. Die Wahl
+    trifft JavaScript über Tabellen, der Fassadenshader liest sie nur noch (der Zufall je Haus im Shader für Holzflächen,
+    Läden, Rollläden, Rahmenfarben und bodentiefe Fenster entfällt bei Häusern mit Tabelle)
+  - **Umland (`FACADE_KIT` in `region.js`):** je Bautyp Anteile für Baustoff (Putz, Klinker, Holz im Obergeschoss/Giebel,
+    Faserzement-Schindeln im Giebel, Schiefer im Obergeschoss/Giebel, Klinkersockel, Holzhaus) und Fensterart (Holz weiß
+    mit Klappläden, Holz weiß, Kunststoff weiß mit Rollladen, Holz braun mit Rollladen, anthrazit mit Raffstore, weiß
+    bzw. anthrazit bodentief). Raffstores mit feineren Lamellen; Teilung je Fensterart (Pfosten, Kämpfer). Klinker- und
+    Holzhäuser bekommen ihre Wandfarbe aus `KLINKER_WALLS`/`WOOD_WALLS`. Fachwerkhäuser bleiben verputzt. Eigener Zufall
+    aus der Lage, die übrigen Farben und Dächer der Kachel bleiben gleich
+  - **Innenstadt (`CITY_KIT` in `world.js`, Daten `data/facades.js`):** nach Lage (Altstadt, Gründerzeitstraße, sonst)
+    und Denkmal-Kennung (477 LoD2-Häuser zugeordnet): Sandstein-Gewände (#cbb99a, getrennt vom weißen Flügelrahmen),
+    Putzfaschen mit Klappläden (dunkelgrün, grau, braun), Barock/Denkmal mit Gewänden, Läden und Eckquadern, Gründerzeit
+    mit Sandstein-Erdgeschoss (Lagerfugen) und Rundbogenfenstern, Segmentbögen darüber, kräftigen Sandstein-Gesimsen und
+    Traufgesims; Klinker über dem Erdgeschoss (OSM `brick` oder Klinkerfarbe), Sandsteinquader (OSM `stone`). Stadthaus
+    mit ochsenblutroten Gewänden. **Fachwerk nur belegt:** Hofapotheke (Markt 15, rotes Gebälk mit Streben), sonst keins
+  - **Gauben in der Innenstadt** (`lodDormers`): auf LoD2-Dachflächen alter Häuser (Altstadt, Gründerzeit, Denkmäler)
+    mit 35–65° Neigung, ≥ 6 m Länge und ≥ 3 m Höhe; Schlepp- oder Satteldachgauben (Gründerzeit Satteldach), bei hohen
+    Dächern eine zweite kleinere Reihe; nur wo die Gaube ganz auf der Dachfläche liegt. 1.498 Gauben
+  - **Getestet (Chromium):** Markt mit Hofapotheke (Fachwerk, zwei Gaubenreihen), Mohrenstraße (Klinker, Sandstein-
+    Erdgeschoss, Rund- und Segmentbögen, Gesimse), Albertsplatz (Klappläden, Gauben), Neubaugebiet Unterlauter
+    (Holzschalung, Raffstores), Siedlung (Faserzement-Giebel); Tag und Nacht, keine Shaderfehler. Verteilung um
+    Unterlauter: Putz mit Rollladen am häufigsten, dann Holz braun, Holz weiß, Faserzement-Giebel, bodentief …
+    **Leistung:** Bausatz der Innenstadt 35 ms beim Laden (einmalig); Kachelaufbau Seßlach 20,5 → 21,0 ms, Neustadt
+    38,6 → 41,3 ms (bester von 3)
+- ⚠️ Grenzen v3.8.0: Die Innenstadt sieht jetzt anders aus als bis v3.7.0 (gewollt). Gewände und Läden folgen dem
+  Fensterraster der Textur, nicht den echten Fenstern; Rundbögen nur als Umriss (kein Schlussstein). Gauben-Fenster
+  leuchten nachts nicht; Gauben sind geschätzt (LoD2 hat keine) und nicht an den Fensterachsen ausgerichtet. Weitere
+  Fachwerkhäuser aus der Recherche (Steinweg-Nordende, Grafengasse, Steintor schiefergrau, Viktoriastraße) fehlen, bis
+  ihre genaue Lage belegt ist. Mehrfamilienhäuser im Umland nutzen die Tabelle noch nicht. Baustoff im Umland nach
+  Anteilen geschätzt (OSM hat dort kaum Angaben).
 
 - ✅ v3.7.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Gewerbe, Industrie, moderne Höfe und Ortsränder –
   Phase 3 des Grafik-Fahrplans (7.1).** Alles im Umland; Innenstadt unverändert (der neue Shader-Zweig greift nur ab
@@ -894,7 +930,7 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 1 | **Bautyp-Erkennung + Stilweiche (v3.5.0):** jedes Haus im Landkreis bekommt beim Umwandeln einen Bautyp (historischer Kern, Siedlung 50er–70er, EFH 80er/90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft, Nebengebäude, Sonderbau) aus Denkmal-Kennung, Ortskern-Abstand (Kirchen, Ortsmittelpunkte), Parzellen-Regelmäßigkeit, Sackgassen/Wendehämmer, Grundriss, OSM-Merkmalen. Das Spiel wählt danach Dachneigung, Farben, Sockel, Fenster, Läden, Fachwerk (nur belegt) und Gärten | `tools/classify-buildings.js` (neu), `tools/convert-region.js`, `data/region.js`, `js/region.js`, `js/world.js` (`facadeShader`), `js/landscape.js` (`buildVillage`), `tools/arch-stats.js` (neu) | M |
 | ✅ 2 | Haustyp-Bibliothek und Umgebung (v3.6.0): Dachformen je Bautyp, Gauben, Balkone, Garagen/Carports, Zäune und Einfassungen, Gehsteige, Fußgängerverteilung nach Gegend und Tageszeit | `js/houses.js` (neu), `region.js`, `world.js`, `landscape.js`, `pedestrians.js`, `player.js`, `game.js`, `tools/convert-region.js`, `tools/classify-buildings.js` | L |
 | ✅ 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder (v3.7.0): Hallen je Art mit Fassaden, Toren und Dächern, Discounter mit Glasfront und Vordach, Tankstellen, Parkplätze, Zäune, Firmenschilder, Biogas/Silos, Fahrsilos, Ortstafeln | `js/archetypes.js` (neu), `region.js`, `world.js` (Stil 6/7), `props.js`, `landscape.js`, `boot.js` | M |
-| 4 | Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
+| ✅ 4 | (v3.8.0) Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
 | 5 | three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
 | 6 | WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
 | 7 | PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
@@ -903,9 +939,8 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phase 1 (v3.5.0), Phase 2 (v3.6.0) und Phase 3 (v3.7.0, 03.11.2026) umgesetzt und getestet (auf dem
-Branch, siehe 6). Nächster Schritt nach Freigabe: **Phase 4** (Fassaden je Bautyp über eine
-Tabelle, Innenstadt historisch genauer). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
+**Stand:** Phasen 1–4 (v3.5.0–v3.8.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 5** (three.js aktuell als ES-Modul, WebGL bleibt). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben
