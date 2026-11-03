@@ -42,7 +42,7 @@ class PostFX {
     this.exposure = 1.0;
     this.params = {
       fogCol: new THREE.Color('#c8dbec'), sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color('#fff1dc'),
-      fogDensity: 0.001, fogBase: 0, night: 0, wet: 0, sunVis: 1, cloud: 0.2, cloudT: 0,
+      fogDensity: 0.001, fogBase: 0, night: 0, wet: 0, sunVis: 1, cloud: 0.2, cloudT: 0, golden: 0,
     };
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quad.frustumCulled = false;
@@ -101,6 +101,7 @@ class PostFX {
       ao: half(hw, hh, aoOpt), ao2: half(hw, hh, aoOpt),
       b1: half(hw, hh), b2: half(Math.ceil(W / 4), Math.ceil(H / 4)), b3: half(Math.ceil(W / 8), Math.ceil(H / 8)),
       b4: half(Math.ceil(W / 16), Math.ceil(H / 16)), b5: half(Math.ceil(W / 32), Math.ceil(H / 32)),
+      r1: half(Math.ceil(W / 4), Math.ceil(H / 4)), r2: half(Math.ceil(W / 4), Math.ceil(H / 4)),
     };
     return this.targets;
   }
@@ -214,11 +215,38 @@ class PostFX {
       }`, { tColor: { value: null }, uTexel: { value: new THREE.Vector2() } },
     { blending: THREE.AdditiveBlending, transparent: true });
 
+    // Lichtstrahlen (seit v3.15.0, Grafik-Phase 10d): Himmel um die Sonne (Wolken und Häuser verdecken) in Viertelauflösung,
+    // dann zweimal radial zur Sonne hin verwischt
+    this.raysMaskMat = sm(`
+      varying vec2 vUv;
+      ${POST_COMMON}
+      uniform sampler2D tColor; uniform mat4 uCamWorld; uniform vec3 uSunDir;
+      void main() {
+        if (texture2D(tDepth, vUv).r < 0.99999) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+        vec3 rd = normalize(mat3(uCamWorld) * viewPosAt(vUv));
+        float mu = max(dot(rd, uSunDir), 0.0);
+        vec3 c = texture2D(tColor, vUv).rgb;
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        gl_FragColor = vec4(vec3(min(l, 4.0) * (pow(mu, 10.0) * 0.6 + pow(mu, 60.0) * 4.0)), 1.0);
+      }`, { tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, tColor: { value: null }, uCamWorld: { value: new THREE.Matrix4() }, uSunDir: { value: new THREE.Vector3() } });
+    this.raysBlurMat = sm(`
+      varying vec2 vUv;
+      uniform sampler2D tColor; uniform vec2 uSun; uniform float uLen;
+      float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+      void main() {
+        vec2 d = (uSun - vUv) * uLen / 40.0;
+        vec2 uv = vUv + d * ign(gl_FragCoord.xy);
+        vec3 s = vec3(0.0); float w = 1.0, tw = 0.0;
+        for (int i = 0; i < 40; i++) { s += texture2D(tColor, uv).rgb * w; tw += w; w *= 0.965; uv += d; }
+        gl_FragColor = vec4(s / tw, 1.0);
+      }`, { tColor: { value: null }, uSun: { value: new THREE.Vector2() }, uLen: { value: 1 } });
+
     // Zusammensetzen: Verdeckung, Luftperspektive, Bloom, Belichtung, ACES, Farbkorrektur, Vignette, Körnung
     this.compMat = sm(`
       varying vec2 vUv;
       ${POST_COMMON}
-      uniform sampler2D tColor, tAO, tBloom;
+      uniform sampler2D tColor, tAO, tBloom, tRays;
+      uniform float uRays;
       uniform mat4 uCamWorld, uProj;
       uniform vec2 uSceneTexel;
       uniform vec3 uFogCol, uSunDir, uSunCol;
@@ -336,6 +364,12 @@ class PostFX {
         #ifdef USE_BLOOM
           col += texture2D(tBloom, vUv).rgb * uBloom;
         #endif
+        #ifdef USE_RAYS
+          if (uRays > 0.0) col += texture2D(tRays, vUv).rgb * uSunCol * uRays;
+          #ifdef DEBUG_RAYS
+            gl_FragColor = vec4(texture2D(tRays, vUv).rgb, 1.0); return;
+          #endif
+        #endif
         col *= uExposure;
         col = aces(col);
         // Farbkorrektur: etwas entsättigt, warme Lichter, kühle Schatten, sanfter Kontrast (Stil GTA IV)
@@ -365,6 +399,7 @@ class PostFX {
       uFogCol: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Color() },
       uFogDensity: { value: 0.001 }, uFogBase: { value: 0 }, uFogFall: { value: 1 / 160 }, uExposure: { value: 1 },
       uBloom: { value: 0.08 }, uNight: { value: 0 }, uWet: { value: 0 }, uTime: { value: 0 }, uAO: { value: 0.85 },
+      tRays: { value: null }, uRays: { value: 0 },
       uProj: { value: new THREE.Matrix4() }, uSceneTexel: { value: new THREE.Vector2() },
       uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() }, uCloud: { value: 0.2 }, uCloudT: { value: 0 },
     });
@@ -433,9 +468,31 @@ class PostFX {
       }
       r.autoClear = true;
     }
+    // Lichtstrahlen: nur, wenn die Sonne vor der Kamera steht (auch knapp außerhalb des Bildes) und scheint
+    let rays = 0;
+    if (q.bloom && P.sunVis > 0.05 && !this.noRays) {
+      const v = this._sv || (this._sv = new THREE.Vector3()), f = this._sf || (this._sf = new THREE.Vector3());
+      camera.getWorldDirection(f);
+      const facing = f.dot(P.sunDir);
+      if (facing > 0.1) {
+        v.copy(P.sunDir).multiplyScalar(1000).add(camera.position).project(camera);
+        const sx = v.x * 0.5 + 0.5, sy = v.y * 0.5 + 0.5, off = Math.max(0, Math.abs(v.x) - 1, Math.abs(v.y) - 1);
+        rays = P.sunVis * U.smoothstep(0.1, 0.45, facing) * (1 - U.smoothstep(0.2, 1.2, off)) * (0.6 + 0.6 * P.golden);
+        if (rays > 0.01) {
+          const mu = this.raysMaskMat.uniforms;
+          mu.tDepth.value = depth; mu.uInvProj.value.copy(camera.projectionMatrixInverse); mu.tColor.value = T.scene.texture;
+          mu.uCamWorld.value.copy(camera.matrixWorld); mu.uSunDir.value.copy(P.sunDir);
+          this.pass(this.raysMaskMat, T.r1);
+          const bu = this.raysBlurMat.uniforms;
+          bu.uSun.value.set(sx, sy);
+          bu.tColor.value = T.r1.texture; bu.uLen.value = 0.9; this.pass(this.raysBlurMat, T.r2);
+          bu.tColor.value = T.r2.texture; bu.uLen.value = 0.3; this.pass(this.raysBlurMat, T.r1);
+        } else rays = 0;
+      }
+    }
     // Zusammensetzen auf den Bildschirm
     const c = this.compMat, u = c.uniforms;
-    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0);
+    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0);
     if (c.userData.key !== want) {
       c.userData.key = want;
       c.defines = {};
@@ -444,6 +501,8 @@ class PostFX {
       if (this.debugAO) c.defines.DEBUG_AO = '';
       if (q.ssr && !this.noSSR) { c.defines.USE_SSR = ''; c.defines.SSR_STEPS = q.ssr; }
       if (this.debugSSR) c.defines.DEBUG_SSR = '';
+      if (q.bloom) c.defines.USE_RAYS = '';
+      if (this.debugRays) c.defines.DEBUG_RAYS = '';
       c.needsUpdate = true;
     }
     u.tColor.value = T.scene.texture; u.tDepth.value = depth; u.tAO.value = T.ao.texture; u.tBloom.value = T.b1.texture;
@@ -452,6 +511,7 @@ class PostFX {
     u.uFogDensity.value = P.fogDensity; u.uFogBase.value = P.fogBase;
     u.uExposure.value = this.exposure; u.uNight.value = P.night; u.uWet.value = P.wet; u.uSunVis.value = P.sunVis;
     u.uCloud.value = P.cloud; u.uCloudT.value = P.cloudT;
+    u.tRays.value = T.r1.texture; u.uRays.value = rays * 0.14;
     u.uBloom.value = P.night > 0.5 ? 0.16 : 0.07;
     u.uTime.value = performance.now() / 1000;
     u.uRes.value.set(this.size.x, this.size.y);

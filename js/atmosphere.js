@@ -287,7 +287,7 @@ class Atmosphere {
       const P = post.params;
       P.fogCol.copy(fog.color); P.fogDensity = 2.1 / far;
       P.sunDir.copy(this.sunTrue); P.sunCol.copy(C.sun).multiplyScalar(1 + this.golden * 1.5);
-      P.sunVis = w.sun * (1 - n) * (1 - g * 0.6); P.night = n; P.wet = this.wet; P.cloud = w.cloud; P.cloudT = this.time;
+      P.sunVis = w.sun * (1 - n) * (1 - g * 0.6); P.night = n; P.wet = this.wet; P.cloud = w.cloud; P.cloudT = this.time; P.golden = this.golden;
       post.exposure = U.lerp(U.lerp(1.08, 1.2, this.golden), 1.85, n) * (1 + g * 0.12);
       fog.near = 1e7; fog.far = 2e7;
     }
