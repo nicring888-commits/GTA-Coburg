@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.10.0 „WebGPU-Probe“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.11.0 „Materialbibliothek, KTX2-Luftbilder“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -38,7 +38,7 @@ eine Internetverbindung gebraucht. Mit `?three=160` in der Adresse lädt das Spi
 
 **Grafik-Proben (seit v3.10.0):** `?gfx=webgpu` zeichnet die Szene mit three.js' `WebGPURenderer` (Messanzeige oben
 rechts), `?gfx=webgpu-gl` mit dessen WebGL2-Rückfall, `?gfx=stats` zeigt dieselbe Messanzeige für den normalen WebGL-Weg.
-Ohne Angabe bleibt alles wie bisher (WebGL).
+Ohne Angabe bleibt alles wie bisher (WebGL). `?ktx2=0` lädt die Luftbilder des Umlands zum Vergleich als JPG.
 
 **Grafikstufen (seit v3.1.2):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
 Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder auf dem Startbildschirm; die Wahl bleibt gespeichert
@@ -146,6 +146,7 @@ und müssen dort bleiben.
 | `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
 | `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (seit v3.9.0 `THREE_VERSION` 0.186.1 per `import()` als ES-Modul und stellt es als `window.THREE` bereit; Ersatz `three.min.js` r160, erzwingbar mit `?three=160`; jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
+| `js/materials.js` | Materialbibliothek (seit v3.11.0, `Mat`): Voreinstellungen `MAT_PRESETS` (Lack, Chrom, Glas, Gummi, Kunststoff, Metall …), `Mat.make(voreinstellung, werte, schlüssel)` stuft je Grafikstufe ab (voll Physical/Standard, mobil Standard, leicht Lambert) und lässt unbekannte Werte weg; Budget `Mat.aniso`, `Mat.size` (gemalte Texturen); KTX2-Lader (`Mat.ktx2`, `Mat.loadKTX2`, three.js-Erweiterung `KTX2Loader` mit Basis-Transcoder vom CDN, Import-Map in `index.html`) |
 | `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
@@ -188,6 +189,7 @@ und müssen dort bleiben.
 | `tools/roof-colors.ps1` | Dachfarbe je Haus aus den Luftbildern (PowerShell/.NET, weil Node keinen JPEG-Leser hat) → `data/raw/region/roof-colors.json`; optional, ohne Datei arbeitet die Erkennung ohne Dachfarbe |
 | `tools/convert-facades.js` | Fassaden-Merkmale der Innenstadt (seit v3.8.0): LoD2-Haus → OSM-Gebäude unter seinem Mittelpunkt (`heritage`/`historic`, `building:material`, `building:levels`) → `data/facades.js`; nach `convert-lod2.js` ausführen |
 | `tools/arch-stats.js` | Verteilung der Bautypen je Gemeinde und Prüfungen (Denkmäler, Fachwerk nur historisch) aus `arch-report.json`; `--md datei` schreibt sie als Tabelle (`recherche/bautypen-statistik.md`) |
+| `tools/ortho-ktx2.mjs` | Luftbilder des Umlands (Einzelbilder und HD-Kacheln) zusätzlich als KTX2 (Basis Universal ETC1S, Mipmaps, Y gespiegelt) neben die JPGs, Liste in `data/region/ortho-ktx2.js`; braucht ffmpeg und `npm i --no-save ktx2-encoder@0.6.0`; nur fehlende bzw. ältere Dateien (`--alle` für alle). Mischkacheln Bayern/Thüringen bleiben JPG |
 | `tools/utm.js` | Umrechnung UTM 32N (EPSG:25832) ↔ Länge/Breite (Krüger-Reihen, millimetergenau) |
 | `tools/fetch-osm.js` | Lädt die OSM-Daten über die Overpass-API (mit Ausweichservern) |
 | `tools/fetch-elevation.js` | Lädt das Höhenraster (≈ 38 Anfragen, 1 pro Sekunde) |
@@ -226,6 +228,7 @@ node tools/fetch-region-osm.js        # Overpass, oft überlastet: dauert 1–2 
 node tools/fetch-region-elevation.js
 node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
 node tools/fetch-region-ortho-hd.js   # scharfe Ortskacheln, nach convert-region.js
+node tools/ortho-ktx2.mjs             # Luftbilder zusätzlich als KTX2 (≈ 10 min; ffmpeg + npm i --no-save ktx2-encoder@0.6.0)
 node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
 node tools/convert-region.js
 powershell -ExecutionPolicy Bypass -File tools/roof-colors.ps1   # Dachfarben (3 s), danach convert-region.js noch einmal
@@ -277,6 +280,28 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.11.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Materialbibliothek, Budget je Grafikstufe,
+  KTX2-Luftbilder – Phase 7 des Grafik-Fahrplans (7.1).**
+  - **`js/materials.js`** (siehe 5): eine Fabrik mit PBR-Voreinstellungen; Fahrzeuge (Lack mit Klarlack, Glas, Chrom,
+    Gummi, Kunststoff) und Laternenmasten im Umland laufen darüber. Budget in `QUALITY.budget` (`js/boot.js`):
+    voll Physical/Standard, Anisotropie 16, gemalte Texturen voll; mobil Standard ohne Klarlack, Anisotropie 4,
+    Landschaftstexturen halb so groß; leicht Lambert, Anisotropie 2, Landschaftstexturen halb so groß. Alle
+    Anisotropie-Werte (Welt, Umland, Landschaft) gehen über `Mat.aniso`
+  - **KTX2:** 920 Luftbilder des Umlands (891 Kacheln + 29 HD-Kacheln, Mischkacheln Bayern/Thüringen bleiben JPG) als
+    Basis-Universal-ETC1S mit Mipmaps (`tools/ortho-ktx2.mjs`, 13 min), 53,7 MB statt 54,1 MB JPG; dazu je Kachel ein
+    Vorschaubild `*.256.jpg` (16 MB), weil Bewuchsfarbe und Gehölze aus dem Luftbild lesbare Pixel brauchen.
+    Geladen mit `KTX2Loader` (Transcoder im Worker, Import-Map in `index.html`), Rückfall auf JPG bei Fehlern.
+    **Grafikspeicher der Luftbilder** bei Netto Untersiemau (44 Kacheln): 61,4 MB → 15,4 MB (−75 %)
+  - **Getestet (Chromium):** Stufen voll (Physical-Lack) und leicht (Lambert, ohne Warnungen); Luftbild-Ausrichtung
+    KTX2 ↔ JPG (`?ktx2=0`) gleich; HD-Kachel als KTX2; Bewuchs aus dem Vorschaubild; keine Konsolenfehler
+  - Beim Testen behoben: gleichzeitige Kacheln fanden den KTX2-Lader „noch nicht da“ und nahmen das JPG (jetzt ein
+    gemeinsames Promise); komprimierte Texturen haben keine lesbaren Pixel (Vorschaubilder)
+- ⚠️ Grenzen v3.11.0: Noch nicht alle Materialien laufen über die Fabrik (Innenräume, Läden, Waffen, Stadtleben,
+  Requisiten der Innenstadt: rund 80 Stellen); Hausfassaden bleiben Lambert mit eigenem Shader (PBR für Fassaden mit
+  TSL in Phase 11). Texturen als Arrays nicht umgesetzt (die gemalten Texturen liegen schon als Atlanten vor; die
+  Luftbilder je Kachel bleiben Einzeltexturen, weil Kacheln einzeln kommen und gehen). Innenstadt-Luftbilder
+  (`data/ortho/`, 5 MB) und Mischkacheln weiter JPG. Repository und Deployment +70 MB. Ladezeit mit KTX2 nicht gemessen.
 
 - ✅ v3.10.0 (03.11.2026, Branch `grafik/regionale-architektur`): **WebGPU-Probe – Phase 6 des Grafik-Fahrplans (7.1).**
   `js/gfx-webgpu.js` (neu), Anbindung in `game.js` (statt `post.render`, wenn die Probe läuft) und `boot.js`
@@ -982,15 +1007,15 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 4 | (v3.8.0) Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
 | ✅ 5 | (v3.9.0, r186) three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
 | ✅ 6 | (v3.10.0) WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
-| 7 | PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
+| ✅ 7 | (v3.11.0) PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
 | 8 | Leistung: Kachelbau im Worker, vereinfachte ferne Kacheln (HLOD), `BatchedMesh`, größere Sichtweite, Impostor-Wälder | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
 | 9 | Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege im Umland, Kanaldeckel, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–6 (v3.5.0–v3.10.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 7** (PBR-Materialbibliothek, Texturen als Atlanten/Arrays, KTX2, Budget je
-Qualitätsstufe). Nach der WebGPU-Messung sollte **Phase 8** (weniger Zeichenaufrufe) vor Phase 11 kommen. Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
+**Stand:** Phasen 1–7 (v3.5.0–v3.11.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 8** (Kachelbau im Worker, vereinfachte ferne Kacheln, `BatchedMesh`, weniger
+Zeichenaufrufe – nach der WebGPU-Messung Voraussetzung für Phase 11). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben

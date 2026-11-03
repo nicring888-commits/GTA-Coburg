@@ -27,6 +27,7 @@ const COVER_ORDER = ['residential', 'farmyard', 'farmland', 'meadow', 'grass', '
 
 // ---------- Texturen (einmal aus der Leinwand gemalt, nahtlos kachelbar) ----------
 function landCanvas(S, base, draw) {
+  S = Mat.size(S);   // Budget je Grafikstufe (js/materials.js): auf mobil/leicht halb so groß
   const cv = document.createElement('canvas'); cv.width = cv.height = S;
   const c = cv.getContext('2d');
   if (base) { c.fillStyle = base; c.fillRect(0, 0, S, S); }
@@ -38,7 +39,7 @@ function landCanvas(S, base, draw) {
 function landTextures(renderer) {
   if (landTextures.cache) return landTextures.cache;
   const rnd = U.rng(4242);
-  const aniso = renderer.capabilities.getMaxAnisotropy();
+  const aniso = Mat.aniso(renderer);
   const tex = (cv, srgb = true) => {
     const t = new THREE.CanvasTexture(cv);
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
@@ -243,7 +244,7 @@ class Landscape {
   // Farbe des Luftbilds an einem Punkt (stark verkleinert, für die Farbe des Bewuchses)
   photoAt(x, z, t) {
     if (!t.photoSmall) {
-      const img = t.terrainMat.map && t.terrainMat.map.image;
+      const img = this.region.photoImage(t);
       if (!img || !img.width || img.width < 8) return null;
       const cv = document.createElement('canvas'); cv.width = cv.height = 64;
       const c = cv.getContext('2d', { willReadFrequently: true }); c.drawImage(img, 0, 0, 64, 64);

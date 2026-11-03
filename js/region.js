@@ -614,7 +614,7 @@ class Region {
   setTexture(t, tex) {
     if (t.disposed) { tex.dispose(); return; }
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
+    tex.anisotropy = Mat.aniso(this.world.renderer);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     t.tex = tex;
     // Gehölze aus dem Luftbild und die Farbe des Bewuchses brauchen das Foto: jetzt nachholen
@@ -638,26 +638,50 @@ class Region {
       for (let k = 0; k < A.length; k += 4) if (A[k] > 246 && A[k + 1] > 246 && A[k + 2] > 246) { A[k] = B[k]; A[k + 1] = B[k + 1]; A[k + 2] = B[k + 2]; }
       c.putImageData(ta, 0, 0);
       return new THREE.CanvasTexture(cv);
-    }) : img(url(flag === 2 ? 'th' : 'by')).then(im => { const tx = new THREE.Texture(im); tx.needsUpdate = true; return tx; });
+    }) : this.ktx2Or(`${flag === 2 ? 'th' : 'by'}${t.ti}_${t.tj}`, () => img(url(flag === 2 ? 'th' : 'by')).then(im => { const tx = new THREE.Texture(im); tx.needsUpdate = true; return tx; }), t);
     job.then(tex => this.setTexture(t, tex)).catch(e => console.warn('Luftbild fehlt', t.ti, t.tj, e));
   }
+  // Luftbild als KTX2 (tools/ortho-ktx2.mjs, Liste in data/region/ortho-ktx2.js), sonst bzw. bei Fehlern das JPG
+  // (komprimierte Texturen haben keine lesbaren Pixel: für Bewuchsfarbe und Gehölze aus dem Luftbild lädt die Kachel
+  // dann das kleine Vorschaubild {name}.256.jpg nach t.photoImg)
+  ktx2Or(name, jpg, t) {
+    const K = window.COBURG_REGION_KTX2;
+    if (!K || !K.tiles[name] || !Mat.budget.ktx2) return jpg();
+    return Mat.loadKTX2(this.world.renderer, `data/region/ortho/${name}.ktx2`).then(tex => {
+      if (t && !t.photoImg) {
+        const im = new Image();
+        im.onload = () => {
+          if (t.disposed) return;
+          t.photoImg = im; t.photoSmall = null;
+          if (this.land) this.land.tileChanged(t);
+          if (this.treesOn.has(t.key) && !t.photoVeg) { this.dropTrees(t); this.buildTrees(t); }
+        };
+        im.src = `data/region/ortho/${name}.256.jpg`;
+      }
+      return tex;
+    }).catch(e => { console.warn('KTX2', name, e.message, '– JPG'); return jpg(); });
+  }
+  // Luftbild der Kachel als lesbares Bild (Vorschaubild bei KTX2, sonst das geladene Bild)
+  photoImage(t) { return t.photoImg || Mat.drawable(t.tex && t.tex.image); }
   // Schärferes Luftbild (tools/fetch-region-ortho-hd.js) für Kacheln direkt um den Spieler, weiter weg wieder das normale
   hdNear(t, d) {
     const H = window.COBURG_REGION_ORTHO_HD;
     if (!H || !this.ortho || !H.tiles[t.ti + ',' + t.tj]) return;
     if (d < 450 && !t.hd) {
       t.hd = 'laden';
-      const im = new Image();
-      im.onload = () => {
-        if (t.disposed || t.hd !== 'laden') return;
-        const tx = new THREE.Texture(im);
-        tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = this.world.renderer.capabilities.getMaxAnisotropy();
-        tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping; tx.needsUpdate = true;
+      const jpg = () => new Promise((res, rej) => {
+        const im = new Image();
+        im.onload = () => { const tx = new THREE.Texture(im); tx.needsUpdate = true; res(tx); };
+        im.onerror = rej;
+        im.src = `data/region/ortho/hd${t.ti}_${t.tj}.jpg`;
+      });
+      this.ktx2Or(`hd${t.ti}_${t.tj}`, jpg).then(tx => {
+        if (t.disposed || t.hd !== 'laden') { tx.dispose(); return; }
+        tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = Mat.aniso(this.world.renderer);
+        tx.wrapS = tx.wrapT = THREE.ClampToEdgeWrapping;
         t.texHd = tx; t.hd = 'an';
         t.terrainMat.map = tx; t.roofMat.map = tx;
-      };
-      im.onerror = () => { t.hd = 'fehlt'; };
-      im.src = `data/region/ortho/hd${t.ti}_${t.tj}.jpg`;
+      }).catch(() => { t.hd = 'fehlt'; });
     } else if (d > 900 && t.hd === 'an') {
       t.terrainMat.map = t.tex || this.placeholder(); t.roofMat.map = t.tex || this.placeholder();
       t.texHd.dispose(); t.texHd = null; t.hd = null;
@@ -1178,7 +1202,7 @@ class Region {
       })();
       const glow = new THREE.PlaneGeometry(10, 10); glow.rotateX(-Math.PI / 2);
       const P = this.props;
-      this._life = { pole, head, glow, poleMat: new THREE.MeshLambertMaterial({ color: '#2e3236' }),
+      this._life = { pole, head, glow, poleMat: Mat.make('metallLack', { color: '#2e3236' }),
         headMat: P && P.lampMat ? P.lampMat : new THREE.MeshLambertMaterial({ color: '#fff4d6', emissive: '#ffd890', emissiveIntensity: 0.05 }),
         glowMat: new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2 }) };
     }
@@ -1756,7 +1780,7 @@ class Region {
   // Gehölze aus dem Luftbild: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser werden zu Büschen
   // (Hecken, schmale Streifen) und Bäumen (große Flecken)
   photoVegetation(t, pts, free) {
-    const img = t.tex && t.tex.image;
+    const img = this.photoImage(t);
     if (!img || !img.width || img.width < 64) return;
     t.photoVeg = true;
     const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;

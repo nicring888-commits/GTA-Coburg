@@ -45,6 +45,12 @@
       region: { load: 800, drop: 1200, trees: 450, treesDrop: 700, life: 400, lifeDrop: 600 } },
   }[level];
   Q.phone = phone; Q.ios = ios;
+  // Budget je Stufe (js/materials.js): Materialart (physical → standard → lambert), Anisotropie, Größe gemalter
+  // Texturen, KTX2-Luftbilder (Grafik-Phase 7)
+  Q.budget = { voll: { level, pbr: 'physical', aniso: 16, texScale: 1, ktx2: true },
+    mobil: { level, pbr: 'standard', aniso: 4, texScale: 0.5, ktx2: true },
+    leicht: { level, pbr: 'lambert', aniso: 2, texScale: 0.5, ktx2: true } }[level];
+  if (/[?&]ktx2=0\b/.test(location.search)) Q.budget.ktx2 = false;   // zum Vergleich: Luftbilder als JPG
   Q.freeGeometry = level !== 'voll';
   window.QUALITY = Q;
 
@@ -155,10 +161,11 @@
     { src: 'data/shops.js', what: 'Läden' },
     { src: 'data/region.js', what: 'Landkreis' },
     { src: 'data/region/ortho.js', what: 'Luftbilder Landkreis' },
+    { src: 'data/region/ortho-ktx2.js', what: 'Luftbilder (KTX2)' },
     { src: 'data/region-rural.js', what: 'Feldwege und Hecken' },
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
-  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'region',
+  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'region',
     'vehicle', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
     'property', 'venues', 'net-p2p', 'net', 'gfx-webgpu', 'game', 'touch'].map(n => `js/${n}.js`));
 

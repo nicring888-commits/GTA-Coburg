@@ -252,20 +252,21 @@ function blobTexture() {
 }
 function carMaterials() {
   if (_carMat.glass) return _carMat;
-  const std = o => new THREE.MeshStandardMaterial(o);
-  _carMat.glass = std({ color: '#121a22', roughness: 0.05, metalness: 0.1, envMapIntensity: 1.8 });
-  _carMat.tire = std({ color: '#161616', roughness: 0.92 });
-  _carMat.hub = std({ color: '#c3c7cc', roughness: 0.28, metalness: 0.9, envMapIntensity: 1.2 });
-  _carMat.trim = std({ color: '#1c1d1f', roughness: 0.6 });
-  _carMat.plate = std({ map: plateTexture(), roughness: 0.5 });
-  _carMat.head = std({ color: '#fff6dd', emissive: '#fff1c4', emissiveIntensity: 0.2, roughness: 0.15, metalness: 0.3 });
-  _carMat.tail = std({ color: '#7a0c0c', emissive: '#ff2020', emissiveIntensity: 0.25, roughness: 0.25 });
-  _carMat.policeBlue = new THREE.MeshPhysicalMaterial({ color: '#1f4fa3', roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.08 });
-  _carMat.lampOff = std({ color: '#16306b', emissive: '#0a1840', emissiveIntensity: 0.4, roughness: 0.3 });
+  // Materialbibliothek (js/materials.js): Voreinstellung + eigene Werte, je Grafikstufe abgestuft
+  const std = (preset, o) => Mat.make(preset, o);
+  _carMat.glass = std('glas', { color: '#121a22', roughness: 0.05, metalness: 0.1, envMapIntensity: 1.8 });
+  _carMat.tire = std('gummi', { color: '#161616', roughness: 0.92 });
+  _carMat.hub = std('chrom', { color: '#c3c7cc', roughness: 0.28, metalness: 0.9, envMapIntensity: 1.2 });
+  _carMat.trim = std('kunststoff', { color: '#1c1d1f', roughness: 0.6 });
+  _carMat.plate = std('kunststoff', { map: plateTexture(), roughness: 0.5 });
+  _carMat.head = std('glas', { color: '#fff6dd', emissive: '#fff1c4', emissiveIntensity: 0.2, roughness: 0.15, metalness: 0.3 });
+  _carMat.tail = std('glas', { color: '#7a0c0c', emissive: '#ff2020', emissiveIntensity: 0.25, roughness: 0.25 });
+  _carMat.policeBlue = std('lack', { color: '#1f4fa3', roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.08 });
+  _carMat.lampOff = std('kunststoff', { color: '#16306b', emissive: '#0a1840', emissiveIntensity: 0.4, roughness: 0.3 });
   _carMat.lampOn = new THREE.MeshBasicMaterial({ color: '#7fb4ff' });
-  _carMat.policeSide = std({ map: textTexture('POLIZEI', '#1f4fa3', '#ffffff', 512, 72), roughness: 0.4 });
-  _carMat.taxiSign = std({ map: textTexture('TAXI', '#f6d23a', '#1a1a1a', 128, 40), emissive: '#ffd84a', emissiveIntensity: 0.25 });
-  _carMat.wreck = std({ color: '#1c1a19', roughness: 1 });
+  _carMat.policeSide = std('lackMatt', { map: textTexture('POLIZEI', '#1f4fa3', '#ffffff', 512, 72), roughness: 0.4 });
+  _carMat.taxiSign = std('kunststoff', { map: textTexture('TAXI', '#f6d23a', '#1a1a1a', 128, 40), emissive: '#ffd84a', emissiveIntensity: 0.25 });
+  _carMat.wreck = std('lackMatt', { color: '#1c1a19', roughness: 1 });
   _carMat.blob = new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, color: '#000000', polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
   _carMat.blob.alphaMap = _carMat.blob.map; _carMat.blob.map = null;
   return _carMat;
@@ -281,7 +282,7 @@ class Vehicle {
     }
     this.color = color;
     // Lack mit Klarlack: spiegelt Himmel und Umgebung (scene.environment aus js/atmosphere.js)
-    const paint = new THREE.MeshPhysicalMaterial({ color: this.color, metalness: 0.35, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.06 });
+    const paint = Mat.make('lack', { color: this.color });
     this.paint = paint;
     this.baseColor = new THREE.Color(this.color);
     const G = carGeometries(kind), M = carMaterials();

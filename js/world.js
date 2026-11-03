@@ -260,7 +260,7 @@ function leafTexture(renderer) {
   for (let i = 0; i < 1400; i++) leaf(384 + rnd() * 128, rnd() * S, 8 + rnd() * 6, 3.5 + rnd() * 2.5, rnd() * 6.283, 0.45 + rnd() * 0.5, rnd() < 0.2 ? 1 : 0);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 4;
+  t.anisotropy = renderer ? Mat.aniso(renderer) : 4;
   _treeAssets.tex = t;
   return t;
 }
@@ -578,7 +578,7 @@ class World {
     this.ortho = null;
     if (!O || !this.hgrid || O.upsample !== TERRAIN_UPSAMPLE || location.protocol === 'file:') return;
     const loader = new THREE.TextureLoader();
-    const aniso = this.renderer.capabilities.getMaxAnisotropy();
+    const aniso = Mat.aniso(this.renderer);
     let done = 0;
     try {
       // Zeitlimit je Bild: hängt die Verbindung, gibt es statt Luftbildern die gemalte Bodentextur
@@ -626,7 +626,7 @@ class World {
     c.putImageData(img, 0, 0);
     const t = new THREE.CanvasTexture(cv);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    t.anisotropy = Mat.aniso(this.renderer);
     return t;
   }
 
@@ -883,7 +883,7 @@ class World {
 
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    tex.anisotropy = Mat.aniso(this.renderer);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     this.groundTexture = tex;
     this.groundCanvas = cv;
@@ -1369,7 +1369,7 @@ class World {
       const t = new THREE.CanvasTexture(cv);
       if (srgb) t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      t.anisotropy = Mat.aniso(this.renderer);
       return t;
     };
     // Putzstruktur ins Höhenfeld, leicht weichzeichnen (stabile Mipmaps), daraus die Normalen
