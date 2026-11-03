@@ -42,7 +42,7 @@ class PostFX {
     this.exposure = 1.0;
     this.params = {
       fogCol: new THREE.Color('#c8dbec'), sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color('#fff1dc'),
-      fogDensity: 0.001, fogBase: 0, night: 0, wet: 0, sunVis: 1,
+      fogDensity: 0.001, fogBase: 0, night: 0, wet: 0, sunVis: 1, cloud: 0.2, cloudT: 0,
     };
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quad.frustumCulled = false;
@@ -221,8 +221,23 @@ class PostFX {
       uniform sampler2D tColor, tAO, tBloom;
       uniform mat4 uCamWorld;
       uniform vec3 uFogCol, uSunDir, uSunCol;
-      uniform float uFogDensity, uFogBase, uFogFall, uExposure, uBloom, uNight, uWet, uTime, uAO, uSunVis;
+      uniform float uFogDensity, uFogBase, uFogFall, uExposure, uBloom, uNight, uWet, uTime, uAO, uSunVis, uCloud, uCloudT;
       uniform vec2 uRes;
+      // Wolkenschatten (seit v3.15.0, Grafik-Phase 10b): dieselbe Rauschart wie die Wolken am Himmel (js/atmosphere.js)
+      float cHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      float cNoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(cHash(i), cHash(i + vec2(1.0, 0.0)), f.x), mix(cHash(i + vec2(0.0, 1.0)), cHash(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      float cloudShadow(vec3 wp) {
+        // Wolkendecke in 1.500 m Höhe, entlang der Sonnenrichtung auf den Boden projiziert; Wind 9 m/s aus Westsüdwest
+        vec2 q = (wp.xz + uSunDir.xz * (1500.0 - wp.y) / max(uSunDir.y, 0.2) - vec2(9.0, 3.5) * uCloudT) / 1150.0;
+        float v = 0.0, a = 0.5;
+        mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+        for (int i = 0; i < 4; i++) { v += a * cNoise(q); q = m * q; a *= 0.5; }
+        float e0 = 0.62 - uCloud * 0.42;
+        return smoothstep(e0, e0 + 0.22, v);
+      }
       vec3 RRTAndODTFit(vec3 v) {
         vec3 a = v * (v + 0.0245786) - 0.000090537;
         vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
@@ -252,6 +267,8 @@ class PostFX {
           vec3 cp = (uCamWorld * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
           float dist = length(vp);
           vec3 rd = (wp - cp) / max(dist, 1e-3);
+          // Wolkenschatten: dunkelt Boden und Häuser, wo eine Wolke vor der Sonne steht (bei Bewölkung kaum, nachts nicht)
+          if (uSunVis > 0.02) col *= 1.0 - cloudShadow(wp) * 0.46 * uSunVis;
           float h0 = cp.y - uFogBase, h1 = wp.y - uFogBase, dh = h1 - h0;
           float k = uFogFall;
           float avg = abs(dh) > 0.5 ? (exp(-k * h0) - exp(-k * h1)) / (k * dh) : exp(-k * h0);
@@ -290,7 +307,7 @@ class PostFX {
       uFogCol: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Color() },
       uFogDensity: { value: 0.001 }, uFogBase: { value: 0 }, uFogFall: { value: 1 / 160 }, uExposure: { value: 1 },
       uBloom: { value: 0.08 }, uNight: { value: 0 }, uWet: { value: 0 }, uTime: { value: 0 }, uAO: { value: 0.85 },
-      uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() },
+      uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() }, uCloud: { value: 0.2 }, uCloudT: { value: 0 },
     });
   }
 
@@ -373,6 +390,7 @@ class PostFX {
     u.uFogCol.value.copy(P.fogCol); u.uSunDir.value.copy(P.sunDir); u.uSunCol.value.copy(P.sunCol);
     u.uFogDensity.value = P.fogDensity; u.uFogBase.value = P.fogBase;
     u.uExposure.value = this.exposure; u.uNight.value = P.night; u.uWet.value = P.wet; u.uSunVis.value = P.sunVis;
+    u.uCloud.value = P.cloud; u.uCloudT.value = P.cloudT;
     u.uBloom.value = P.night > 0.5 ? 0.16 : 0.07;
     u.uTime.value = performance.now() / 1000;
     u.uRes.value.set(this.size.x, this.size.y);
