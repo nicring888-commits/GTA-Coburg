@@ -1,5 +1,6 @@
 // Verkehr: Autos fahren auf dem echten Straßennetz (Kanten zwischen Kreuzungen) rechts und
-// biegen an Kreuzungen zufällig ab. Sie halten vor dem Spieler und vor anderen Autos.
+// biegen an Kreuzungen zufällig ab. Sie halten vor dem Spieler und vor anderen Autos, seit v3.14.0 auch an roten
+// Ampeln, Stoppschildern, Wartelinien (Vorfahrt) und Zebrastreifen (Haltepunkte aus js/signals.js).
 'use strict';
 
 // Zivile Modelle im Verkehr (Mehrfachnennung = häufiger)
@@ -14,11 +15,12 @@ class Traffic {
     this.policeShare = 0.09;   // Anteil Streifenwagen im Verkehr
     const G = world.data.graph;
     this.nodes = G.nodes;
-    this.edges = G.edges.map(e => {
+    this.edges = G.edges.map((e, gi) => {
       const p = e.p, cum = [0];
       for (let i = 2; i < p.length; i += 2) cum.push(cum[cum.length - 1] + Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]));
-      return { a: e.a, b: e.b, p, cum, len: cum[cum.length - 1], o: !!e.o, s: e.s, n: e.n };
+      return { a: e.a, b: e.b, p, cum, len: cum[cum.length - 1], o: !!e.o, s: e.s, n: e.n, gi };
     }).filter(e => e.len > 1);
+    this.peds = null;          // Fußgänger (game.js), für die Zebrastreifen
     // Abgehende Kanten pro Knoten: [Kante, Richtung]
     this.out = new Map();
     const add = (node, ei, dir) => { if (!this.out.has(node)) this.out.set(node, []); this.out.get(node).push([ei, dir]); };
@@ -134,6 +136,7 @@ class Traffic {
         target = Math.min(target, U.lerp(e.s, 4.5, U.clamp(turn / 1.6, 0, 1)));
       }
       if (blocked < Infinity) target = Math.min(target, Math.max(0, (blocked - 6) * 0.8));
+      target = Math.min(target, this.ruleLimit(car, e, obstacles, dt));
       if (ai.bumped > 0) { ai.bumped -= dt; target = 0; }
       if (car.burning || car.health < 15) target = 0;
       const acc = target > ai.speed ? 3 : 8;
@@ -141,13 +144,82 @@ class Traffic {
       ai.s += ai.speed * dt;
       if (ai.s >= e.len) {
         if (ai.next) {
-          ai.s -= e.len; ai.edge = ai.next[0]; ai.dir = ai.next[1]; ai.next = null;
+          ai.s -= e.len; ai.edge = ai.next[0]; ai.dir = ai.next[1]; ai.next = null; ai.passed = null; ai.go = null; ai.wait = 0;
         } else { ai.s = e.len; ai.speed = 0; }
       }
       this.placeCar(car, dt, false);
       car.spin += ai.speed * dt / CAR.wheelR;
       car.sync();
     }
+  }
+
+  // Verkehrsregeln: Tempogrenze aus den Haltepunkten voraus (aktuelle Kante, kurz vor dem Ende auch die nächste).
+  // Ampel rot oder rot-gelb: halten; gelb: halten, wenn das noch bequem geht (sonst durchfahren, ai.go). Stopp: anhalten,
+  // 1,2 s stehen, dann wie Vorfahrt achten: warten, solange ein bevorrechtigtes Auto auf die Kreuzung zufährt oder darauf
+  // ist (nach 9 s Warten fährt es trotzdem, keine Blockade). Zebrastreifen: halten, solange jemand auf der Fahrbahn quert.
+  ruleLimit(car, e, obstacles, dt) {
+    const ctl = this.world.region && this.world.region.control, ai = car.ai;
+    if (!ctl || e.gi === undefined) return Infinity;
+    const v = ai.speed, now = performance.now() / 1000;
+    let lim = Infinity, waiting = false;
+    const check = (ed, dir, base) => {
+      for (const st of ctl.stopsOn(ed.gi)) {
+        if (st.dir !== dir || st === ai.passed) continue;
+        // Abstand der Wagenmitte zum Haltepunkt 2,6 m vor der Linie
+        const dist = base + (dir > 0 ? st.s : ed.len - st.s) - ai.s - 2.6;
+        if (dist < -1.5 || dist > 45) continue;
+        let halt = false;
+        if (st.kind === 'signal') {
+          const s = ctl.state(st.sig, st.g, now);
+          if (s !== 2 && ai.go !== st) {
+            // schon zu nah zum Bremsen (gelb oder gerade rot geworden): durchfahren
+            if (dist < v * v / 12 + 0.5 && v > 3) ai.go = st; else halt = true;
+          }
+        } else if (st.kind === 'zebra') halt = this.crossingBusy(st, obstacles);
+        else {
+          const stopped = st.kind === 'stop' && (ai.wait || 0) < 1.2;
+          halt = stopped || !this.clear(car, st, obstacles);
+          if (!halt) lim = Math.min(lim, 4 + Math.max(0, dist) * 0.6); // vorsichtig hineinrollen
+        }
+        if (!halt) continue;
+        if (dist < 1.2) {
+          waiting = true;
+          // an Stopp und Vorfahrt: weiter, sobald frei (Stopp erst nach dem Stehen), nach 9 s auf jeden Fall
+          if ((st.kind === 'stop' || st.kind === 'give') && (ai.wait || 0) >= 1.2 && ((ai.wait || 0) > 9 || this.clear(car, st, obstacles))) { ai.passed = st; continue; }
+        }
+        lim = Math.min(lim, Math.max(0, dist) * 0.9);
+      }
+    };
+    check(e, ai.dir, 0);
+    const remain = e.len - ai.s;
+    if (ai.next && remain < 45) { const ne = this.edges[ai.next[0]]; if (ne && ne !== e) check(ne, ai.next[1], remain); }
+    ai.wait = waiting && v < 0.6 ? (ai.wait || 0) + dt : 0;
+    return lim;
+  }
+  // Ist die Kreuzung für einen Wartepflichtigen frei? Kein anderes Auto (Verkehr, Spieler, Polizei) bis 9 m auf ihr und
+  // keins, das bis 30 m mit über 2 m/s auf sie zufährt, außer es wartet selbst an diesem Knoten
+  clear(car, st, obstacles) {
+    const busy = o => {
+      if (o === car || o.disposed) return false;
+      const dx = st.x - o.x, dz = st.z - o.z, d = Math.hypot(dx, dz);
+      if (d > 30) return false;
+      if (o.ai && o.ai.wait > 0) return false;
+      const sp = o.ai ? o.ai.speed : Math.hypot(o.vx || 0, o.vz || 0);
+      if (d < 9) return sp > 0.5 || !o.ai;
+      if (sp < 2) return false;
+      const fx = o.ai ? Math.sin(o.heading) : o.vx / sp, fz = o.ai ? Math.cos(o.heading) : o.vz / sp;
+      return (dx * fx + dz * fz) / d > 0.6;
+    };
+    for (const o of this.cars) if (busy(o)) return false;
+    for (const o of obstacles) if (o.vx !== undefined && busy(o)) return false;
+    return true;
+  }
+  // Steht oder läuft jemand (Fußgänger, Spieler zu Fuß) auf dem Zebrastreifen bzw. auf der Fahrbahn daneben?
+  crossingBusy(st, obstacles) {
+    const on = (x, z) => { const dx = x - st.x, dz = z - st.z; return Math.abs(dx * st.ux + dz * st.uz) < 3 && Math.abs(dx * st.uz - dz * st.ux) < st.half + 0.6; };
+    for (const o of obstacles) if (o.vx === undefined && on(o.x, o.z)) return true;
+    if (this.peds) for (const p of this.peds.list) if (p.state !== 'down' && on(p.x, p.z)) return true;
+    return false;
   }
 
   // Auto wird vom Spieler übernommen

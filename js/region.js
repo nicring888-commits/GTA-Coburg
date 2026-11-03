@@ -215,6 +215,8 @@ class Region {
     this.far = new Map();           // vereinfachte ferne Kacheln (HLOD)
     this.treesOn = new Set();
     this.decodeGraph();
+    // Ampeln, Vorfahrt und Haltepunkte des Verkehrs (js/signals.js, seit v3.14.0)
+    this.control = typeof TrafficControl !== 'undefined' ? new TrafficControl(this) : null;
     this.places = R.places;
     this.ortho = window.COBURG_REGION_ORTHO && location.protocol !== 'file:' ? window.COBURG_REGION_ORTHO : null;
     this._near = [];
@@ -540,6 +542,7 @@ class Region {
   // Dringendes (unter dem Spieler, Schnellreise) wird weiter sofort ganz gebaut.
   update(px, pz, force) {
     this.px = px; this.pz = pz;
+    if (this.control) this.control.update(px, pz);
     const [pi, pj] = this.tileOf(px, pz);
     const reach = Math.ceil(REGION.drop / Math.min(this.tw, this.th)) + 1;
     const want = [];
@@ -1264,6 +1267,7 @@ class Region {
     yield;
     this.nodeMarks(t, marks, white);
     this.postMesh(t, posts);
+    if (this.control) this.control.build(t, t.group, (x, z) => x >= t.x0 && x < t.x1 && z >= t.z0 && z < t.z1 && !this.inCore(x, z));
     const [rm, mm] = this.roadMaterials();
     if (t.bridgeParts) t.bridgeParts.meshes(this.world.buildingMaterials().plain, { cast: true, receive: true }).forEach(m => t.group.add(m));
     roads.meshes(rm, { receive: true }).forEach(m => t.group.add(m));
@@ -1410,40 +1414,36 @@ class Region {
       if (q.x < t.x0 || q.x >= t.x1 || q.z < t.z0 || q.z >= t.z1 || this.inCore(q.x, q.z)) continue;
       if (q.k === 5) { const J = this.nearJunction(q.x, q.z, 8); if (J) W.markDisc(marks, J.x, J.z, 2.2, y, col, hf); continue; }
       if (q.k > 1) continue;
-      const r = this.snapRoad(q.x, q.z, 6);
-      if (!r || r.e.w < 4 || /motorway|trunk|service|track/.test(r.e.h)) continue;
-      const cum = this.edgeCum(r.e), len = cum[cum.length - 1];
-      const Ja = this.junction(r.e.a), Jb = this.junction(r.e.b);
-      const lo = (Ja ? this.armD(Ja, r.ei, true) : 0) + 4.6, hi = len - (Jb ? this.armD(Jb, r.ei, false) : 0) - 4.6;
-      if (hi < lo) continue;
-      const s = U.clamp(r.s, lo, hi), p = this.edgePoint(r.e, s);
-      W.crossingMarks(marks, q.k, p[0], p[1], p[2], p[3], r.e.w / 2, y, col, hf, !!r.e.o);
+      const c = this.crossingAt(q.x, q.z);
+      if (c) W.crossingMarks(marks, q.k, c.x, c.z, c.tx, c.tz, c.half, y, col, hf, c.oneway);
     }
-    // Kreuzungen: Haltlinien an Ampeln und Stoppschildern, Wartelinien an Vorfahrt-achten-Schildern bzw. an
-    // untergeordneten Straßen (nur wenn mindestens zwei Arme höheren Rangs durchgehen)
+    // Kreuzungen (Regeln aus js/signals.js, rules): Haltlinien an Ampeln und Stoppschildern, Wartelinien an
+    // Vorfahrt-achten-Schildern, untergeordneten Straßen und Mini-Kreiseln, dazu Haifischzähne und Fahrbahnpfeile
     for (const J of t.junctions || []) {
-      const near = this.roadNodesNear(J.x, J.z, 32);
-      const signals = near.some(q => q.k === 2 || q.k === 1);
-      const ranks = J.arms.map(a => this.roadRank(a.e.h)), top = Math.max(...ranks), nTop = ranks.filter(r => r === top).length;
-      J.arms.forEach((a, i) => {
-        let line = signals ? 'stop' : null;
-        if (!line) {
-          // Schild an diesem Arm: vor der Kreuzung (vorwärts entlang des Arms) und höchstens 4 m neben der Fahrbahnmitte
-          for (const q of near) {
-            if (q.k !== 3 && q.k !== 4) continue;
-            const dx = q.x - J.x, dz = q.z - J.z, along = dx * a.dx + dz * a.dz, across = Math.abs(dx * a.dz - dz * a.dx);
-            if (along > 0 && across < a.half + 4) line = q.k === 3 ? 'stop' : 'give';
-          }
-        }
-        if (!line && nTop >= 2 && ranks[i] < top && ranks[i] > 0) line = 'give';
-        if (!line) return;
-        // ankommende Spur: links des Arms (Rechtsverkehr); Einbahnstraße nur, wenn sie zur Kreuzung hin führt
-        const one = !!a.e.o;
-        if (one && a.atA) return;
-        const o0 = one ? -a.half + 0.25 : 0.15, o1 = a.half - 0.25;
-        W.stopLine(marks, line === 'give', a.px, a.pz, a.tx, a.tz, 0.4, o0, o1, y, col, hf);
-      });
+      const ru = this.control && this.control.rules(J.nd);
+      if (!ru) continue;
+      for (const r of ru.arms) {
+        const a = r.a;
+        if (!r.incoming) continue;
+        // ankommende Spur: rechts des ankommenden Verkehrs, also o < 0 im Rahmen des Arms (der zeigt von der Kreuzung weg)
+        const one = !!a.e.o, o0 = -a.half + 0.25, o1 = one ? a.half - 0.25 : -0.15;
+        if (r.line) W.stopLine(marks, r.line === 'give', a.px, a.pz, a.tx, a.tz, 0.4, o0, o1, y, col, hf);
+        if (r.teeth) W.sharkTeeth(marks, a.px, a.pz, a.tx, a.tz, 1.1, o0, o1, y, col, hf);
+        if (r.arrows) { const [px, pz, tx, tz] = this.alongEnd(a.P, a.n, a.d + r.arrowS, true); W.laneArrow(marks, px, pz, tx, tz, 0, one ? 0 : -a.half / 2, r.arrows, y, col, hf); }
+      }
     }
+  }
+  // Querung (Zebrastreifen, Furt, Fußgängerampel) an (x, z): auf die nächste Fahrbahn bis 6 m gerastet und aus den
+  // Kreuzungsflächen herausgeschoben; { ei, s, x, z, tx, tz, half, oneway } oder null (schmal, Autobahn, Zufahrt)
+  crossingAt(x, z) {
+    const r = this.snapRoad(x, z, 6);
+    if (!r || r.e.w < 4 || /motorway|trunk|service|track/.test(r.e.h)) return null;
+    const cum = this.edgeCum(r.e), len = cum[cum.length - 1];
+    const Ja = this.junction(r.e.a), Jb = this.junction(r.e.b);
+    const lo = (Ja ? this.armD(Ja, r.ei, true) : 0) + 4.6, hi = len - (Jb ? this.armD(Jb, r.ei, false) : 0) - 4.6;
+    if (hi < lo) return null;
+    const s = U.clamp(r.s, lo, hi), p = this.edgePoint(r.e, s);
+    return { ei: r.ei, s, x: p[0], z: p[1], tx: p[2], tz: p[3], half: r.e.w / 2, oneway: !!r.e.o };
   }
   // Straßendetails eines Abschnitts (seit v3.13.0, Grafik-Phase 9, World.roadDetails): innerorts Kanaldeckel und Gullys,
   // überall Flickstellen, außerorts an Landstraßen Leitpfosten (posts: [x, z, Winkel, Seite] je Pfosten)
@@ -1476,8 +1476,9 @@ class Region {
     const m = new THREE.InstancedMesh(this._postGeo, this._postMat, N), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
     for (let i = 0; i < N; i++) {
       const x = posts[i * 4], z = posts[i * 4 + 1], ang = posts[i * 4 + 2], side = posts[i * 4 + 3];
-      // Seite −1 liegt rechts der Richtung (Rechteck gegen die Richtung), Seite 1 links: umgedreht
-      q.setFromAxisAngle(up, -ang + (side > 0 ? Math.PI : 0));
+      // Seite 1 liegt rechts der Richtung (x = Osten, z = Süden: rechts von (ux, uz) ist (−uz, ux)); dort zeigt das Rechteck
+      // gegen die Richtung zum Verkehr, der den Pfosten rechts hat. Seite −1 (links): umgedreht
+      q.setFromAxisAngle(up, -ang + (side < 0 ? Math.PI : 0));
       m.setMatrixAt(i, m4.compose(p.set(x, this.heightAt0(x, z) - 0.15, z), q, one));
     }
     m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere();

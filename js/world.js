@@ -1363,7 +1363,7 @@ class World {
   }
   // ---------------- Markierungen an Querungen und Kreuzungen (seit v3.13.0, Grafik-Phase 9) ----------------
   // Rechteck im Rahmen einer Straße: Mitte (x, z), Richtung (ux, uz) entlang der Fahrbahn; s0..s1 entlang, o0..o1 quer
-  // (positiv = links der Richtung), Höhe hf(x, z) + y
+  // (positiv = rechts der Richtung: x = Osten, z = Süden), Höhe hf(x, z) + y
   markQuad(chunks, x, z, ux, uz, s0, s1, o0, o1, y, col, hf) {
     const P = (s, o) => { const px = x + ux * s - uz * o, pz = z + uz * s + ux * o; return [px, hf(px, pz) + y, pz]; };
     const b = chunks.get(x, z), a = P(s0, o0), c = P(s1, o0), d = P(s1, o1), e = P(s0, o1);
@@ -1382,11 +1382,37 @@ class World {
       return;
     }
     for (const s of [-2, 2]) for (let o = -w; o + 0.5 <= w + 0.01; o += 1.0) this.markQuad(chunks, x, z, ux, uz, s - 0.25, s + 0.25, o, o + 0.5, y, col, hf);
-    // Haltlinien: Verkehr in +u fährt rechts (o < 0) und hält vor s = -2; Gegenrichtung links vor s = +2
+    // Haltlinien: Verkehr in +u fährt rechts (o > 0) und hält vor s = -2; Gegenrichtung (o < 0) vor s = +2
     if (oneway) this.markQuad(chunks, x, z, ux, uz, -4.1, -3.6, -w, w, y, col, hf);
     else {
-      this.markQuad(chunks, x, z, ux, uz, -4.1, -3.6, -w, -0.15, y, col, hf);
-      this.markQuad(chunks, x, z, ux, uz, 3.6, 4.1, 0.15, w, y, col, hf);
+      this.markQuad(chunks, x, z, ux, uz, -4.1, -3.6, 0.15, w, y, col, hf);
+      this.markQuad(chunks, x, z, ux, uz, 3.6, 4.1, -w, -0.15, y, col, hf);
+    }
+  }
+  // Dreieck im Rahmen einer Straße (Punkte als [s, o] wie bei markQuad)
+  markTri(chunks, x, z, ux, uz, A, B, C, y, col, hf) {
+    const P = ([s, o]) => { const px = x + ux * s - uz * o, pz = z + uz * s + ux * o; return [px, hf(px, pz) + y, pz]; };
+    const b = chunks.get(x, z), a = P(A), c = P(B), d = P(C);
+    // Umlaufsinn wie markQuad (Normale nach oben)
+    if ((B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]) > 0) b.tri(a, c, d, col, null, null, null, 0, 1, 0);
+    else b.tri(a, d, c, col, null, null, null, 0, 1, 0);
+  }
+  // Haifischzähne (Zeichen 342) vor einer Wartelinie: Dreiecke 0,5 m breit, 0,6 m lang, Spitze zum Wartepflichtigen (+s)
+  sharkTeeth(chunks, x, z, ux, uz, s0, o0, o1, y, col, hf) {
+    for (let o = o0; o + 0.5 <= o1 + 0.01; o += 0.75) this.markTri(chunks, x, z, ux, uz, [s0, o], [s0 + 0.6, o + 0.25], [s0, o + 0.5], y, col, hf);
+  }
+  // Fahrbahnpfeil (5 m) auf der Spur bei o; Spitze bei s0 zeigt gegen +s (zur Kreuzung). dirs: { s, l, r } geradeaus,
+  // links, rechts. Links des Fahrers (der fährt gegen +s) ist +o, rechts −o
+  laneArrow(chunks, x, z, ux, uz, s0, o, dirs, y, col, hf) {
+    const Q = (a, b, c, d) => this.markQuad(chunks, x, z, ux, uz, s0 + a, s0 + b, o + c, o + d, y, col, hf);
+    const T = (A, B, C) => this.markTri(chunks, x, z, ux, uz, [s0 + A[0], o + A[1]], [s0 + B[0], o + B[1]], [s0 + C[0], o + C[1]], y, col, hf);
+    Q(dirs.s ? 1.6 : 2.15, 5, -0.08, 0.08);
+    if (dirs.s) T([0, 0], [1.6, 0.32], [1.6, -0.32]);
+    for (const [k, side] of [['l', 1], ['r', -1]]) {
+      if (!dirs[k]) continue;
+      // Abzweig quer zur Seite, Spitze 1 m neben der Pfeilachse
+      Q(2.15, 2.45, side > 0 ? 0 : -0.5, side > 0 ? 0.5 : 0);
+      T([2.3, side * 1.05], [1.95, side * 0.5], [2.65, side * 0.5]);
     }
   }
   // Haltlinie (durchgehend) bzw. Wartelinie (Blöcke 0,5 m, Lücke 0,25 m), 0,5 m breit, quer über o0..o1 bei s0

@@ -134,6 +134,7 @@
     });
     progress('Fußgänger und Stadtleben …', 0.99);
     peds = new Pedestrians(world, scene);
+    traffic.peds = peds;
     // Waffen (js/weapons.js): Waffenläden, Schüsse, Granaten, Pickups
     weapons = new Weapons({ world, scene, fx, ui, audio, peds, police, property, camera, cam, save, persist, addMoney, keys, pressed,
       player: () => player, car: () => car, ride: () => ride, mode: () => mode, cars: allCars, blast });
