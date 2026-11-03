@@ -152,6 +152,7 @@ und müssen dort bleiben.
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
 | `js/landscape.js` | Landschaft im Umland (seit v2.5.0): Bodenbedeckungskarte je Kachel aus den OSM-Flächen (`paintCover`: r Acker, g Wiese, b Wald, Feldraine an Feldgrenzen, weichgezeichnet; zweite Karte mit Reihenrichtung je Feld), Geländematerial (`terrainMaterial`: Gras-, Ackerboden- und Waldbodentextur aus der Leinwand, Farbe aus dem unscharfen Luftbild, Ackerart nach Fotofarbe mit Saatreihen, Furchen, Stoppeln, Fahrgassen; Relief über die Normale), 3D-Bewuchs um die Kamera (`update`/`makeCell`: Gras, Getreide, Blumen, Farn als Instanzen in 8-m-Zellen bis 88 m, sinkt am Rand ein), Kronendach-Hülle über fernen Wäldern (`buildCanopy`), Feld- und Waldwege (`splitRural`, `buildTracks`, `trackMaterial`: Fahrspuren, Grasnarbe, Schotter, Asphalt), Dörfer (`buildVillage`: Gärten mit Staketen- und Lattenzaun, Tor und Einfahrt zur Straße, Hecken, Obstbäume, Rundballen an Scheunen) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
+| `js/tile-worker.js` | Höhengitter einer Umland-Kachel (seit v3.12.0, `TileHeights`): Catmull-Rom aus dem groben Raster, Kleinrelief (an Straßen auslaufend), ausgehobene Gewässer, `roadNear`. Läuft als normales Skript (Region rechnet damit dringende Kacheln) und als Worker (Region bestellt die Höhen der nächsten Kacheln vorab, `prefetch`; Ergebnis bitgleich). Ohne Worker: `file://` oder `?worker=0` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
 | `js/vehicle.js` | Automodelle (Pkw, Sportwagen mit Spoiler, Taxi mit Dachschild, Streifenwagen mit Blaulicht), Fahrwerte je Typ, Arcade-Fahrphysik (Längs- und Seitenhaftung, Handbremse, Steigung, Teilschritte gegen Durchtunneln), Schaden, Brand, Wrack, Auto-gegen-Auto-Kollision |
 | `js/traffic.js` | KI-Verkehr auf dem Straßennetz: fährt rechts, beachtet Einbahnstraßen, bremst vor Kurven, Hindernissen und dem Spieler |
@@ -280,6 +281,47 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.12.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Leistung: Zeitscheiben, Worker, ferne Kacheln (HLOD),
+  größere Sichtweite, Impostors – Phase 8 des Grafik-Fahrplans (7.1).** Fünf Commits (8a–8e).
+  - **8a Zeitscheiben** (`region.js` `update`/`startJob`/`runJob`): Kachel, Bäume und Ortsleben sind Schrittfolgen
+    (Generatoren: `tileSteps`, `buildingSteps`, `waterSteps`, `roadSteps`, `sidewalkSteps`, `treeSteps`, `photoVegSteps`,
+    `Landscape.villageSteps`, `WaterSet.surfaceSteps`); pro Bild wird bis `REGION.sliceMs` (4 ms) gebaut, eine Kachel kommt
+    erst fertig in die Szene (`t.ready`). Dringendes (unter 350 m, Schnellreise, `ensure`) wird weiter sofort ganz gebaut.
+    Messwerte in `game.world.region.stats` (`maxFrame`, `maxStep`)
+  - **8b Bäume** (`TreeSet`): je Kachel und Art wenige InstancedMeshes statt eines je 250-m-Gruppe (Neustadt 2.089 → 264
+    Baum-Meshes); Instanzen nach Zellen (4 × 4 je Kachel) sortiert, nah ein Mesh, fern und Impostor je Kachelviertel.
+    **Kein `BatchedMesh`:** es braucht `WEBGL_multi_draw`, das ANGLE/D3D11 (Windows) nur nachbildet und Firefox nicht hat
+    (three.js zeichnet dann jeden Baum einzeln)
+  - **8c ferne Kacheln und Sichtweite:** volle Kacheln bis 1,4 km (vorher 2 km), dahinter bis 4,6 km (`REGION.far`) je
+    Kachel eine einfache Fassung (`farSteps`): Gelände im 50-m-Raster mit kleinem Luftbild (`*.256.jpg`), Häuser als
+    Körper mit Sattel-/Flachdach und Fotodach, Wald als Kronendach (bis 3,4 km); 2–4 Zeichenaufrufe je Kachel, im Mittel
+    1 ms Bauzeit. Umland-Stücke (Straßen, Häuser, Wasser) je Kachelviertel statt 250 m (`Chunks(size, ox, oz)`). Kamera
+    6,5 km, Nebel am klaren Tag 3,8 statt 2,9 km; Innenstadt, Autos und Requisiten werden hinter 4 km wie bisher nicht
+    gezeichnet (`hideFar` in `game.js`, nur für das jeweilige Bild). Smartphone-Stufen ohne ferne Kacheln (`far: 0`)
+  - **8d Worker** (`js/tile-worker.js`, siehe 5): alle Höhengitter beim Fahren aus dem Worker, bitgleich zum Hauptthread
+  - **8e Impostors:** Laubbaum, Nadelbaum, Busch beim Start einmal in Texturen gerendert (`treeImpostors`); ab 600 m zwei
+    gekreuzte Flächen statt der groben Hülle, Stämme entfallen (Wald-Test −28 % Dreiecke, 1,2 % Bildabweichung).
+    Ferne Kacheln bis 2,5 km zeigen Impostor-Wald statt der Kronendach-Hülle
+  - **Messung gegen v3.11.0** (gleiches Skript, Chromium, Kamera 25 m hoch, vier Blickrichtungen, Stufe voll):
+
+    | Ort | Zeichenaufrufe v3.11.0 | v3.12.0 | Dreiecke (Mio.) v3.11.0 → v3.12.0 |
+    |---|---|---|---|
+    | Neustadt | 462 / 727 / 633 / 699 | 212 / 311 / 441 / 206 | 2,1–3,5 → 3,0–4,5 (Sichtweite 2 → 4,6 km) |
+    | Unterlauter | 1.121 / 2.395 / 2.141 / 893 | 470 / 1.219 / 1.041 / 433 | 3,2–6,7 → 2,9–5,5 |
+    | Markt | 1.182 / 1.472 / 1.621 / 1.792 | 1.238 / 996 / 1.377 / 1.271 | 3,4–3,7 → 3,2–4,1 |
+
+    **Bauzeit pro Bild** bei 9 km Fahrt mit 30 m/s (8.800 Bilder): längstes Bild 112 → 16 ms, Bilder über 16 ms 57 → 0,
+    99,9-%-Wert 51 → 10 ms. Ferne Kachel gegen volle Kachel aus 1,6–2,5 km: 0,33 % Bildabweichung
+  - **Getestet (Chromium):** Stufe voll, `?grafik=leicht&worker=0` (ohne ferne Kacheln und Worker), `?three=160` mit
+    Stufe voll; Schnellreisen, keine Konsolenfehler. Beim Testen behoben: dunkle Kronendach-Kanten am Ende des Rings vor
+    dem Himmel (Kronendach nur bis 3,4 km), Innenstadt aus 6,5 km mitgezeichnet (`hideFar`), große Seen 83 ms in einem
+    Schritt (`surfaceSteps`), liegengebliebene ferne Kacheln nach Schnellreisen
+- ⚠️ Grenzen v3.12.0: Ferne Häuser ohne Fenster, Gauben und Garagentore (aus 1,4 km kaum zu sehen); Dachformen dort nur
+  Sattel- oder Flachdach. Die Innenstadt hat keine vereinfachte Fassung (darum bleibt sie hinter 4 km unsichtbar).
+  Zwischen 1,1 und 1,4 km zeigen volle Kacheln weiter die Kronendach-Hülle statt Bäumen. Einzelne Bauschritte bis ≈ 12 ms
+  (Häuser-Geometrie, Speicherbereinigung). Bodenbedeckung (`paintCover`, ≈ 4 ms) noch im Hauptthread. Mehr Grafikspeicher
+  durch ≈ 100 ferne Kacheln (je ≈ 0,3 MB). Nur im Vorschaufenster gemessen, nicht auf Smartphones.
 
 - ✅ v3.11.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Materialbibliothek, Budget je Grafikstufe,
   KTX2-Luftbilder – Phase 7 des Grafik-Fahrplans (7.1).**
@@ -1008,14 +1050,15 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 5 | (v3.9.0, r186) three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
 | ✅ 6 | (v3.10.0) WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
 | ✅ 7 | (v3.11.0) PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
-| 8 | Leistung: Kachelbau im Worker, vereinfachte ferne Kacheln (HLOD), `BatchedMesh`, größere Sichtweite, Impostor-Wälder | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
+| ✅ 8 | (v3.12.0) Leistung: Zeitscheiben, Höhen im Worker, vereinfachte ferne Kacheln (HLOD) bis 4,6 km, Bäume in wenigen InstancedMeshes (statt `BatchedMesh`, siehe 6), Impostors und Impostor-Wald | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
 | 9 | Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege im Umland, Kanaldeckel, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–7 (v3.5.0–v3.11.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 8** (Kachelbau im Worker, vereinfachte ferne Kacheln, `BatchedMesh`, weniger
-Zeichenaufrufe – nach der WebGPU-Messung Voraussetzung für Phase 11). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
+**Stand:** Phasen 1–8 (v3.5.0–v3.12.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 9** (Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege, Kanaldeckel,
+Flickstellen, Leitpfosten). Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
+Bodenbedeckung im Worker, WebGPU-Probe mit den weniger gewordenen Zeichenaufrufen neu messen. Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben
