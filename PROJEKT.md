@@ -177,6 +177,7 @@ und müssen dort bleiben.
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
 | `data/facades.js` | **Erzeugt** von `tools/convert-facades.js` (seit v3.8.0): je LoD2-Haus Denkmal, Baustoff und Geschosse aus OSM als `window.COBURG_FACADES` (23 KB; fehlt sie, gibt es keine Denkmal-Fassaden) |
+| `data/roadnodes.js` | **Erzeugt** von `tools/convert-road-nodes.js` (seit v3.13.0): Straßenknoten aus OSM als `window.COBURG_ROADNODES` ([x·10, z·10, Art]: 0 Zebrastreifen, 1 Fußgängerfurt, 2 Ampel, 3 Stopp, 4 Vorfahrt achten, 5 Mini-Kreisel; 35 KB, optional) |
 | `data/shops.js` | **Erzeugt** von `tools/convert-shops.js` aus `recherche/pois-coburg.json`: Läden und Lokale als `window.COBURG_SHOPS` ([Name, Art, x, z, geprüft]) |
 | `data/raw/` | Rohdaten: `coburg.osm.json`, `relations.osm.json`, `elevation.json` |
 | `data/raw/lod2/` | LoD2-Rohdaten: 9 CityGML-Kacheln `{ost}_{nord}.gml` (UTM 32N, ≈ 430 MB, werden vom Spiel nicht geladen) |
@@ -191,6 +192,7 @@ und müssen dort bleiben.
 | `tools/convert-facades.js` | Fassaden-Merkmale der Innenstadt (seit v3.8.0): LoD2-Haus → OSM-Gebäude unter seinem Mittelpunkt (`heritage`/`historic`, `building:material`, `building:levels`) → `data/facades.js`; nach `convert-lod2.js` ausführen |
 | `tools/arch-stats.js` | Verteilung der Bautypen je Gemeinde und Prüfungen (Denkmäler, Fachwerk nur historisch) aus `arch-report.json`; `--md datei` schreibt sie als Tabelle (`recherche/bautypen-statistik.md`) |
 | `tools/ortho-ktx2.mjs` | Luftbilder des Umlands (Einzelbilder und HD-Kacheln) zusätzlich als KTX2 (Basis Universal ETC1S, Mipmaps, Y gespiegelt) neben die JPGs, Liste in `data/region/ortho-ktx2.js`; braucht ffmpeg und `npm i --no-save ktx2-encoder@0.6.0`; nur fehlende bzw. ältere Dateien (`--alle` für alle). Mischkacheln Bayern/Thüringen bleiben JPG |
+| `tools/fetch-road-nodes.js`, `tools/convert-road-nodes.js` | Straßenknoten fürs ganze Gebiet per Overpass nach `data/raw/region/road-nodes.json`, umgewandelt nach `data/roadnodes.js` (seit v3.13.0) |
 | `tools/utm.js` | Umrechnung UTM 32N (EPSG:25832) ↔ Länge/Breite (Krüger-Reihen, millimetergenau) |
 | `tools/fetch-osm.js` | Lädt die OSM-Daten über die Overpass-API (mit Ausweichservern) |
 | `tools/fetch-elevation.js` | Lädt das Höhenraster (≈ 38 Anfragen, 1 pro Sekunde) |
@@ -231,6 +233,8 @@ node tools/fetch-region-ortho.js      # ≈ 15 Minuten, 60 MB
 node tools/fetch-region-ortho-hd.js   # scharfe Ortskacheln, nach convert-region.js
 node tools/ortho-ktx2.mjs             # Luftbilder zusätzlich als KTX2 (≈ 10 min; ffmpeg + npm i --no-save ktx2-encoder@0.6.0)
 node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
+node tools/fetch-road-nodes.js        # Zebrastreifen, Ampeln, Stopp-/Vorfahrtschilder (Overpass)
+node tools/convert-road-nodes.js      # → data/roadnodes.js
 node tools/convert-region.js
 powershell -ExecutionPolicy Bypass -File tools/roof-colors.ps1   # Dachfarben (3 s), danach convert-region.js noch einmal
 node tools/convert-region.js
@@ -281,6 +285,40 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.13.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Straßen: Kreuzungsflächen, Markierungen, Details –
+  Phase 9 des Grafik-Fahrplans (7.1).** Zwei Commits (9a Daten, 9b–d Straßen).
+  - **9a Daten:** `tools/fetch-road-nodes.js` + `tools/convert-road-nodes.js` → `data/roadnodes.js` (siehe 5): 2.305 Knoten
+    (192 Zebrastreifen, 271 Fußgängerfurten, 343 Ampeln, 107 Stopp, 1.385 Vorfahrt achten, 7 Mini-Kreisel). Karten-,
+    Straßen- und Gebäudedaten unverändert
+  - **9b Kreuzungsflächen** (`region.js` `junction`, `junctionRing`, `junctionFillet`): an Knoten mit drei und mehr Straßen
+    werden die Fahrbahnen zurückgenommen (aus dem Winkel zu den Nachbarstraßen: so weit, wie sich die Streifen überlappen,
+    plus 2,5 m Eckradius) und eine eigene Fläche mit abgerundeten Ecken eingesetzt; Mittellinien enden davor. Gehsteige
+    beginnen genau an der Rücknahme und laufen als **Gehweg-Ecken** (Bordstein, Belag, Schürze) um die Kreuzung, wenn an
+    beiden Seiten einer ankommt. Keine eigene Fläche an Autobahnen, Kraftfahrstraßen, Brücken und Abzweigen unter 25°
+  - **9c Markierungen** (`World.crossingMarks`, `stopLine`, `markQuad`, `markDisc`; `Region.nodeMarks`, `World.cityNodeMarks`):
+    Zebrastreifen (Streifen 0,5 m, 4 m breit) und Fußgängerfurten (Blockreihen, Haltlinien je Fahrtrichtung) an den
+    OSM-Querungen in Stadt und Landkreis, aus Kreuzungsflächen herausgeschoben; Haltlinien an Kreuzungen mit Ampel und an
+    Stoppschildern, Wartelinien an Vorfahrt-achten-Schildern bzw. an untergeordneten Einmündungen (nur wenn zwei Arme
+    höheren Rangs durchgehen; gleichrangige Wohnstraßen: rechts vor links, keine Linie); Einbahnstraßen nur in
+    Zufahrtsrichtung; Mini-Kreisel als weiße Scheibe
+  - **9d Details** (`World.roadDetails`, `Region.postMesh`): innerorts Kanaldeckel (alle 35–60 m in der Spur) und Gullys
+    am Rand (alle 18–28 m), überall Flickstellen und Leitungsgräben, Leitpfosten an Landstraßen außerorts (alle 50 m, in
+    Kurven 25 m; Rechteck-Rückstrahler rechts, zwei runde links; nicht in Wohn-, Gewerbe-, Industriegebieten und Höfen);
+    Kanaldeckel und Flickstellen auch in der Innenstadt
+  - **Getestet (Chromium):** Kreuzungen in Unterlauter und Neustadt (Ecken, Wartelinien), Autobahn-Ausfahrt (bleibt wie
+    bisher), Zebrastreifen Oberer Bürglaß (Innenstadt) und Hinterer Floßanger (Umland), Kanaldeckel/Gully aus der Nähe,
+    Leitpfosten bei Meeder; keine Konsolenfehler. **Leistung gegen v3.12.0:** Zeichenaufrufe Neustadt 214/317/453/208
+    (vorher 212/311/441/206), Unterlauter 567/1.223/1.063/378 (470/1.219/1.041/433), Markt 1.117/1.003/1.439/1.284
+    (1.238/996/1.377/1.271) – im Rauschen von Verkehr und Figuren; Straßenschritte höchstens 2,3 ms; Fahrt 9 km:
+    99,9-%-Wert der Bauzeit 9,8 ms (vorher 10,4)
+  - Beim Testen behoben: Rücknahme bei stumpfen Winkeln viel zu groß (falsche Formel), Kreuzungsflächen an
+    Autobahn-Ausfahrten, Leitpfosten im Gewerbegebiet, Rückstrahler zeigten zur Fahrbahnmitte statt zum Verkehr
+- ⚠️ Grenzen v3.13.0: Innenstadt ohne Kreuzungsflächen und ohne Halt-/Wartelinien an Kreuzungen (kein Knotennetz; das
+  Luftbild zeigt die Kreuzungen); Mittellinien laufen dort durch Zebrastreifen. Gehweg-Ecken nur, wenn der Gehsteig der
+  Nachbarkachel schon gebaut ist; auf den Ecken steht die Figur auf dem Boden statt auf dem Belag (kein `walkAt`).
+  Ampeln selbst (Masten) fehlen noch, ebenso Haifischzähne und Pfeile. Vorfahrt ohne OSM-Schild geschätzt. Leitpfosten
+  sind keine Hindernisse und leuchten nachts nicht. KI-Verkehr hält nicht an Halt- und Wartelinien.
 
 - ✅ v3.12.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Leistung: Zeitscheiben, Worker, ferne Kacheln (HLOD),
   größere Sichtweite, Impostors – Phase 8 des Grafik-Fahrplans (7.1).** Fünf Commits (8a–8e).
@@ -1051,13 +1089,14 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 6 | (v3.10.0) WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
 | ✅ 7 | (v3.11.0) PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
 | ✅ 8 | (v3.12.0) Leistung: Zeitscheiben, Höhen im Worker, vereinfachte ferne Kacheln (HLOD) bis 4,6 km, Bäume in wenigen InstancedMeshes (statt `BatchedMesh`, siehe 6), Impostors und Impostor-Wald | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
-| 9 | Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege im Umland, Kanaldeckel, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
+| ✅ 9 | (v3.13.0) Straßen: Kreuzungsflächen mit Gehweg-Ecken, Zebrastreifen/Furten/Halt-/Wartelinien aus OSM, Kanaldeckel, Gullys, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–8 (v3.5.0–v3.12.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 9** (Straßen: Kreuzungsflächen, Zebrastreifen, Haltelinien, Gehwege, Kanaldeckel,
-Flickstellen, Leitpfosten). Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
+**Stand:** Phasen 1–9 (v3.5.0–v3.13.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 10** (Licht und Wetter: gestaffelte Schatten, Spiegelungen auf nassen Straßen und
+Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts). Offen aus Phase 9: Ampelmasten an den OSM-Ampeln, KI-Verkehr
+hält an Halt-/Wartelinien und Zebrastreifen, Haifischzähne und Fahrbahnpfeile. Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
 Bodenbedeckung im Worker, WebGPU-Probe mit den weniger gewordenen Zeichenaufrufen neu messen. Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
