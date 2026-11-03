@@ -1570,6 +1570,7 @@ class World {
     const detail = this.makeDetailTexture();
     mat.normalMap = tex.normal;
     mat.normalScale = new THREE.Vector2(1, 1);
+    mat.userData.tsl = nm => NodeKit.facade(nm, tex, detail, this.archDebug); // WebGPU (js/tsl-facade.js)
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, ATMO.uniforms);
       sh.uniforms.facadeMask = { value: tex.mask };

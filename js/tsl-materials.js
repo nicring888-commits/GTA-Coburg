@@ -11,6 +11,11 @@ const NodeKit = {
   // ---------- Grundlagen ----------
   init(mod) {
     this.mod = mod; this.T = mod.TSL;
+    const black = () => this.black || (this.black = Landscape.blackTex()), tile = m => m.userData && m.userData.tile;
+    const def = (k, f) => { if (!(k in THREE.Material.prototype)) Object.defineProperty(THREE.Material.prototype, k, { get() { return f(this) || black(); }, configurable: true }); };
+    def('tslMap', m => m.map);
+    def('tslCover', m => tile(m) && tile(m).coverTex);
+    def('tslField', m => tile(m) && tile(m).fieldTex);
     this._u = new Map();
     const T = this.T, { Fn, vec2, float, fract, floor, dot, mix, Loop } = T;
     // dieselben Rauschfunktionen wie im GLSL (js/atmosphere.js, js/post.js)
@@ -45,15 +50,15 @@ const NodeKit = {
     return n;
   },
   get A() { const U = ATMO.uniforms; return { wet: this.u(U.uWet), night: this.u(U.uNight), time: this.u(U.uTime), top: this.u(U.uSkyTop), horizon: this.u(U.uSkyHorizon), ground: this.u(U.uSkyGround) }; },
-  // Textur je gezeichnetem Objekt aus dessen Material: get(material) → Textur. Der WebGPURenderer teilt einen gebauten
-  // Shader zwischen allen Materialien mit gleichem customProgramCacheKey (alle Geländekacheln, alle Laubarten); fest
-  // eingebaute Texturen gälten dann für alle. Luftbilder werden außerdem später getauscht (ohne Neuübersetzen).
-  live(get, uvNode, level) {
-    const T = this.T, black = this.black || (this.black = Landscape.blackTex());
-    const n = T.texture(black, uvNode, level);
-    n.onObjectUpdate(({ material }) => { const v = (material && get(material)) || black; if (n.value !== v) n.value = v; });
-    return n;
-  },
+  // Textur einer Material-Eigenschaft je gezeichnetem Objekt (Standard-UV). Der WebGPURenderer teilt einen gebauten Shader
+  // zwischen allen Materialien mit gleichem customProgramCacheKey (alle Geländekacheln, alle Laubarten), und Luftbilder
+  // werden später getauscht: feste Texturen in TSL gälten für alle und folgten keinem Wechsel. materialReference liest die
+  // Eigenschaft beim Zeichnen aus dem Material des Render-Objekts (dem Original); die Getter dafür (tslMap, tslCover,
+  // tslField) liegen auf THREE.Material.prototype (init), weil Materialien mit gleichem Schlüssel nicht einzeln
+  // umgewandelt werden
+  mref(key) { return this.T.materialReference(key, 'texture'); },
+  // Luftbild bzw. Textur des Materials, nie leer (sonst bricht der Texturknoten ab)
+  map() { return this.mref('tslMap'); },
   // Farbe des Materials (color) je Objekt
   get color() { return this.T.materialReference('color', 'color'); },
   // Relief aus einer Höhe h (Ableitungen im Bildraum, wie die GLSL-Fassungen in js/landscape.js): neue Normale im Blickraum
@@ -119,7 +124,7 @@ const NodeKit = {
     const T = this.T, { Fn, texture, materialColor, fwidth, max, dot, mix, vec3, vec4 } = T, A = this.A;
     if (!nm.map) return;
     nm.colorNode = Fn(() => {
-      const a = this.live(m => m.map, T.uv()).a, c = materialColor.xyz;
+      const a = this.map().a, c = materialColor.xyz;
       const l = dot(c, vec3(0.299, 0.587, 0.114));
       const sharp = a.sub(0.5).div(max(fwidth(a), 1e-4)).add(0.5);
       return vec4(mix(vec3(l), c, 0.85).mul(0.95).mul(A.wet.mul(-0.2).add(1)), sharp);
@@ -146,7 +151,7 @@ const NodeKit = {
       const big = texture(tex, P.xz.mul(0.11)).r;
       const c = materialColor.xyz.toVar();
       // steile Flächen: das von oben projizierte Foto wäre verschmiert, dort die unscharfe Mittelfarbe
-      if (map) c.assign(mix(c, this.live(m => m.map, uv(), T.float(5)).rgb.mul(this.color), smoothstep(0.55, 0.3, N.y)));
+      if (map) c.assign(mix(c, this.map().rgb.mul(this.color), smoothstep(0.55, 0.3, N.y)));
       If(g.tiled, () => {
         const tileV = h(vec2(row, col)).mul(0.28).add(0.86), wave = cos(fc.mul(6.2831853));
         const pat = tileV.mul(wave.mul(0.07).add(0.93)).mul(mix(1, 0.58, smoothstep(0.72, 1, fr)))
@@ -181,8 +186,8 @@ const NodeKit = {
     };
     const land = Fn(() => {
       const wp = positionWorld.xz, dist = length(positionWorld.sub(cameraPosition));
-      const photo = this.live(m => m.map, uv()).rgb.mul(this.color);
-      const cov = this.live(m => m.userData.tile && m.userData.tile.coverTex, uv()).rgb;
+      const photo = this.map().rgb.mul(this.color);
+      const cov = this.mref('tslCover').rgb;
       const nE = this.lfbm(wp.div(11)).sub(0.5);
       const wF = smoothstep(0.32, 0.62, cov.r.add(nE.mul(0.45))).toVar(), wG = smoothstep(0.32, 0.62, cov.g.add(nE.mul(0.4))).toVar(), wW = smoothstep(0.32, 0.6, cov.b.sub(nE.mul(0.4))).toVar();
       const k = max(wF.add(wG).add(wW), 1);
@@ -198,7 +203,7 @@ const NodeKit = {
       const grassC = mix(gC, gT.mul(gC.div(vec3(0.095, 0.15, 0.06))).mul(0.62), near.mul(0.85));
       const grassH = dot(gT, vec3(0.33)).mul(2);
       // Acker
-      const fm = this.live(m => m.userData.tile && m.userData.tile.fieldTex, uv());
+      const fm = this.mref('tslField');
       const ang = atan(fm.g.mul(2).sub(1), fm.r.mul(2).sub(1)).mul(0.5), dir = vec2(cos(ang), sin(ang));
       const acr = dot(wp, vec2(dir.y.negate(), dir.x));
       const green = smoothstep(0, 0.07, ph.g.sub(max(ph.r, ph.b).mul(0.95)));
@@ -255,7 +260,7 @@ const NodeKit = {
     const T = this.T, { Fn, texture, uv, materialColor, fwidth, max, mix, vec4 } = T;
     if (!nm.map) return;
     nm.colorNode = Fn(() => {
-      const a = this.live(m => m.map, uv()).a;
+      const a = this.map().a;
       return vec4(materialColor.xyz.mul(mix(0.55, 1.05, uv().y)), a.sub(0.5).div(max(fwidth(a), 1e-4)).add(0.5));
     })();
   },

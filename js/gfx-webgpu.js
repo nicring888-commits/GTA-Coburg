@@ -8,6 +8,17 @@
 // Messanzeige oben rechts: Backend, Bildzeit (Mittel über 1 s), Zeichenaufrufe, Dreiecke; game.gfx.stats für Tests.
 'use strict';
 
+// Ganzzahl-Attribute (Wandprofil aProfA/B/C als Int32Array): WebGL wandelt sie still in Gleitkomma um, WebGPU liest sie
+// ohne Kennzeichnung als Float32-Bits (falsche Werte). Mit der Probe deshalb beim Anlegen als Ganzzahlen kennzeichnen.
+if (/[?&]gfx=webgpu/.test(location.search)) {
+  const setAttr = THREE.BufferGeometry.prototype.setAttribute;
+  THREE.BufferGeometry.prototype.setAttribute = function (name, attr) {
+    const a = attr && attr.array;
+    if (a && /^aProf/.test(name) && !attr.normalized && (a instanceof Int32Array || a instanceof Int16Array)) attr.gpuType = THREE.IntType;
+    return setAttr.call(this, name, attr);
+  };
+}
+
 const GfxProbe = {
   wanted: /[?&]gfx=webgpu/.test(location.search),
   statsOnly: /[?&]gfx=stats\b/.test(location.search),   // nur Messanzeige für den normalen WebGL-Weg (zum Vergleich)
@@ -32,7 +43,7 @@ const GfxProbe = {
         const nm = from(m);
         // Texturen folgen dem Original: das Spiel tauscht Luftbilder (map) später ohne Neuübersetzen aus, die Kopie hielte
         // sonst die alte, schon freigegebene Textur
-        if (nm && nm !== m) for (const k of ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'aoMap', 'lightMap']) {
+        if (nm && nm !== m) for (const k of ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'aoMap', 'lightMap', 'emissiveIntensity', 'opacity']) {
           if (k in m) Object.defineProperty(nm, k, { get: () => m[k], set: v => { m[k] = v; }, configurable: true });
         }
         if (nm && nm !== m && m.userData && m.userData.tsl) {
