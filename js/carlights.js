@@ -64,6 +64,9 @@ class CarLights {
           gl_FragColor = vec4(uCol * a, 0.0);
         }`,
     }, add));
+    // Node-Zwillinge für die WebGPU-Probe (js/tsl-materials.js)
+    this.poolMat.userData.node = kit => kit.carPool(this.poolMat, CARLIGHT.poolLen);
+    this.beamMat.userData.node = kit => kit.carBeam(this.beamMat);
     this.pool = new THREE.InstancedMesh(pool, this.poolMat, CARLIGHT.max);
     this.beam = new THREE.InstancedMesh(beam, this.beamMat, CARLIGHT.max);
     for (const m of [this.pool, this.beam]) { m.frustumCulled = false; m.count = 0; m.renderOrder = 5; scene.add(m); }

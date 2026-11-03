@@ -123,6 +123,11 @@ const NodeKit = {
   leaf(nm) {
     const T = this.T, { Fn, texture, materialColor, fwidth, max, dot, mix, vec3, vec4 } = T, A = this.A;
     if (!nm.map) return;
+    // Wiegen im Wind oberhalb von 2,6 m; Phase je Instanz (die Lage der Instanz ist bei geteilten Materialien nicht lesbar)
+    nm.positionNode = Fn(() => {
+      const p = T.positionLocal, ph = this.hash(T.vec2(T.instanceIndex.toFloat().mul(0.37), 1.3)).mul(6.28), sway = T.max(p.y.sub(2.6), 0);
+      return p.add(T.vec3(T.sin(A.time.mul(1.3).add(ph).add(p.z.mul(0.7))).mul(0.035).mul(sway), 0, T.cos(A.time.mul(1.1).add(ph.mul(1.3)).add(p.x.mul(0.6))).mul(0.03).mul(sway)));
+    })();
     nm.colorNode = Fn(() => {
       const a = this.map().a, c = materialColor.xyz;
       const l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -259,9 +264,16 @@ const NodeKit = {
   cover(nm) {
     const T = this.T, { Fn, texture, uv, materialColor, fwidth, max, mix, vec4 } = T;
     if (!nm.map) return;
+    const A = this.A;
+    nm.positionNode = Fn(() => {
+      const p = T.positionLocal, ph = this.hash(T.vec2(T.instanceIndex.toFloat().mul(0.61), 2.9)).mul(6.28);
+      return p.add(T.vec3(T.sin(A.time.mul(1.9).add(ph)).mul(0.07).mul(p.y), 0, T.cos(A.time.mul(1.6).add(ph.mul(0.7))).mul(0.05).mul(p.y)));
+    })();
     nm.colorNode = Fn(() => {
       const a = this.map().a;
-      return vec4(materialColor.xyz.mul(mix(0.55, 1.05, uv().y)), a.sub(0.5).div(max(fwidth(a), 1e-4)).add(0.5));
+      // zum Rand des Bewuchses (LAND.coverR) ausblenden statt einsinken
+      const d = T.length(T.positionWorld.xz.sub(T.cameraPosition.xz)), fade = T.smoothstep(LAND.coverR - 28, LAND.coverR - 4, d).oneMinus();
+      return vec4(materialColor.xyz.mul(mix(0.55, 1.05, uv().y)), a.sub(0.5).div(max(fwidth(a), 1e-4)).add(0.5).mul(fade).sub(fade.oneMinus().mul(0.5)));
     })();
   },
   // Feld- und Waldwege (Landscape.trackMaterial): surf 0 Schotter, 1 Erdweg mit Fahrspuren, 2 Asphalt
@@ -282,6 +294,37 @@ const NodeKit = {
     const a = smoothstep(0, 0.05, edge.add(n2.sub(0.5).mul(0.06))).greaterThan(0.5).select(1, 0);
     nm.colorNode = vec4(col.mul(A.wet.mul(-0.3).add(1)), a);
     nm.normalNode = this.bump(h, 0.05);
+  },
+
+  // ---------- Scheinwerfer (js/carlights.js) ----------
+  // Lichtteppich: Helligkeit aus Abstand und Seitenlage in Fahrzeugkoordinaten (positionLocal), additiv
+  carPool(mat, len) {
+    const T = this.T, { Fn, positionLocal, smoothstep, abs, max, vec4 } = T, I = this.u(mat.uniforms.uI), col = this.u(mat.uniforms.uCol);
+    const nm = new this.mod.MeshBasicNodeMaterial(this.additive(mat));
+    nm.colorNode = Fn(() => {
+      const d = positionLocal.z, x = positionLocal.x, w = d.mul(0.17).add(0.9);
+      const l = max(smoothstep(w, w.mul(0.25), abs(x.sub(0.65))), smoothstep(w, w.mul(0.25), abs(x.add(0.65))));
+      const a = l.mul(smoothstep(1, 4, d)).mul(smoothstep(9, len, d).oneMinus()).mul(T.float(2).div(d.mul(0.4).add(1)).add(1));
+      return vec4(col.mul(a).mul(I), 0);
+    })();
+    return nm;
+  },
+  // Lichtkegel in der Luft: Mitte (Normale zum Betrachter) heller, zum Ende hin aus
+  carBeam(mat) {
+    const T = this.T, { Fn, uv, normalWorld, positionWorld, cameraPosition, normalize, abs, dot, pow, clamp, vec4 } = T, I = this.u(mat.uniforms.uI), col = this.u(mat.uniforms.uCol);
+    const nm = new this.mod.MeshBasicNodeMaterial(Object.assign(this.additive(mat), { side: THREE.DoubleSide }));
+    nm.colorNode = Fn(() => {
+      const f = abs(dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))));
+      const a = pow(clamp(uv().y.oneMinus(), 0, 1), 1.6).mul(pow(clamp(f, 0, 1), 1.5)).mul(I);
+      return vec4(col.mul(a), 0);
+    })();
+    return nm;
+  },
+  // Mischung wie im ShaderMaterial: Farbe addieren, Alpha (Spiegelstärke) unberührt
+  additive(m) {
+    return { transparent: true, depthWrite: false, fog: false, blending: m.blending, blendSrc: m.blendSrc, blendDst: m.blendDst,
+      blendSrcAlpha: m.blendSrcAlpha, blendDstAlpha: m.blendDstAlpha, polygonOffset: m.polygonOffset, polygonOffsetFactor: m.polygonOffsetFactor,
+      polygonOffsetUnits: m.polygonOffsetUnits };
   },
 
   // ---------- Himmel und Regen (js/atmosphere.js) ----------
