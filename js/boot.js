@@ -163,6 +163,7 @@
     { src: 'data/region/ortho.js', what: 'Luftbilder Landkreis' },
     { src: 'data/region/ortho-ktx2.js', what: 'Luftbilder (KTX2)' },
     { src: 'data/region-rural.js', what: 'Feldwege und Hecken' },
+    { src: 'data/roadnodes.js', what: 'Zebrastreifen und Ampeln' },
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
   const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'tile-worker', 'region',
