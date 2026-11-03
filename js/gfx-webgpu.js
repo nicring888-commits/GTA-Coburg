@@ -107,17 +107,38 @@ const GfxProbe = {
   fail(msg) { this.stats.backend = 'nicht verfügbar'; console.warn('WebGPU-Probe:', msg, '– das Spiel zeichnet weiter mit WebGL'); },
 
   // Umgebungsbild aus der Himmelskuppel (Node-Zwilling) mit dem PMREM des WebGPURenderers, wenn sich der Himmel geändert hat
+  // Dasselbe Rendertarget weiterverwenden: eine neue Umgebungstextur bindet bzw. übersetzt alle spiegelnden Materialien neu
+  // (gemessen: Hänger von 0,5–3 s am Abend, wenn sich der Himmel laufend ändert); höchstens alle 4 s
   updateEnv(atmo) {
     if (!atmo || !this.pmrem || atmo.envKey === this.envKey) return;
+    const now = performance.now();
+    if (this.envRT && now - (this.envT || 0) < 4000) return;
     const twin = NodeKit.twin(atmo.skyMat);
     if (!twin) return;
-    this.envKey = atmo.envKey;
+    this.envKey = atmo.envKey; this.envT = now;
     const old = atmo.envDome.material;
     atmo.envDome.material = twin;
-    const rt = this.pmrem.fromScene(atmo.envScene, 0.02, 0.1, 500);
+    const rt = this.pmrem.fromScene(atmo.envScene, 0.02, 0.1, 500, this.envRT ? { renderTarget: this.envRT } : {});
     atmo.envDome.material = old;
-    if (this.envRT) this.envRT.dispose();
+    if (this.envRT && rt !== this.envRT) this.envRT.dispose();
     this.envRT = rt;
+  },
+  // Gestaffelte Schatten (Phase 11f): three.js-Zusatz CSMShadowNode an der Sonne (dem schattenwerfenden Richtungslicht),
+  // drei Stufen bis 720 m wie die WebGL-Fassung (game.js, CSM); ?csm=0 zum Vergleich. Nur wenn three.js vom CDN der Import-Map
+  // kommt (der Zusatz importiert three/webgpu)
+  setupCSM(scene) {
+    if (this.csmState || /[?&]csm=0/.test(location.search)) return;
+    this.csmState = 'laden';
+    let sun = null;
+    scene.traverse(o => { if (!sun && o.isDirectionalLight && o.castShadow && o.intensity > 0) sun = o; });
+    if (!sun || !/cdn\.jsdelivr\.net/.test(window.THREE_SRC || '')) { this.csmState = 'aus'; return; }
+    import('three/addons/csm/CSMShadowNode.js').then(m => {
+      const csm = new m.CSMShadowNode(sun, { cascades: 3, maxFar: 720, mode: 'practical', lightMargin: 250 });
+      csm.fade = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.shadowNode = csm;
+      this.csm = csm; this.csmState = 'an';
+    }).catch(e => { console.warn('CSM für WebGPU nicht verfügbar:', e.message); this.csmState = 'aus'; });
   },
   // Szene zeichnen; ShaderMaterials gegen ihren Node-Zwilling tauschen (ohne Zwilling ausblenden), Umgebungsbild aus
   // updateEnv statt des WebGL-Rendertargets
@@ -133,6 +154,7 @@ const GfxProbe = {
       if (tw) { swapped.push([o, o.material]); o.material = tw; } else { o.visible = false; hidden.push(o); }
     }
     this.updateEnv(atmo);
+    this.setupCSM(scene);
     const env = scene.environment, bg = scene.background;
     scene.environment = this.envRT ? this.envRT.texture : null;
     scene.background = fogColor || (scene.fog && scene.fog.color) || null;
