@@ -273,7 +273,8 @@ class Atmosphere {
 
     // Nebel und Sichtweite: klarer Tag weit, Regen und Nebel nah
     const fog = this.scene.fog;
-    let far = U.lerp(2700 * w.vis + 180, 1100 * Math.min(1, w.vis * 1.6) + 150, n);
+    // klarer Tag: seit v3.12.0 weiter (ferne Kacheln bis 4,6 km, js/region.js REGION.far), vorher 2700 m
+    let far = U.lerp(3600 * w.vis + 180, 1100 * Math.min(1, w.vis * 1.6) + 150, n);
     // Smartphones bauen das Umland nur in einem kleineren Umkreis: Nebel davor, damit kein Rand zu sehen ist
     if (window.QUALITY && window.QUALITY.fogFar) far = Math.min(far, window.QUALITY.fogFar);
     fog.far = far; fog.near = Math.min(far * 0.12, 320);

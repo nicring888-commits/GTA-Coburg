@@ -191,9 +191,10 @@ function polyProfile(P, base, style = 0) {
 }
 
 class Chunks {
-  constructor() { this.map = new Map(); }
+  // size: Kantenlänge der Stücke (m), ab (ox, oz); die Umland-Kacheln nehmen seit v3.12.0 Kachelviertel (weniger Zeichenaufrufe)
+  constructor(size = CHUNK, ox = 0, oz = 0) { this.map = new Map(); this.size = size; this.ox = ox; this.oz = oz; }
   get(x, z) {
-    const k = Math.floor(x / CHUNK) + ',' + Math.floor(z / CHUNK);
+    const k = Math.floor((x - this.ox) / this.size) + ',' + Math.floor((z - this.oz) / this.size);
     let b = this.map.get(k);
     if (!b) { b = new Bucket(); this.map.set(k, b); }
     return b;

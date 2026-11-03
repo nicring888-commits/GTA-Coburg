@@ -117,7 +117,9 @@ class WaterSet {
   // Wasseroberfläche (Höhe = ursprüngliches Gelände minus WATER.surface) in bucket; inside(x, z): Abschnitt zeichnen?
   // hc(x, z): Gelände mit ausgehobenem Bett. Das Wasser liegt dann höchstens so hoch wie das Ufer an seinem Rand
   // (das grobe Höhengitter senkt die Ufer oft tiefer ab), sonst schwebte es als Platte bzw. Band über der Böschung.
-  buildSurface(bucket, h0, inside, hc) {
+  buildSurface(bucket, h0, inside, hc) { for (const _ of this.surfaceSteps(bucket, h0, inside, hc)); }
+  // dasselbe in Schritten (Zeitscheiben im Umland, js/region.js): gibt etwa alle 2 ms ab (große Seen zerfallen in Tausende Dreiecke)
+  *surfaceSteps(bucket, h0, inside, hc) {
     const col = new THREE.Color('#ffffff');
     const y = (x, z) => h0(x, z) - WATER.surface;
     // Wasserspiegel einer Fläche: höchstens Ufer am nächsten Randpunkt, mindestens 20 cm über dem Bett
@@ -151,12 +153,14 @@ class WaterSet {
       bucket.get(cx, cz).tri(P(a), P(b), P(c), col, [a[0] / 9, a[1] / 9], [b[0] / 9, b[1] / 9], [c[0] / 9, c[1] / 9], 0, 1, 0);
     };
     const toV = p => { const o = []; for (let i = 0; i < p.length; i += 2) o.push(new THREE.Vector2(p[i], p[i + 1])); return o; };
+    let ty = performance.now();
     for (const P of this.polys) {
       const contour = toV(P.p), holes = (P.ho || []).map(toV);
       let faces;
       try { faces = THREE.ShapeUtils.triangulateShape(contour, holes); } catch (e) { continue; }
       const all = contour.concat(...holes);
       for (const f of faces) {
+        if (performance.now() - ty > 2) { yield; ty = performance.now(); }
         const a = all[f[0]], b = all[f[1]], c = all[f[2]];
         if (a && b && c) emit([a.x, a.y], [b.x, b.y], [c.x, c.y], 0, P);
       }
@@ -165,6 +169,7 @@ class WaterSet {
     for (const L of this.lines) {
       const p = L.p, n = p.length / 2;
       for (let i = 0; i < n - 1; i++) {
+        if (performance.now() - ty > 2) { yield; ty = performance.now(); }
         const ax = p[i * 2], az = p[i * 2 + 1], bx = p[i * 2 + 2], bz = p[i * 2 + 3];
         const mx = (ax + bx) / 2, mz = (az + bz) / 2;
         if (this.polys.some(P => this.inPoly(mx, mz, P))) continue;

@@ -6,8 +6,10 @@
 
 const REGION = {
   F: 4,               // Verfeinerung des Geländegitters (wie TERRAIN_UPSAMPLE in world.js)
-  load: 2000,         // Kacheln bis zu diesem Abstand vom Spieler bauen (m, bis zum Kachelrand)
-  drop: 2800,         // weiter entfernte Kacheln abbauen
+  load: 1400,         // Kacheln bis zu diesem Abstand vom Spieler voll bauen (m, bis zum Kachelrand; bis v3.11.0 2000)
+  drop: 1900,         // weiter entfernte Kacheln abbauen (bis v3.11.0 2800)
+  far: 4600,          // dahinter vereinfachte Kacheln (HLOD) bis zu diesem Abstand (0 = keine)
+  farDrop: 5200,
   trees: 1100,        // Bäume nur in der Nähe
   treesDrop: 1600,
   skirt: 5,           // Schürze an den Kachelrändern gegen Lichtspalten (m)
@@ -202,6 +204,7 @@ class Region {
     this.ti0 = S.i0; this.tj0 = S.j0; this.tni = S.ni; this.tnj = S.nj; this.state = S.state;
     this.limits = { minX: this.tileX(S.i0), minZ: this.tileZ(S.j0), maxX: this.tileX(S.i0 + S.ni), maxZ: this.tileZ(S.j0 + S.nj) };
     this.loaded = new Map();
+    this.far = new Map();           // vereinfachte ferne Kacheln (HLOD)
     this.treesOn = new Set();
     this.decodeGraph();
     this.places = R.places;
@@ -569,8 +572,28 @@ class Region {
         else if (lifeOn && d > REGION.lifeDrop) this.dropLife(t);
       }
     }
+    // ferne Kacheln (HLOD): bauen zwischen 70 % von REGION.load und REGION.far, zeigen, solange die volle Kachel fehlt
+    const farWant = [];
+    if (REGION.far > 0) {
+      const reachF = Math.ceil(REGION.farDrop / Math.min(this.tw, this.th)) + 1;
+      for (let tj = pj - reachF; tj <= pj + reachF; tj++) for (let ti = pi - reachF; ti <= pi + reachF; ti++) {
+        const st = this.stateOf(ti, tj);
+        if (!st) continue;
+        const d = this.rectDist(ti, tj, px, pz), key = tileKey(ti, tj), f = this.far.get(key), t = this.loaded.get(key);
+        if (f) {
+          if (d > REGION.farDrop || (d < REGION.load * 0.5 && t && t.ready)) this.disposeFar(f);
+          else if (f.ready) {
+            f.group.visible = !(t && t.ready);
+            // Kronendach nur bis 3,4 km: am Ende des Rings stünde es sonst als dunkle Kante vor dem Himmel
+            if (f.canopy) f.canopy.visible = d < REGION.far - 1200;
+          }
+        } else if (d < REGION.far && d > REGION.load * 0.7) farWant.push({ ti, tj, key, st, d, far: true });
+      }
+      farWant.sort((a, b) => a.d - b.d);
+    }
     // Kacheln weit außerhalb (nach einer Schnellreise) abbauen
     if (this.loaded.size > 60 || force) for (const t of [...this.loaded.values()]) if (this.rectDist(t.ti, t.tj, px, pz) > REGION.drop) this.dispose(t);
+    if (this.far.size > 160 || force) for (const f of [...this.far.values()]) if (this.rectDist(f.ti, f.tj, px, pz) > REGION.farDrop) this.disposeFar(f);
     want.sort((a, b) => a.d - b.d);
     const t0 = performance.now();
     for (const w of want) if (force || w.d < 350) this.runJob(this.startJob(w), Infinity);
@@ -578,9 +601,10 @@ class Region {
     const until = performance.now() + REGION.sliceMs;
     while (performance.now() < until) {
       if (!this.job) {
-        const w = want.find(w => !(force || w.d < 350));
+        let w = want.find(w => !(force || w.d < 350));
+        if (w) want.splice(want.indexOf(w), 1);
+        else w = farWant.shift(); // ferne Kacheln zuletzt
         if (!w) break;
-        want.splice(want.indexOf(w), 1);
         this.job = this.startJob(w);
         if (!this.job) continue;
       }
@@ -591,6 +615,12 @@ class Region {
   }
   // Auftrag anlegen: { art, Kachel, Schritte }; Kachel, Bäume oder Ortsleben
   startJob(w) {
+    if (w.far) {
+      const f = { ti: w.ti, tj: w.tj, key: w.key, st: w.st, x0: this.tileX(w.ti), z0: this.tileZ(w.tj) };
+      f.x1 = f.x0 + this.tw; f.z1 = f.z0 + this.th;
+      this.far.set(f.key, f);
+      return { kind: 'far', t: f, it: this.farSteps(f), ms: 0 };
+    }
     if (w.trees || w.life) {
       const t = this.loaded.get(w.key);
       if (!t || !t.ready || !t.d) return null;
@@ -645,6 +675,8 @@ class Region {
     }
   }
 
+  // Stücke für Straßen, Häuser, Gewässer: je Kachelviertel ein Mesh (Sichtbarkeitsprüfung), seit v3.12.0 statt 250 m
+  chunks(t) { return new Chunks(Math.max(this.tw, this.th) / 2 + 1, t.x0, t.z0); }
   // Kachel sofort ganz bauen
   buildTile(w) {
     const job = this.startJob(w);
@@ -688,6 +720,191 @@ class Region {
     if (t.coverTex) { t.coverTex.dispose(); t.fieldTex.dispose(); }
     t.disposed = true;
     this.loaded.delete(t.key);
+  }
+
+  // ---------------- Ferne Kacheln (HLOD, seit v3.12.0, Grafik-Phase 8) ----------------
+  // Zwischen REGION.load und REGION.far zeigt jede Kachel eine einfache Fassung: Gelände im groben 50-m-Raster mit dem
+  // kleinen Luftbild (*.256.jpg), Häuser als Körper mit Sattel- bzw. Flachdach (Dach mit Luftbild), Wald als
+  // Kronendach-Hülle. Drei Zeichenaufrufe je Kachel; zu sehen, solange die volle Kachel nicht fertig ist.
+  coarseAt(x, z) {
+    const gc = (x - this.minX) / this.stepX, gr = (z - this.minZ) / this.stepZ;
+    const c = Math.floor(gc), r = Math.floor(gr), tx = gc - c, tz = gr - r;
+    const h00 = this.coarse(c, r), h10 = this.coarse(c + 1, r), h01 = this.coarse(c, r + 1), h11 = this.coarse(c + 1, r + 1);
+    if (tx + tz <= 1) return h00 + (h10 - h00) * tx + (h01 - h00) * tz;
+    return h11 + (h01 - h11) * (1 - tx) + (h10 - h11) * (1 - tz);
+  }
+  farWallMaterial() {
+    return this._farWall || (this._farWall = new THREE.MeshLambertMaterial({ vertexColors: true }));
+  }
+  *farSteps(f) {
+    const TC = this.TC, S = TC + 1, F = REGION.F, C = this.core, sx = this.stepX, sz = this.stepZ;
+    const c0 = f.ti * TC, r0 = f.tj * TC, x0 = this.tileX(f.ti), z0 = this.tileZ(f.tj);
+    f.group = new THREE.Group();
+    f.group.visible = false;
+    f.mat = new THREE.MeshLambertMaterial({ map: this.placeholder(), color: ORTHO_TINT, vertexColors: true });
+    this.farPhoto(f);
+    // Gelände: Punkte des groben Gitters, weiche Normalen aus den Nachbarn, Schürze gegen Spalten zur vollen Kachel
+    const pos = [], nor = [], col = [], uv = [], idx = [];
+    const h = (c, r) => this.coarse(c0 + c, r0 + r);
+    for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) {
+      const hx = (h(c + 1, r) - h(c - 1, r)) / (2 * sx), hz = (h(c, r + 1) - h(c, r - 1)) / (2 * sz), l = Math.hypot(hx, 1, hz);
+      pos.push(x0 + c * sx, h(c, r), z0 + r * sz); nor.push(-hx / l, 1 / l, -hz / l); col.push(1, 1, 1); uv.push(c / TC, 1 - r / TC);
+    }
+    for (let r = 0; r < TC; r++) for (let c = 0; c < TC; c++) {
+      const gc = (c0 + c) * F, gr = (r0 + r) * F;
+      if (gc >= 0 && gc < C.fc && gr >= 0 && gr < C.fr) continue; // Innenstadt
+      const a = r * S + c, b = a + 1, d = a + S, e = d + 1;
+      idx.push(a, d, b, b, d, e);
+    }
+    const rim = [];
+    for (let c = 0; c < S; c++) rim.push(c);
+    for (let r = 1; r < S; r++) rim.push(r * S + TC);
+    for (let c = TC - 1; c >= 0; c--) rim.push(TC * S + c);
+    for (let r = TC - 1; r >= 0; r--) rim.push(r * S);
+    let v = S * S;
+    for (let k = 0; k < rim.length; k++) {
+      const i = rim[k];
+      pos.push(pos[i * 3], pos[i * 3 + 1] - 8, pos[i * 3 + 2]); nor.push(nor[i * 3], nor[i * 3 + 1], nor[i * 3 + 2]);
+      col.push(1, 1, 1); uv.push(uv[i * 2], uv[i * 2 + 1]);
+      if (k) { const a = rim[k - 1], as = v - 1; idx.push(a, as, i, i, as, v, a, i, as, i, v, as); }
+      v++;
+    }
+    yield;
+    const d = f.st === 2 ? this.decodeTile(f) : null;
+    if (d) {
+      // Häuser: Wände (eigene Farbe je Bautyp) und Dächer (Luftbild von oben, mit im Geländenetz)
+      const walls = new Bucket(), roofs = new Bucket(), white = new THREE.Color(1, 1, 1);
+      const tuv = (x, z) => [(x - x0) / this.tw, 1 - (z - z0) / this.th];
+      const rt = { b: roofs, uv: tuv };
+      let k = 0;
+      for (const b of d.buildings) {
+        if (++k % 200 === 0) yield;
+        const ring = b.p, n = ring.length / 2;
+        if (b.t === 'roof' || b.t === 'carport' || n < 3) continue;
+        const area = U.polyArea(ring), absA = Math.abs(area), sgn = area > 0 ? 1 : -1;
+        if (absA < 12) continue;
+        let minH = Infinity, maxH = -Infinity;
+        for (let i = 0; i < ring.length; i += 2) { const y = this.coarseAt(ring[i], ring[i + 1]); minH = Math.min(minH, y); maxH = Math.max(maxH, y); }
+        const arch = b.a || 0, hall = HALL_TYPES.has(b.t) || arch === ARCH.GEWERBE || arch === ARCH.INDUSTRIE || arch === ARCH.AGRAR_NEU;
+        const house = (arch >= ARCH.HOF && arch <= ARCH.MFH) || arch === ARCH.AGRAR_ALT || (!arch && HIP_TYPES.has(b.t));
+        const pitched = n === 4 && !b.f && b.rs !== 5 && absA <= 900 && (b.r || house) && arch !== ARCH.NEBEN;
+        const eave = pitched ? (b.h <= 4.6 ? 3.3 : arch === ARCH.NEUBAU ? 6.1 : 5.2) : arch === ARCH.NEBEN ? Math.min(b.h, 3) : b.h;
+        const top = Math.max(minH + eave, maxH + 2), base = minH - 2;
+        const hs = U.hashStr(b.t + ring[0].toFixed(1) + ring[1].toFixed(1));
+        const pal = ARCH_WALLS[arch] || (arch === ARCH.INDUSTRIE ? INDUSTRIE_WALLS : arch === ARCH.AGRAR_NEU ? AGRAR_NEU_WALLS
+          : FARM_TYPES.has(b.t) || arch === ARCH.AGRAR_ALT ? BARN_WALLS : arch === ARCH.NEBEN ? NEBEN_WALLS : hall ? GEWERBE_WALLS : RURAL_FACADES);
+        const wc = new THREE.Color(pal[hs % pal.length]).multiplyScalar(0.92);
+        const f4 = pitched ? HouseKit.frame(ring) : null;
+        const rh = f4 ? Math.min(f4.d * Math.tan((arch === ARCH.NEUBAU ? 30 : arch === ARCH.EFH ? 36 : 45) * Math.PI / 180), 7) : 0;
+        const du = (x, z) => (x - f4.c[0]) * f4.ux + (z - f4.c[1]) * f4.uz;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1];
+          const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+          if (len < 0.01) continue;
+          const ox = sgn * dz / len, oz = -sgn * dx / len;
+          const A0 = [ax, base, az], B0 = [bx, base, bz], A1 = [ax, top, az], B1 = [bx, top, bz];
+          walls.tri(A0, B0, B1, wc, null, null, null, ox, 0, oz); walls.tri(A0, B1, A1, wc, null, null, null, ox, 0, oz);
+          if (!f4) continue;
+          if (Math.abs(dx / len * f4.ux + dz / len * f4.uz) > 0.7) {
+            // Traufseite: Dachfläche bis zum First
+            const RA = f4.X(du(ax, az), 0, top + rh), RB = f4.X(du(bx, bz), 0, top + rh);
+            roofs.tri(A1, B1, RB, white, tuv(ax, az), tuv(bx, bz), tuv(RB[0], RB[2]), 0, 1, 0);
+            roofs.tri(A1, RB, RA, white, tuv(ax, az), tuv(RB[0], RB[2]), tuv(RA[0], RA[2]), 0, 1, 0);
+          } else {
+            // Giebel
+            const R = f4.X(du((ax + bx) / 2, (az + bz) / 2), 0, top + rh);
+            walls.tri(A1, B1, R, wc, null, null, null, ox, 0, oz);
+          }
+        }
+        if (!f4) this.world.flatRoof(rt, [ring], top, white, 1);
+      }
+      // Dächer ins Geländenetz (gleiches Material und Luftbild)
+      let base = pos.length / 3;
+      for (let i = 0; i < roofs.pos.length; i++) pos.push(roofs.pos[i]);
+      for (let i = 0; i < roofs.nor.length; i++) nor.push(roofs.nor[i]);
+      for (let i = 0; i < roofs.col.length; i++) col.push(roofs.col[i]);
+      for (let i = 0; i < roofs.uv.length; i++) uv.push(roofs.uv[i]);
+      for (let i = base; i < pos.length / 3; i++) idx.push(i);
+      const wg = walls.geometry();
+      if (wg) f.group.add(new THREE.Mesh(wg, this.farWallMaterial()));
+      yield;
+      // Wald: Kronendach-Hülle über dem groben Gitter
+      const forests = d.areas.filter(a => a.k === 'forest').map(a => ({ a, bb: U.polyBBox(a.p) }));
+      if (forests.length && this.land) {
+        const inF = new Uint8Array(S * S);
+        let any = false;
+        for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) {
+          const x = x0 + c * sx, z = z0 + r * sz;
+          for (const { a, bb } of forests) {
+            if (x < bb.minX || x > bb.maxX || z < bb.minZ || z > bb.maxZ || !U.pointInPoly(x, z, a.p)) continue;
+            if (a.ho && a.ho.some(q => U.pointInPoly(x, z, q))) continue;
+            inF[r * S + c] = 1; any = true; break;
+          }
+        }
+        if (any) {
+          const cp = [], cc = [], ci = [], map = new Int32Array(S * S).fill(-1), rnd = U.rng(f.key * 13 + 5);
+          for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) {
+            let near = inF[r * S + c];
+            for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const q = c + dc, w = r + dr; if (q >= 0 && w >= 0 && q < S && w < S) near |= inF[w * S + q]; }
+            if (!near) continue;
+            map[r * S + c] = cp.length / 3;
+            cp.push(x0 + c * sx, h(c, r) + (inF[r * S + c] ? LAND.canopyH * (0.75 + 0.45 * rnd()) : -2), z0 + r * sz);
+            const vv = 0.7 + rnd() * 0.45; cc.push(vv * 0.9, vv, vv * 0.85);
+          }
+          for (let r = 0; r < TC; r++) for (let c = 0; c < TC; c++) {
+            const a = map[r * S + c], b = map[r * S + c + 1], e1 = map[(r + 1) * S + c], e2 = map[(r + 1) * S + c + 1];
+            if (a < 0 || b < 0 || e1 < 0 || e2 < 0) continue;
+            if (inF[r * S + c] + inF[r * S + c + 1] + inF[(r + 1) * S + c] + inF[(r + 1) * S + c + 1] < 2) continue;
+            ci.push(a, e1, b, b, e1, e2);
+          }
+          if (ci.length) {
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3));
+            g.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
+            g.setIndex(ci); g.computeVertexNormals();
+            f.canopy = new THREE.Mesh(g, this.land.canopyMaterial());
+            f.group.add(f.canopy);
+          }
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeBoundingSphere();
+    f.group.add(new THREE.Mesh(g, f.mat));
+    this.world.group.add(f.group);
+    f.ready = true;
+  }
+  // kleines Luftbild der Kachel: Vorschaubild der KTX2-Fassung, sonst das JPG, sonst aus den Flächen gemalt
+  farPhoto(f) {
+    const flag = this.ortho && this.ortho.tiles[f.ti + ',' + f.tj], K = window.COBURG_REGION_KTX2;
+    const name = (flag === 2 ? 'th' : 'by') + f.ti + '_' + f.tj;
+    const done = tex => {
+      if (f.disposed) { tex.dispose(); return; }
+      tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.anisotropy = 4;
+      f.tex = tex; f.mat.map = tex;
+    };
+    if (!flag) { if (f.st === 2) { f.d = this.decodeTile(f); done(new THREE.CanvasTexture(this.paintTile(f, 128))); f.d = null; } return; }
+    const im = new Image();
+    im.onload = () => {
+      if (f.disposed) return;
+      // große JPGs (Mischkacheln) auf 256 px verkleinern: weniger Grafikspeicher
+      if (im.width > 256) { const cv = document.createElement('canvas'); cv.width = cv.height = 256; cv.getContext('2d').drawImage(im, 0, 0, 256, 256); done(new THREE.CanvasTexture(cv)); }
+      else { const tx = new THREE.Texture(im); tx.needsUpdate = true; done(tx); }
+    };
+    im.src = flag !== 3 && K && K.tiles[name] ? `data/region/ortho/${name}.256.jpg` : `data/region/ortho/${name}.jpg`;
+  }
+  disposeFar(f) {
+    if (this.job && this.job.t === f) this.job = null;
+    if (f.group) { f.group.traverse(o => { if (o.isMesh) o.geometry.dispose(); }); this.world.group.remove(f.group); }
+    if (f.mat) f.mat.dispose();
+    if (f.tex) f.tex.dispose();
+    f.disposed = true;
+    this.far.delete(f.key);
   }
 
   // Kachel-Daten entpacken (Formate siehe tools/convert-region.js)
@@ -897,7 +1114,7 @@ class Region {
   buildRoads(t) {
     const runs = this.runs.get(t.key);
     if (!runs) return;
-    const W = this.world, roads = new Chunks(), marks = new Chunks();
+    const W = this.world, roads = this.chunks(t), marks = this.chunks(t);
     const rnd = U.rng(t.key);
     const white = new THREE.Color('#e9e6dc');
     const y = REGION.roadY;
@@ -935,7 +1152,7 @@ class Region {
       }
       if (B && B.low) {
         const water = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0 ? this.heightAt0(x, z) - WATER.surface : -Infinity;
-        lowBridgeParts(t.bridgeParts || (t.bridgeParts = new Chunks()), pts, L, R, (x, z) => W.heightAt(x, z), water, false);
+        lowBridgeParts(t.bridgeParts || (t.bridgeParts = this.chunks(t)), pts, L, R, (x, z) => W.heightAt(x, z), water, false);
       } else if (B) this.bridgeStructure(t, B, pts, sAt, L, R);
       else W.bankSkirt(roads, L, R);
       for (let i = 0; i < n - 1; i++) {
@@ -1172,7 +1389,7 @@ class Region {
     t.railJobs = null;
     t.rails = []; t.railGrid = new U.Grid(16);
     if (!jobs) return;
-    const W = this.world, E = this.graph.edges, parts = new Chunks(), steel = new THREE.Color('#b9bdc1'), post = new THREE.Color('#7d8186');
+    const W = this.world, E = this.graph.edges, parts = this.chunks(t), steel = new THREE.Color('#b9bdc1'), post = new THREE.Color('#7d8186');
     const town = (x, z) => t.polyGrid.query(x, z, 35, W._tmp).some(b => Math.abs(b.bb.minX - x) < 65 && Math.abs(b.bb.minZ - z) < 65);
     const quad = (b, a, c, d, e, col, nx, ny, nz) => { b.tri(a, c, d, col, null, null, null, nx, ny, nz); b.tri(a, d, e, col, null, null, null, nx, ny, nz); };
     // Höhe einer anderen Straße am Punkt (x, z) nahe ihrem Abschnitt k
@@ -1245,7 +1462,7 @@ class Region {
 
   // Brückenbauwerk: Platte unter der Fahrbahn, Geländer, Pfeiler bis zum Gelände
   bridgeStructure(t, B, pts, sAt, L, R) {
-    const parts = t.bridgeParts || (t.bridgeParts = new Chunks());
+    const parts = t.bridgeParts || (t.bridgeParts = this.chunks(t));
     const W = this.world, n = pts.length / 2;
     const concrete = new THREE.Color('#a9a59c'), rail = new THREE.Color('#8d8a84');
     const quad = (b, a, c, d, e, col, nx, ny, nz) => { b.tri(a, c, d, col, null, null, null, nx, ny, nz); b.tri(a, d, e, col, null, null, null, nx, ny, nz); };
@@ -1305,8 +1522,8 @@ class Region {
     if (!own.areas.length && !own.lines.length) return;
     const ws = new WaterSet(own.areas, own.lines);
     const inside = (x, z) => x >= t.x0 && x < t.x1 && z >= t.z0 && z < t.z1 && !this.inCore(x, z);
-    const surf = new Chunks();
-    ws.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
+    const surf = this.chunks(t);
+    yield* ws.surfaceSteps(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
     surf.meshes(waterMaterial(), { receive: true }).forEach(m => t.group.add(m));
     yield;
     ws.edges((ax, az, bx, bz) => {
@@ -1470,7 +1687,7 @@ class Region {
   *buildingSteps(t) {
     const W = this.world, list = t.d.buildings;
     if (!list.length) return;
-    const walls = new Chunks(), plain = new Chunks(), roofs = new Chunks();
+    const walls = this.chunks(t), plain = this.chunks(t), roofs = this.chunks(t);
     const rnd = U.rng(t.key * 7 + 3);
     const BAY_W = 3.2 * 4, BAY_H = 3.1 * 4;
     const photoCol = new THREE.Color(ORTHO_TINT);

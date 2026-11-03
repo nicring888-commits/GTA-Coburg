@@ -40,7 +40,7 @@
 
   const scene = new THREE.Scene();
   const BASE_FOV = 65;
-  const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.3, 4000);
+  const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.3, typeof REGION !== 'undefined' && REGION.far > 0 ? 6500 : 4000);
   scene.fog = new THREE.Fog('#c8dbec', 300, 2800);
 
   const hemi = new THREE.HemisphereLight('#cfe2ff', '#6f6a55', 1.1);
@@ -1180,6 +1180,28 @@
     });
   }
 
+  // Sichtweite (seit v3.12.0): Gelände und vereinfachte ferne Kacheln (js/region.js) reichen bis 6,5 km, alles andere
+  // (Innenstadt, Autos, Requisiten) wird wie bisher hinter 4 km nicht gezeichnet – nur für dieses Bild ausgeblendet.
+  const FAR_OBJ = 4000, farHidden = [], _fs = new THREE.Sphere();
+  function hideFar() {
+    if (camera.far <= FAR_OBJ) return;
+    const cp = camera.position, regionGroups = world.group.children;
+    const test = o => {
+      if (!o.visible) return;
+      if (o.isMesh || o.isPoints || o.isLine) {
+        const s = o.isInstancedMesh ? (o.boundingSphere || (o.computeBoundingSphere(), o.boundingSphere)) : (o.geometry.boundingSphere || (o.geometry.computeBoundingSphere(), o.geometry.boundingSphere));
+        if (o.frustumCulled && s) {
+          _fs.copy(s).applyMatrix4(o.matrixWorld);
+          if (_fs.center.distanceTo(cp) - _fs.radius > FAR_OBJ) { o.visible = false; farHidden.push(o); return; }
+        }
+      }
+      for (const c of o.children) test(c);
+    };
+    for (const o of scene.children) if (o !== world.group) test(o);
+    // Innenstadt: Meshes direkt in world.group (Umland-Kacheln sind Gruppen und bleiben)
+    for (const o of regionGroups) if (!o.isGroup) test(o);
+  }
+
   function render(dt) {
     if (!player) return;
     updateCamera(dt);
@@ -1202,8 +1224,11 @@
     waterTick(dt);
     ui.updateLabels(camera);
     // WebGPU-Probe (?gfx=webgpu, js/gfx-webgpu.js) zeichnet statt der WebGL-Kette; ?gfx=stats misst die WebGL-Kette
+    hideFar();
     if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color);
     else { const t0 = performance.now(); post.render(scene, camera); GfxProbe.measureWebGL(renderer, performance.now() - t0); }
+    for (const o of farHidden) o.visible = true;
+    farHidden.length = 0;
   }
 
   addEventListener('resize', () => {

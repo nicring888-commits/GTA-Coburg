@@ -40,9 +40,9 @@
   const Q = {
     voll: { level: 'voll', pixelRatio: 0, antialias: true, shadow: 0, lod2: true, hd: true, ensure: 1400, fogFar: 0, region: null },
     mobil: { level: 'mobil', pixelRatio: 1.25, antialias: false, post: 'niedrig', shadow: 1024, lod2: true, hd: false, ensure: 900, fogFar: 1500,
-      region: { load: 1200, drop: 1700, trees: 700, treesDrop: 1000, life: 500, lifeDrop: 750 } },
+      region: { load: 1200, drop: 1700, trees: 700, treesDrop: 1000, life: 500, lifeDrop: 750, far: 0 } },
     leicht: { level: 'leicht', pixelRatio: 1, antialias: false, post: 'niedrig', postForce: true, shadow: 1024, lod2: false, hd: false, ensure: 600, fogFar: 1000,
-      region: { load: 800, drop: 1200, trees: 450, treesDrop: 700, life: 400, lifeDrop: 600 } },
+      region: { load: 800, drop: 1200, trees: 450, treesDrop: 700, life: 400, lifeDrop: 600, far: 0 } },
   }[level];
   Q.phone = phone; Q.ios = ios;
   // Budget je Stufe (js/materials.js): Materialart (physical → standard → lambert), Anisotropie, Größe gemalter
