@@ -106,52 +106,58 @@ const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, 
 const tileKey = (ti, tj) => (ti + 512) * 1024 + (tj + 512);
 
 // Bäume einer Art in einer Kachel (seit v3.12.0, Grafik-Phase 8): wenige InstancedMeshes statt je eines pro 250-m-Gruppe.
-// Die Instanzen liegen nach Zellen sortiert (4 × 4 je Kachel): nahe Zellen (Blattkarten) in einem Mesh, ferne (grobe Hülle)
-// in je einem Mesh pro Kachelviertel, damit Unsichtbares weiter ausgeblendet wird. Wechselt eine Zelle zwischen nah und
-// fern, werden die Puffer neu zusammengesetzt (beim Fahren alle paar Sekunden, ≈ 0,1 ms).
+// Die Instanzen liegen nach Zellen sortiert (4 × 4 je Kachel). Jede Zelle hat eine Stufe: nah (unter 220 m, Blattkarten,
+// ein Mesh), fern (grobe Hülle) und ab 600 m Impostor (zwei gekreuzte Flächen mit gerendertem Bild; Stämme entfallen) –
+// fern und Impostor je Kachelviertel ein Mesh, damit Unsichtbares weiter ausgeblendet wird. Wechselt eine Zelle die
+// Stufe, werden die Puffer neu zusammengesetzt (beim Fahren alle paar Sekunden, ≈ 0,1 ms).
 const TREE_CELLS = 4;
+const TREE_NEAR = [220, 250], TREE_IMP = [600, 650]; // Stufenwechsel (m) mit Spielraum zurück
 class TreeSet {
-  // mats: Float32Array (16 je Baum), cols: Float32Array (3 je Baum) oder null, start: Zellgrenzen (TREE_CELLS² + 1)
-  constructor(t, near, far, mat, mats, cols, start, cw, ch) {
-    Object.assign(this, { t, near, far, mat, mats, cols, start, cw, ch });
+  // mats: Float32Array (16 je Baum), cols: Float32Array (3 je Baum) oder null, start: Zellgrenzen (TREE_CELLS² + 1);
+  // imp: { geo, mat } für die Impostor-Stufe oder null (Stämme: dort nicht zeichnen)
+  constructor(t, near, far, mat, mats, cols, start, cw, ch, imp) {
+    Object.assign(this, { t, near, far, mat, mats, cols, start, cw, ch, imp });
     const N = TREE_CELLS, S = start;
     this.n = S[N * N];
-    this.mask = -1;
+    this.lv = null;
     // Viertel der Zelle k und Größe jedes Viertels
     this.quad = k => (Math.floor((k % N) * 2 / N)) + 2 * Math.floor(Math.floor(k / N) * 2 / N);
-    const qn = [0, 0, 0, 0];
-    for (let k = 0; k < N * N; k++) qn[this.quad(k)] += S[k + 1] - S[k];
-    this.farM = qn.map(c => c ? this.mesh(far, c) : null);
+    this.qn = [0, 0, 0, 0];
+    for (let k = 0; k < N * N; k++) this.qn[this.quad(k)] += S[k + 1] - S[k];
+    this.farM = [null, null, null, null];
+    this.impM = [null, null, null, null];
     this.nearM = null;
     this.m = this; // Schlüssel für World.removeTreeLod
   }
-  mesh(geo, cap) {
-    const m = new THREE.InstancedMesh(geo, this.mat, cap);
+  mesh(geo, mat, cap, shadow = true) {
+    const m = new THREE.InstancedMesh(geo, mat, cap);
     if (this.cols) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-    m.castShadow = true; m.receiveShadow = true; m.count = 0;
+    m.castShadow = shadow; m.receiveShadow = true; m.count = 0;
     this.t.group.add(m);
     return m;
   }
-  // Zelle k nah unter 220 m, wieder fern ab 250 m (wie die Bäume der Innenstadt)
+  // Stufe je Zelle aus dem Abstand zur Kamera
   update(x, z) {
-    const t = this.t, N = TREE_CELLS;
-    let mask = 0;
+    const t = this.t, N = TREE_CELLS, old = this.lv, lv = new Uint8Array(N * N);
+    let changed = !old;
     for (let k = 0; k < N * N; k++) {
       if (this.start[k + 1] === this.start[k]) continue;
       const x0 = t.x0 + (k % N) * this.cw, z0 = t.z0 + Math.floor(k / N) * this.ch;
       const d = Math.hypot(Math.max(x0 - x, 0, x - x0 - this.cw), Math.max(z0 - z, 0, z - z0 - this.ch));
-      if (d < 220 || (d <= 250 && this.mask > 0 && (this.mask >> k) & 1)) mask |= 1 << k;
+      const o = old ? old[k] : -1;
+      lv[k] = d < TREE_NEAR[0] || (o === 0 && d <= TREE_NEAR[1]) ? 0 : d < TREE_IMP[0] || (o === 1 && d <= TREE_IMP[1]) ? 1 : 2;
+      if (lv[k] !== o) changed = true;
     }
-    if (mask !== this.mask) this.fill(mask);
+    if (changed) this.fill(lv);
   }
-  fill(mask) {
-    this.mask = mask;
+  fill(lv) {
+    this.lv = lv;
     const N = TREE_CELLS, S = this.start;
     let nNear = 0;
-    for (let k = 0; k < N * N; k++) if ((mask >> k) & 1) nNear += S[k + 1] - S[k];
+    for (let k = 0; k < N * N; k++) if (lv[k] === 0) nNear += S[k + 1] - S[k];
     if (nNear && (!this.nearM || this.nearM.instanceMatrix.count < nNear)) {
       if (this.nearM) { this.t.group.remove(this.nearM); this.nearM.dispose(); }
-      this.nearM = this.mesh(this.near, Math.min(this.n, Math.ceil(nNear * 1.3)));
+      this.nearM = this.mesh(this.near, this.mat, Math.min(this.n, Math.ceil(nNear * 1.3)));
     }
     const put = (m, at, k) => {
       const a = S[k], b = S[k + 1];
@@ -159,12 +165,14 @@ class TreeSet {
       if (this.cols) m.instanceColor.array.set(this.cols.subarray(a * 3, b * 3), at * 3);
       return at + b - a;
     };
-    const fc = [0, 0, 0, 0];
+    const fc = [0, 0, 0, 0], ic = [0, 0, 0, 0];
     let n = 0;
     for (let k = 0; k < N * N; k++) {
       if (S[k + 1] === S[k]) continue;
-      if ((mask >> k) & 1) n = put(this.nearM, n, k);
-      else { const q = this.quad(k); fc[q] = put(this.farM[q], fc[q], k); }
+      const q = this.quad(k);
+      if (lv[k] === 0) n = put(this.nearM, n, k);
+      else if (lv[k] === 1) fc[q] = put(this.farM[q] || (this.farM[q] = this.mesh(this.far, this.mat, this.qn[q])), fc[q], k);
+      else if (this.imp) ic[q] = put(this.impM[q] || (this.impM[q] = this.mesh(this.imp.geo, this.imp.mat, this.qn[q], false)), ic[q], k);
     }
     const done = (m, c) => {
       if (!m) return;
@@ -173,10 +181,10 @@ class TreeSet {
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
       if (c) m.computeBoundingSphere();
     };
-    this.farM.forEach((m, q) => done(m, fc[q]));
+    for (let q = 0; q < 4; q++) { done(this.farM[q], fc[q]); done(this.impM[q], ic[q]); }
     done(this.nearM, n);
   }
-  meshes() { return [...this.farM, this.nearM].filter(Boolean); }
+  meshes() { return [...this.farM, ...this.impM, this.nearM].filter(Boolean); }
 }
 
 class Region {
@@ -566,7 +574,9 @@ class Region {
           else if (f.ready) {
             f.group.visible = !(t && t.ready);
             // Kronendach nur bis 3,4 km: am Ende des Rings stünde es sonst als dunkle Kante vor dem Himmel
-            if (f.canopy) f.canopy.visible = d < REGION.far - 1200;
+            const trees = !!(f.forest && f.forest.length) && d < 2500;
+            if (f.forest) for (const m of f.forest) m.visible = trees;
+            if (f.canopy) f.canopy.visible = !trees && d < REGION.far - 1200;
           }
         } else if (d < REGION.far && d > REGION.load * 0.7) farWant.push({ ti, tj, key, st, d, far: true });
       }
@@ -853,6 +863,42 @@ class Region {
           }
         }
       }
+      // Wald aus Impostor-Bäumen (bis 2,5 km statt der Kronendach-Hülle): Dichte und Nadelholz-Anteil wie bei den
+      // Bäumen der vollen Kacheln (treeSteps), zwei Zeichenaufrufe je Kachel
+      const imps = forests.length ? this.treeImpostors() : null;
+      if (imps) {
+        yield;
+        const rnd = U.rng(f.key * 29 + 11), lists = [[], []];
+        let budget = 6000;
+        for (const { a, bb } of forests) {
+          const hh = U.hashStr(a.k + a.p[0] + ',' + a.p[1]), conifer = 0.15 + (hh % 100) / 100 * 0.7;
+          const count = Math.min(Math.round(Math.abs(U.polyArea(a.p)) / 115), budget);
+          for (let k = 0, tries = 0; k < count && tries < count * 2; tries++) {
+            const x = bb.minX + rnd() * (bb.maxX - bb.minX), z = bb.minZ + rnd() * (bb.maxZ - bb.minZ);
+            if (!U.pointInPoly(x, z, a.p) || (a.ho && a.ho.some(q => U.pointInPoly(x, z, q)))) continue;
+            lists[rnd() < conifer ? 1 : 0].push(x, z, 0.55 + Math.pow(rnd(), 0.7) * 1.15);
+            k++;
+          }
+          budget -= count;
+          if (budget <= 0) break;
+        }
+        const greens = ['#5f8d3e', '#4f7d35', '#6a9a45', '#577f3a', '#7a9e4a', '#46703a'];
+        const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
+        f.forest = [];
+        lists.forEach((L, kind) => {
+          const n = L.length / 3;
+          if (!n) return;
+          const m = new THREE.InstancedMesh(imps[kind].geo, imps[kind].mat, n);
+          for (let i = 0; i < n; i++) {
+            const x = L[i * 3], z = L[i * 3 + 1], s = L[i * 3 + 2];
+            q.setFromAxisAngle(up, rnd() * 6.28); ps.set(x, this.coarseAt(x, z) - 0.2, z); sc.set(s, s * (0.85 + rnd() * 0.35), s);
+            m.setMatrixAt(i, m4.compose(ps, q, sc));
+            m.setColorAt(i, c.set(kind ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3));
+          }
+          m.computeBoundingSphere(); m.visible = false;
+          f.forest.push(m); f.group.add(m);
+        });
+      }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -886,7 +932,8 @@ class Region {
   }
   disposeFar(f) {
     if (this.job && this.job.t === f) this.job = null;
-    if (f.group) { f.group.traverse(o => { if (o.isMesh) o.geometry.dispose(); }); this.world.group.remove(f.group); }
+    // Impostor-Wald: gemeinsame Form (nicht freigeben), nur die Instanzpuffer
+    if (f.group) { f.group.traverse(o => { if (o.isInstancedMesh) o.dispose(); else if (o.isMesh) o.geometry.dispose(); }); this.world.group.remove(f.group); }
     if (f.mat) f.mat.dispose();
     if (f.tex) f.tex.dispose();
     f.disposed = true;
@@ -2005,6 +2052,51 @@ class Region {
     }
     return this._trees;
   }
+  // Impostors (seit v3.12.0, Grafik-Phase 8): die fernen Formen von Laubbaum (mit Stamm), Nadelbaum (mit Stamm) und Busch
+  // einmal von der Seite in je eine Textur gerendert (Grundfarbe mit Eigenschatten, ohne Licht); dazu zwei gekreuzte
+  // Flächen, jede in beide Richtungen mit Normalen nach oben (gleichmäßig beleuchtet wie eine Krone von weitem).
+  // Die Grünfärbung kommt wie beim Laub aus der Instanzfarbe. null ohne Renderer bzw. bei Fehlern.
+  treeImpostors() {
+    if (this._imp !== undefined) return this._imp;
+    this._imp = null;
+    const r = this.world.renderer;
+    if (!r || !r.setRenderTarget) return null;
+    try {
+      const A = this.treeAssets(), S = 256, cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -50, 50);
+      const leafM = new THREE.MeshBasicMaterial({ map: A.leafMat.map, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide });
+      const trunkM = new THREE.MeshBasicMaterial({ color: A.trunkMat.color });
+      const prevRT = r.getRenderTarget(), prevCol = r.getClearColor(new THREE.Color()), prevA = r.getClearAlpha();
+      const out = [[A.leafFar, true], [A.pineFar, true], [A.bushFar, false]].map(([g, trunk]) => {
+        g.computeBoundingBox();
+        const b = g.boundingBox, w = Math.max(-b.min.x, b.max.x, -b.min.z, b.max.z) * 2.08;
+        const y0 = trunk ? 0 : Math.max(0, b.min.y), y1 = b.max.y * 1.02, side = Math.max(w, y1 - y0), cy = (y0 + y1) / 2;
+        const scene = new THREE.Scene();
+        scene.add(new THREE.Mesh(g, leafM));
+        if (trunk) scene.add(new THREE.Mesh(A.trunkFar, trunkM));
+        Object.assign(cam, { left: -side / 2, right: side / 2, top: cy + side / 2, bottom: cy - side / 2 });
+        cam.position.set(0, 0, 20); cam.lookAt(0, 0, 0); cam.updateProjectionMatrix();
+        const rt = new THREE.WebGLRenderTarget(S, S, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+        r.setRenderTarget(rt); r.setClearColor(0x000000, 0); r.clear(); r.render(scene, cam);
+        // zwei gekreuzte Flächen (Breite und Höhe = side), jede vorne und hinten
+        const pos = [], nor = [], uv = [], b0 = cy - side / 2, h = side / 2;
+        for (const [dx, dz] of [[1, 0], [0, 1]]) for (const back of [false, true]) {
+          const P = [[-h * dx, b0, -h * dz, 0, 0], [h * dx, b0, h * dz, 1, 0], [h * dx, b0 + side, h * dz, 1, 1], [-h * dx, b0 + side, -h * dz, 0, 1]];
+          const order = back ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
+          for (const i of order) { pos.push(P[i][0], P[i][1], P[i][2]); nor.push(0, 1, 0); uv.push(P[i][3], P[i][4]); }
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        geo.computeBoundingSphere();
+        return { geo, mat: new THREE.MeshLambertMaterial({ map: rt.texture, alphaTest: 0.45 }), rt };
+      });
+      r.setRenderTarget(prevRT); r.setClearColor(prevCol, prevA);
+      leafM.dispose(); trunkM.dispose();
+      this._imp = out;
+    } catch (e) { console.warn('Baum-Impostors aus:', e.message); }
+    return this._imp;
+  }
   // Bäume sofort ganz bauen (Spielstart, Schnellreise)
   buildTrees(t) {
     if (this.finishJob(t, 'trees') || this.treesOn.has(t.key) || !t.d) return;
@@ -2125,6 +2217,8 @@ class Region {
     if (t.canopy) t.canopy.visible = false;
     t.treeMeshes = [];
     const forms = [[A.leaf, A.leafFar, A.leafMat], [A.pine, A.pineFar, A.leafMat], [A.bush, A.bushFar, A.leafMat], [A.trunk, A.trunkFar, A.trunkMat]];
+    const imps = this.treeImpostors(); // Laubbaum, Nadelbaum, Busch; Stämme ohne
+
     bins.forEach((cells, kind) => {
       const start = new Int32Array(N * N + 1);
       cells.forEach((b, c) => { start[c + 1] = start[c] + b.m.length / 16; });
@@ -2132,7 +2226,7 @@ class Region {
       if (!n) return;
       const mats = new Float32Array(n * 16), cols = kind === 3 ? null : new Float32Array(n * 3);
       cells.forEach((b, c) => { mats.set(b.m, start[c] * 16); if (cols) cols.set(b.c, start[c] * 3); });
-      const set = new TreeSet(t, forms[kind][0], forms[kind][1], forms[kind][2], mats, cols, start, cw, ch);
+      const set = new TreeSet(t, forms[kind][0], forms[kind][1], forms[kind][2], mats, cols, start, cw, ch, imps ? imps[kind] : null);
       set.update(this.px !== undefined ? this.px : t.x0, this.pz !== undefined ? this.pz : t.z0);
       t.treeMeshes.push(set);
       (this.world.treeLod || (this.world.treeLod = [])).push(set);
