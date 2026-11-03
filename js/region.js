@@ -215,6 +215,7 @@ class Region {
     this.lifeOn = new Set();
     this.night = false;
     this.initBridges();
+    this.startWorker();
     // Landschaft: Bodenbedeckung, Geländematerial, Bewuchs, Waldkulisse (js/landscape.js)
     this.land = typeof Landscape !== 'undefined' ? new Landscape(this) : null;
     // Feldwege, Hecken, Baumreihen (data/region-rural.js) nach Kacheln
@@ -272,16 +273,7 @@ class Region {
 
   // Straße (oder flache Brücke) in der Nähe? Hohe Brücken zählen nicht: unter ihnen bleibt das Wasser.
   // carve: fürs Ausheben der Gewässer; dann zählen auch niedrige Brücken nicht (unter ihnen fließt das Wasser durch)
-  roadNear(x, z, margin, carve) {
-    const list = this.netGrid.query(x, z, 14, this._rq || (this._rq = []));
-    for (const code of list) {
-      const e = this.graph.edges[Math.floor(code / 4096)], k = (code % 4096) * 2;
-      if (e.deck && (!e.deck.low || carve)) continue;
-      const c = U.closestOnSeg(x, z, e.p[k], e.p[k + 1], e.p[k + 2], e.p[k + 3]);
-      if (Math.hypot(c[0] - x, c[1] - z) < e.w / 2 + margin) return true;
-    }
-    return false;
-  }
+  roadNear(x, z, margin, carve) { return TileHeights.roadNear(this, x, z, margin, carve); }
 
   // ---------------- Brücken ----------------
   // Brücken über Täler: Fahrbahn als Gerade zwischen den Brückenenden statt auf dem Gelände. Führt eine Brücke über
@@ -435,67 +427,56 @@ class Region {
     c = U.clamp(c - this.gc0, 0, this.gcols - 1); r = U.clamp(r - this.gr0, 0, this.grows - 1);
     return this.gh[r * this.gcols + c];
   }
-  // Höhe am feinen Gitterpunkt (fc, fr), gezählt ab der Nordwestecke der Innenstadt (wie in World.buildTerrainData)
-  fine(fc, fr) {
-    const F = REGION.F;
-    const gr = fr / F, r0 = Math.floor(gr), tr = gr - r0, gc = fc / F, c0 = Math.floor(gc), tc = gc - c0;
-    const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
-    const row = k => cr(this.coarse(c0 - 1, r0 + k), this.coarse(c0, r0 + k), this.coarse(c0 + 1, r0 + k), this.coarse(c0 + 2, r0 + k), tc);
-    const h = tr === 0 ? row(0) : cr(row(-1), row(0), row(1), row(2), tr);
-    return h + this.relief(this.minX + fc * this.fx, this.minZ + fr * this.fz);
-  }
-  // Kleinrelief: sanfte Bodenwellen (bis ≈ ±1,8 m) im offenen Land, die das grobe Höhenmodell nicht kennt.
-  // An Straßen (bis 12 m neben der Fahrbahn) und am Rand der Innenstadt läuft es aus.
-  relief(x, z) {
-    const C = this.core, dc = Math.hypot(Math.max(C.minX - x, 0, x - C.maxX), Math.max(C.minZ - z, 0, z - C.maxZ));
-    if (dc < 150) return 0;
-    const m = this.reliefMask(x, z) * U.smoothstep(150, 450, dc);
-    if (m <= 0.001) return 0;
-    return m * ((U.vnoise(x / 140, z / 140) - 0.5) * 3.0 + (U.vnoise(x / 47 + 17.3, z / 47 - 3.1) - 0.5) * 1.0);
-  }
-  // Abstand zur nächsten Straße als Maske 0..1, auf einem 25-m-Raster zwischengespeichert und weich interpoliert
-  reliefMask(x, z) {
-    const G = 25, gx = x / G, gz = z / G, i = Math.floor(gx), j = Math.floor(gz), fx = gx - i, fz = gz - j;
-    const at = (a, b) => {
-      const k = a * 100003 + b;
-      let v = this._rmask.get(k);
-      if (v === undefined) {
-        const px = a * G, pz = b * G;
-        let d = 60;
-        for (const code of this.netGrid.query(px, pz, 60, this._rq3 || (this._rq3 = []))) {
-          const e = this.graph.edges[Math.floor(code / 4096)], q = (code % 4096) * 2;
-          const c = U.closestOnSeg(px, pz, e.p[q], e.p[q + 1], e.p[q + 2], e.p[q + 3]);
-          d = Math.min(d, Math.hypot(c[0] - px, c[1] - pz) - e.w / 2);
-        }
-        v = U.smoothstep(14, 50, d);
-        if (this._rmask.size > 400000) this._rmask.clear();
-        this._rmask.set(k, v);
-      }
-      return v;
-    };
-    if (!this._rmask) this._rmask = new Map();
-    return U.lerp(U.lerp(at(i, j), at(i + 1, j), fx), U.lerp(at(i, j + 1), at(i + 1, j + 1), fx), fz);
-  }
-  // Feines Höhenraster einer Kachel mit einem Punkt Rand (für Normalen), Zeilenlänge N + 3
-  makeHeights(t) {
-    const N = this.N, S = N + 3, g = new Float32Array(S * S);
-    const fc0 = t.ti * N - 1, fr0 = t.tj * N - 1;
-    for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) g[r * S + c] = this.fine(fc0 + c, fr0 + r);
-    t.hg0 = g; t.hs = S;
-    t.hg = g;
-    if (t.st !== 2 || typeof WaterSet === 'undefined') return;
-    // Gewässer dieser und der Nachbarkacheln (damit die Ränder zueinander passen)
+  // Höhen, Kleinrelief, Straßenmaske: gemeinsamer Rechenweg mit dem Worker (js/tile-worker.js)
+  fine(fc, fr) { return TileHeights.fine(this, fc, fr); }
+  relief(x, z) { return TileHeights.relief(this, x, z); }
+  reliefMask(x, z) { return TileHeights.reliefMask(this, x, z); }
+  // Gewässer der Kachel und ihrer acht Nachbarn (damit die Ränder zueinander passen), null ohne Daten
+  waterNear(t) {
+    if (t.st !== 2 || typeof WaterSet === 'undefined') return null;
     const areas = [], lines = [];
     for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
       const w = this.waterOf(t.ti + a, t.tj + b);
       areas.push(...w.areas); lines.push(...w.lines);
     }
-    t.waterAll = new WaterSet(areas, lines);
-    if (t.waterAll.empty) return;
-    t.hg = Float32Array.from(g);
-    const x0 = this.tileX(t.ti) - this.fx, z0 = this.tileZ(t.tj) - this.fz;
-    t.waterAll.carveGrid(t.hg, S * S, i => [x0 + (i % S) * this.fx, z0 + Math.floor(i / S) * this.fz],
-      (x, z) => this.inCore(x, z) || this.roadNear(x, z, WATER.roadGap, true));
+    return { areas, lines };
+  }
+  // Feines Höhenraster einer Kachel mit einem Punkt Rand (für Normalen), Zeilenlänge N + 3. Liegt es schon vom Worker
+  // vor, wird es übernommen, sonst hier gerechnet (dringende Kacheln, ohne Worker).
+  makeHeights(t) {
+    const pre = this.hcache.get(t.key);
+    let r = pre && pre.hg0 ? pre : null;
+    this.hcache.delete(t.key);
+    const water = this.waterNear(t);
+    if (!r) r = TileHeights.heights(this, t.ti, t.tj, this.N, this.tileX(t.ti) - this.fx, this.tileZ(t.tj) - this.fz, water);
+    t.hg0 = r.hg0; t.hg = r.hg || r.hg0; t.hs = r.S;
+    if (water) t.waterAll = new WaterSet(water.areas, water.lines);
+  }
+  // Höhen der Kachel beim Worker bestellen (seit v3.12.0, Grafik-Phase 8)
+  prefetch(w) {
+    if (!this.hw || this.hcache.has(w.key) || this.hpending >= 3) return;
+    const t = { ti: w.ti, tj: w.tj, st: w.st };
+    this.hcache.set(w.key, { pending: performance.now() });
+    this.hpending++;
+    this.hw.postMessage({ key: w.key, ti: w.ti, tj: w.tj, N: this.N, x0: this.tileX(w.ti) - this.fx, z0: this.tileZ(w.tj) - this.fz, water: this.waterNear(t) });
+  }
+  // Worker starten (nicht bei file://, nicht mit ?worker=0); er bekommt einmal grobes Raster, Innenstadt und Straßennetz
+  startWorker() {
+    this.hcache = new Map(); this.hpending = 0; this.hw = null;
+    if (typeof Worker === 'undefined' || location.protocol === 'file:' || /[?&]worker=0/.test(location.search)) return;
+    try {
+      const hw = new Worker('js/tile-worker.js');
+      hw.onmessage = e => {
+        const m = e.data, c = this.hcache.get(m.key);
+        this.hpending = Math.max(0, this.hpending - 1);
+        if (c && c.pending) this.hcache.set(m.key, { hg0: m.hg0, hg: m.hg, S: m.S });
+      };
+      hw.onerror = e => { console.warn('Kachel-Worker aus:', e.message); this.hw = null; this.hcache.clear(); this.hpending = 0; };
+      hw.postMessage({ init: { gh: this.gh, gc0: this.gc0, gr0: this.gr0, gcols: this.gcols, grows: this.grows, minX: this.minX, minZ: this.minZ,
+        fx: this.fx, fz: this.fz, core: this.core, F: REGION.F,
+        edges: this.graph.edges.map(e => ({ p: e.p, w: e.w, d: e.deck ? (e.deck.low ? 2 : 1) : 0 })) } });
+      this.hw = hw;
+    } catch (e) { console.warn('Kachel-Worker nicht möglich:', e.message); }
   }
   // Gewässer einer Kachel (Flächen und Mittellinien), zwischengespeichert
   waterOf(ti, tj) {
@@ -597,11 +578,16 @@ class Region {
     want.sort((a, b) => a.d - b.d);
     const t0 = performance.now();
     for (const w of want) if (force || w.d < 350) this.runJob(this.startJob(w), Infinity);
+    // Höhen der nächsten Kacheln beim Worker bestellen; eine Kachel beginnt erst, wenn ihre Höhen da sind (spätestens nach 1,5 s
+    // rechnet sie selbst), solange baut update() andere Aufträge
+    for (const w of want) if (!w.trees && !w.life) this.prefetch(w);
+    if (this.hcache.size > 24) for (const [k, c] of this.hcache) if (c.hg0 && !want.some(w => w.key === k)) this.hcache.delete(k);
+    const ready = w => w.trees || w.life || !this.hw || (c => c && (c.hg0 || performance.now() - c.pending > 1500))(this.hcache.get(w.key));
     // sonst ein Auftrag nach dem anderen, bis die Zeit für dieses Bild um ist
     const until = performance.now() + REGION.sliceMs;
     while (performance.now() < until) {
       if (!this.job) {
-        let w = want.find(w => !(force || w.d < 350));
+        let w = want.find(w => !(force || w.d < 350) && ready(w));
         if (w) want.splice(want.indexOf(w), 1);
         else w = farWant.shift(); // ferne Kacheln zuletzt
         if (!w) break;
@@ -693,7 +679,7 @@ class Region {
     this.buildTerrain(t); yield;
     if (t.st === 2) {
       t.d = t.d || this.decodeTile(t);
-      this.buildRoads(t); yield;
+      yield* this.roadSteps(t); yield;
       yield* this.waterSteps(t); yield;
       yield* this.buildingSteps(t);
       yield* this.sidewalkSteps(t); yield;
@@ -1111,14 +1097,18 @@ class Region {
     }
     return [this._roadMat, this._markMat];
   }
-  buildRoads(t) {
+  buildRoads(t) { for (const _ of this.roadSteps(t)); }
+  // Straßen in Schritten: gibt etwa alle 2 ms ab (Zeitscheiben, siehe update)
+  *roadSteps(t) {
     const runs = this.runs.get(t.key);
     if (!runs) return;
     const W = this.world, roads = this.chunks(t), marks = this.chunks(t);
     const rnd = U.rng(t.key);
     const white = new THREE.Color('#e9e6dc');
     const y = REGION.roadY;
+    let ty = performance.now();
     for (const run of runs) {
+      if (performance.now() - ty > 2) { yield; ty = performance.now(); }
       const e = this.graph.edges[run.e];
       const raw = e.p.slice(run.k0 * 2, run.k1 * 2 + 2);
       for (let k = 0; k + 2 < raw.length; k += 2) {
@@ -2099,7 +2089,7 @@ class Region {
     if (this.land && t.buildings.length) { yield; t.villageMeshes = yield* this.land.villageSteps(t, pts, free); }
     yield;
     // Feldgehölze, Hecken und Einzelbäume, die das Luftbild zeigt, OSM aber nicht kennt
-    this.photoVegetation(t, pts, free);
+    yield* this.photoVegSteps(t, pts, free);
     if (!pts.length) return;
     yield;
     const A = this.treeAssets(), rnd = U.rng(t.key);
@@ -2150,7 +2140,8 @@ class Region {
   }
   // Gehölze aus dem Luftbild: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser werden zu Büschen
   // (Hecken, schmale Streifen) und Bäumen (große Flecken)
-  photoVegetation(t, pts, free) {
+  photoVegetation(t, pts, free) { for (const _ of this.photoVegSteps(t, pts, free)); }
+  *photoVegSteps(t, pts, free) {
     const img = this.photoImage(t);
     if (!img || !img.width || img.width < 64) return;
     t.photoVeg = true;
@@ -2161,6 +2152,7 @@ class Region {
     const L = new Float32Array(S * S), M = new Uint8ClampedArray(S * S * 4);
     for (let k = 0; k < S * S; k++) { L[k] = 0.3 * px[k * 4] + 0.59 * px[k * 4 + 1] + 0.11 * px[k * 4 + 2]; M[k * 4] = L[k]; }
     Landscape.blur(M, S, 6, 1, 1);
+    yield;
     const mean = k => M[k * 4];
     const mask = new Uint8Array(S * S);
     for (let k = 0; k < S * S; k++) {
@@ -2168,17 +2160,20 @@ class Region {
       if (l > 18 && l < 125 && l < mean(k) * 0.84 && g >= r - 4 && g > b + 3 && !(cov && cov[k * 4 + 2] > 120)) mask[k] = 1;
     }
     const rnd = U.rng(t.key * 17 + 3);
-    let made = 0;
-    for (let y = 1; y < S - 1 && made < 5000; y++) for (let x = 1; x < S - 1; x++) {
-      if (!mask[y * S + x]) continue;
-      let n = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) n += mask[(y + dy) * S + x + dx];
-      if (n < 3 || rnd() > 0.6) continue;
-      const wx = t.x0 + (x + rnd()) / S * this.tw, wz = t.z0 + (y + rnd()) / S * this.th;
-      if (!free(wx, wz, 1.2)) continue;
-      if (n >= 8 && rnd() < 0.45) pts.push([wx, wz, rnd() < 0.15 ? 1 : 0, 0.7 + rnd() * 0.6]);
-      else pts.push([wx, wz, 2, 0.8 + rnd() * 0.8]);
-      made++;
+    let made = 0, ty = performance.now();
+    for (let y = 1; y < S - 1 && made < 5000; y++) {
+      if (performance.now() - ty > 2) { yield; ty = performance.now(); }
+      for (let x = 1; x < S - 1; x++) {
+        if (!mask[y * S + x]) continue;
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) n += mask[(y + dy) * S + x + dx];
+        if (n < 3 || rnd() > 0.6) continue;
+        const wx = t.x0 + (x + rnd()) / S * this.tw, wz = t.z0 + (y + rnd()) / S * this.th;
+        if (!free(wx, wz, 1.2)) continue;
+        if (n >= 8 && rnd() < 0.45) pts.push([wx, wz, rnd() < 0.15 ? 1 : 0, 0.7 + rnd() * 0.6]);
+        else pts.push([wx, wz, 2, 0.8 + rnd() * 0.8]);
+        made++;
+      }
     }
   }
   dropTrees(t) {

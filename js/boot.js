@@ -165,7 +165,7 @@
     { src: 'data/region-rural.js', what: 'Feldwege und Hecken' },
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
-  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'region',
+  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'tile-worker', 'region',
     'vehicle', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
     'property', 'venues', 'net-p2p', 'net', 'gfx-webgpu', 'game', 'touch'].map(n => `js/${n}.js`));
 
