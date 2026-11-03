@@ -633,6 +633,7 @@
       player.place(p.x, p.z, world);
     }
     cam.init = false;
+    post.eye.reset = true; // Augenanpassung am neuen Ort sofort
     ui.toast(name ? 'Willkommen: ' + name : 'Schnellreise', 2);
     net.teleported();
   }

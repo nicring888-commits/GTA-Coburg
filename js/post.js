@@ -105,7 +105,13 @@ class PostFX {
     this.params = {
       fogCol: new THREE.Color('#c8dbec'), sunDir: new THREE.Vector3(0, 1, 0), sunCol: new THREE.Color('#fff1dc'),
       fogDensity: 0.001, fogBase: 0, night: 0, wet: 0, sunVis: 1, cloud: 0.2, cloudT: 0, golden: 0,
+      // Bloom und Farblook (seit v3.18.0 aus der Licht-Tabelle in js/atmosphere.js)
+      bloomT: 1.05, bloom: 0.07,
+      grade: { sat: 0.86, curve: 0.22, lift: 0.012, lo: new THREE.Vector3(0.94, 0.985, 1.05), hi: new THREE.Vector3(1.045, 1, 0.9) },
     };
+    // Augenanpassung (seit v3.18.0): mittlere Helligkeit des Bildes, träge nachgeführt; ändert die Belichtung der
+    // Tabelle nur in Grenzen (dunkle Gassen heller, Blick in den hellen Himmel dunkler). eye.reset: sofort einstellen
+    this.eye = { on: !/[?&]adapt=0\b/.test(location.search), reset: true, min: 0.8, max: 1.3, key: 0.2, rate: 1.4, dt: 1 / 60, last: 0 };
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quad.frustumCulled = false;
     this.qScene = new THREE.Scene(); this.qScene.add(this.quad);
@@ -164,7 +170,12 @@ class PostFX {
       b1: half(hw, hh), b2: half(Math.ceil(W / 4), Math.ceil(H / 4)), b3: half(Math.ceil(W / 8), Math.ceil(H / 8)),
       b4: half(Math.ceil(W / 16), Math.ceil(H / 16)), b5: half(Math.ceil(W / 32), Math.ceil(H / 32)),
       r1: half(Math.ceil(W / 4), Math.ceil(H / 4)), r2: half(Math.ceil(W / 4), Math.ceil(H / 4)),
+      // Helligkeit: 32 × 18 log. Luminanz, dann 1 × 1 nachgeführt (zwei Ziele im Wechsel)
+      lum: half(32, 18, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }),
+      eyeA: half(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }),
+      eyeB: half(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }),
     };
+    if (this.eye) this.eye.reset = true;
     return this.targets;
   }
 
@@ -303,6 +314,36 @@ class PostFX {
         gl_FragColor = vec4(s / tw, 1.0);
       }`, { tColor: { value: null }, uSun: { value: new THREE.Vector2() }, uLen: { value: 1 } });
 
+    // Augenanpassung: log. Luminanz in 32 × 18 (je 4 × 4 Proben, Himmel zählt halb), dann Mittel und Nachführen in 1 × 1
+    this.lumMat = sm(`
+      varying vec2 vUv;
+      uniform sampler2D tColor, tDepth;
+      void main() {
+        float s = 0.0, w = 0.0;
+        for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) {
+          vec2 uv = vUv + (vec2(float(i), float(j)) - 1.5) / vec2(128.0, 72.0);
+          float l = dot(texture2D(tColor, uv).rgb, vec3(0.2126, 0.7152, 0.0722));
+          float wi = texture2D(tDepth, uv).r >= 0.99999 ? 0.5 : 1.0;
+          // Bildmitte zählt mehr
+          wi *= 1.0 - 0.6 * length(uv - 0.5);
+          s += log(max(l, 1e-4)) * wi; w += wi;
+        }
+        gl_FragColor = vec4(s / w, w, 0.0, 1.0);
+      }`, { tColor: { value: null }, tDepth: { value: null } });
+    this.eyeMat = sm(`
+      varying vec2 vUv;
+      uniform sampler2D tLum, tPrev;
+      uniform float uK, uReset;
+      void main() {
+        float s = 0.0, w = 0.0;
+        for (int i = 0; i < 32; i++) for (int j = 0; j < 18; j++) {
+          vec2 v = texture2D(tLum, (vec2(float(i), float(j)) + 0.5) / vec2(32.0, 18.0)).rg;
+          s += v.r * v.g; w += v.g;
+        }
+        float now = exp(s / max(w, 1e-4)), prev = texture2D(tPrev, vec2(0.5)).r;
+        gl_FragColor = vec4(uReset > 0.5 || !(prev > 0.0) ? now : mix(prev, now, uK), 0.0, 0.0, 1.0);
+      }`, { tLum: { value: null }, tPrev: { value: null }, uK: { value: 0.05 }, uReset: { value: 1 } });
+
     // Zusammensetzen: Verdeckung, Luftperspektive, Bloom, Belichtung, ACES, Farbkorrektur, Vignette, Körnung
     this.compMat = sm(`
       varying vec2 vUv;
@@ -313,6 +354,11 @@ class PostFX {
       uniform vec2 uSceneTexel;
       uniform vec3 uFogCol, uSunDir, uSunCol;
       uniform float uFogDensity, uFogBase, uFogFall, uExposure, uBloom, uNight, uWet, uTime, uAO, uSunVis, uCloud, uCloudT;
+      uniform sampler2D tEye;
+      uniform vec3 uEye;                 // x: an/aus, y: untere, z: obere Grenze des Faktors
+      uniform float uEyeKey;
+      uniform vec3 uGradeLo, uGradeHi;   // Tönung der Schatten und Lichter
+      uniform float uSat, uCurve, uLift;
       uniform vec2 uRes;
       // Wolkenschatten (seit v3.15.0, Grafik-Phase 10b): dieselbe Rauschart wie die Wolken am Himmel (js/atmosphere.js)
       float cHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -432,16 +478,22 @@ class PostFX {
             gl_FragColor = vec4(texture2D(tRays, vUv).rgb, 1.0); return;
           #endif
         #endif
-        col *= uExposure;
+        float eye = 1.0;
+        if (uEye.x > 0.5) {
+          float avg = texture2D(tEye, vec2(0.5)).r * uExposure;
+          eye = clamp(uEyeKey / max(avg, 1e-4), uEye.y, uEye.z);
+          eye = pow(eye, 0.6); // nur ein Teil des Weges: der Look der Tabelle bleibt
+        }
+        col *= uExposure * eye;
         col = aces(col);
-        // Farbkorrektur: etwas entsättigt, warme Lichter, kühle Schatten, sanfter Kontrast (Stil GTA IV)
+        // Farbkorrektur aus der Licht-Tabelle (js/atmosphere.js TIMECYCLE): Sättigung, Tönung von Schatten und Lichtern,
+        // S-Kurve, angehobene Tiefen
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-        col = mix(vec3(l), col, mix(0.86, 0.8, uNight));
-        vec3 warm = mix(vec3(1.045, 1.0, 0.9), vec3(1.06, 0.97, 0.86), uNight);
-        vec3 cool = mix(vec3(0.94, 0.985, 1.05), vec3(0.85, 0.95, 1.12), uNight);
-        col *= mix(cool, warm, smoothstep(0.05, 0.6, l));
-        col = mix(col, col * col * (3.0 - 2.0 * col), 0.22);           // S-Kurve
-        col = col * 0.975 + 0.012;                                    // leicht angehobene Tiefen (Film)
+        col = mix(vec3(l), col, uSat);
+        col *= mix(uGradeLo, uGradeHi, smoothstep(0.05, 0.6, l));
+        col = clamp(col, 0.0, 1.0);
+        col = mix(col, col * col * (3.0 - 2.0 * col), uCurve);         // S-Kurve
+        col = col * (1.0 - 2.0 * uLift) + uLift;                     // leicht angehobene Tiefen (Film)
         // Vignette
         vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
         col *= 1.0 - smoothstep(0.35, 1.15, length(q)) * 0.42;
@@ -464,6 +516,8 @@ class PostFX {
       tRays: { value: null }, uRays: { value: 0 },
       uProj: { value: new THREE.Matrix4() }, uSceneTexel: { value: new THREE.Vector2() },
       uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() }, uCloud: { value: 0.2 }, uCloudT: { value: 0 },
+      tEye: { value: null }, uEye: { value: new THREE.Vector3() }, uEyeKey: { value: 0.2 },
+      uGradeLo: { value: new THREE.Vector3(1, 1, 1) }, uGradeHi: { value: new THREE.Vector3(1, 1, 1) }, uSat: { value: 1 }, uCurve: { value: 0.22 }, uLift: { value: 0.012 },
     });
   }
 
@@ -529,7 +583,7 @@ class PostFX {
       if (G) G.begin('bloom');
       const bu = this.brightMat.uniforms;
       bu.tColor.value = T.scene.texture; bu.uTexel.value.set(1 / T.w, 1 / T.h); bu.uExposure.value = this.exposure;
-      bu.uThreshold.value = P.night > 0.5 ? 0.8 : 1.05;
+      bu.uThreshold.value = P.bloomT;
       this.pass(this.brightMat, T.b1);
       const chain = [T.b1, T.b2, T.b3, T.b4, T.b5];
       const du = this.downMat.uniforms;
@@ -568,6 +622,22 @@ class PostFX {
         } else rays = 0;
       }
     }
+    // Augenanpassung
+    const A = this.eye;
+    if (A.on) {
+      if (G) G.begin('eye');
+      const now = performance.now(), dt = A.last ? Math.min(0.25, (now - A.last) / 1000) : A.dt;
+      A.last = now;
+      const lu = this.lumMat.uniforms;
+      lu.tColor.value = T.scene.texture; lu.tDepth.value = depth;
+      this.pass(this.lumMat, T.lum);
+      const eu = this.eyeMat.uniforms, src = T.eyeA, dst = T.eyeB;
+      eu.tLum.value = T.lum.texture; eu.tPrev.value = src.texture;
+      eu.uK.value = 1 - Math.exp(-(A.fixedDt || dt) * A.rate); eu.uReset.value = A.reset ? 1 : 0;
+      this.pass(this.eyeMat, dst);
+      T.eyeA = dst; T.eyeB = src; A.reset = false;
+    }
+    u.tEye.value = T.eyeA.texture; u.uEye.value.set(A.on ? 1 : 0, A.min, A.max); u.uEyeKey.value = A.key;
     // Zusammensetzen auf den Bildschirm
     if (G) G.begin('comp');
     const c = this.compMat, u = c.uniforms;
@@ -591,7 +661,9 @@ class PostFX {
     u.uExposure.value = this.exposure; u.uNight.value = P.night; u.uWet.value = P.wet; u.uSunVis.value = P.sunVis;
     u.uCloud.value = P.cloud; u.uCloudT.value = P.cloudT;
     u.tRays.value = T.r1.texture; u.uRays.value = rays * 0.14;
-    u.uBloom.value = P.night > 0.5 ? 0.16 : 0.07;
+    u.uBloom.value = P.bloom;
+    const Gr = P.grade;
+    u.uGradeLo.value.copy(Gr.lo); u.uGradeHi.value.copy(Gr.hi); u.uSat.value = Gr.sat; u.uCurve.value = Gr.curve; u.uLift.value = Gr.lift;
     u.uTime.value = performance.now() / 1000;
     u.uRes.value.set(this.size.x, this.size.y);
     this.pass(c, null);

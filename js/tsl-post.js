@@ -34,6 +34,12 @@ NodeKit.post = {
     num('fogDensity', () => P.fogDensity); num('sunVis', () => P.sunVis); num('night', () => P.night); num('cloud', () => P.cloud);
     num('cloudT', () => P.cloudT); num('exposure', () => post.exposure); num('golden', () => P.golden || 0);
     num('time', () => performance.now() / 1000); num('rays', () => this.rays);
+    // Farblook aus der Licht-Tabelle (seit v3.18.0, js/atmosphere.js TIMECYCLE; Augenanpassung nur im WebGL-Weg)
+    const Gr = () => P.grade || {};
+    num('sat', () => Gr().sat !== undefined ? Gr().sat : 0.86); num('curve', () => Gr().curve !== undefined ? Gr().curve : 0.22);
+    num('lift', () => Gr().lift !== undefined ? Gr().lift : 0.012);
+    const gLo = uniform(new THREE.Vector3(0.94, 0.985, 1.05)).onRenderUpdate(() => (Gr().lo ? gLo.value.copy(Gr().lo) : gLo.value));
+    const gHi = uniform(new THREE.Vector3(1.045, 1, 0.9)).onRenderUpdate(() => (Gr().hi ? gHi.value.copy(Gr().hi) : gHi.value));
     const fogCol = uniform(P.fogCol), sunDir = uniform(P.sunDir), sunCol = uniform(P.sunCol), sunUV = uniform(new THREE.Vector2(0.5, 0.5));
     this.sunUV = sunUV.value; this.rays = 0;
 
@@ -130,11 +136,11 @@ NodeKit.post = {
     const graded = Fn(() => {
       const c = aces(lin.mul(U.exposure)).toVar();
       const l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      c.assign(mix(vec3(l), c, mix(0.86, 0.8, U.night)));
-      const warm = mix(vec3(1.045, 1, 0.9), vec3(1.06, 0.97, 0.86), U.night), cool = mix(vec3(0.94, 0.985, 1.05), vec3(0.85, 0.95, 1.12), U.night);
-      c.mulAssign(mix(cool, warm, smoothstep(0.05, 0.6, l)));
-      c.assign(mix(c, c.mul(c).mul(c.mul(-2).add(3)), 0.22));
-      c.assign(c.mul(0.975).add(0.012));
+      c.assign(mix(vec3(l), c, U.sat));
+      c.mulAssign(mix(gLo, gHi, smoothstep(0.05, 0.6, l)));
+      c.assign(clamp(c, 0, 1));
+      c.assign(mix(c, c.mul(c).mul(c.mul(-2).add(3)), U.curve));
+      c.assign(c.mul(U.lift.mul(-2).add(1)).add(U.lift));
       const qv = screenUV.sub(0.5).mul(vec2(T.screenSize.x.div(T.screenSize.y), 1));
       c.mulAssign(smoothstep(0.35, 1.15, length(qv)).mul(-0.42).add(1));
       // Körnung gegen Farbstufen

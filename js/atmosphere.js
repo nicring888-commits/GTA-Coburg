@@ -29,12 +29,64 @@ const WEATHER_ODDS = { clear: 0.38, cloudy: 0.3, overcast: 0.12, rain: 0.13, fog
 const CLOCK = { rise: 6.0, set: 20.0, maxElev: 54, hoursPerSec: 1 / 60 };
 const DEG = Math.PI / 180;
 
-// Farben und Lichtstärken für Tag und Nacht (Tag bei klarem Wetter; Bewölkung mischt Grau hinein)
-const SKY_DAY = { top: '#3d74c0', horizon: '#c8dbec', ground: '#6b6a5e', sun: '#fff1dc', sunI: 2.8, hemiSky: '#cfe2ff', hemiGround: '#7f7a68', hemiI: 1.7 };
-const SKY_GREY = { top: '#8792a0', horizon: '#b4bcc4', ground: '#5f5f5a', hemiSky: '#c4ccd6' };
-const SKY_DUSK = { top: '#3b5287', horizon: '#f2a46e', ground: '#5a4a44', sun: '#ffa660', sunI: 2.1, hemiSky: '#d6b9b0', hemiGround: '#6b5546', hemiI: 1.15 };
-// Nacht: Mondlicht bläulich, am Horizont der orange Schein der Stadtbeleuchtung
-const SKY_NIGHT = { top: '#03060f', horizon: '#2a2530', ground: '#0d0e12', sun: '#8fa6ff', sunI: 0.3, hemiSky: '#5a6a9a', hemiGround: '#2a2218', hemiI: 0.48 };
+// Licht-Tabelle (seit v3.18.0, Grafik-Phase G1, nach dem Vorbild des „Timecycle“ großer Open-World-Spiele): je Uhrzeit
+// alle Werte für Himmel, Sonne, Umgebungslicht, Nebel, Belichtung, Bloom und Farblook bei klarem Wetter; dazwischen
+// weich gemischt. Bewölkung und Regen mischen danach Grau hinein (SKY_GREY, w.dark).
+//   top/horizon/ground: Himmelskuppel · sun/sunI: Sonnenfarbe und -stärke (nachts Mond) · amb/ambGround/ambI:
+//   Himmelslicht oben und Rückstrahlung vom Boden (als Kugelflächen-Licht, siehe skyProbe) · fog: Dunstfarbe ·
+//   cloud/shade: Wolken hell/dunkel · exp: Belichtung · bloomT/bloom: Schwelle und Stärke des Leuchtens ·
+//   sat/curve: Sättigung und S-Kurve · lo/hi: Tönung der Schatten und Lichter (Faktoren um 1) · lift: angehobenes Schwarz
+const TIMECYCLE = [
+  { t: 0, top: '#040917', horizon: '#2b2633', ground: '#0c0d12', sun: '#93a8ff', sunI: 0.32, amb: '#4a5b92', ambGround: '#2c2219', ambI: 0.5, fog: '#1d202c',
+    cloud: '#1c2232', shade: '#0b0e16', exp: 1.9, bloomT: 0.75, bloom: 0.2, sat: 0.86, curve: 0.26, lo: [0.86, 0.95, 1.14], hi: [1.07, 0.97, 0.84], lift: 0.014 },
+  { t: 4.6, same: 0 },
+  // blaue Stunde vor dem Aufgang
+  { t: 5.5, top: '#18295a', horizon: '#b4827a', ground: '#28252d', sun: '#ff9466', sunI: 0.9, amb: '#7d84b2', ambGround: '#43352f', ambI: 0.78, fog: '#8b7f8e',
+    cloud: '#d49a8a', shade: '#4a4660', exp: 1.5, bloomT: 0.9, bloom: 0.14, sat: 0.92, curve: 0.24, lo: [0.9, 0.96, 1.1], hi: [1.06, 0.99, 0.9], lift: 0.012 },
+  // Sonnenaufgang: tief, warm, lange Schatten
+  { t: 6.6, top: '#3a5c9e', horizon: '#ffb27c', ground: '#5a4a44', sun: '#ffa058', sunI: 2.2, amb: '#c6b0aa', ambGround: '#6b5546', ambI: 1.12, fog: '#e2b99c',
+    cloud: '#ffc8a0', shade: '#8a7286', exp: 1.24, bloomT: 1.0, bloom: 0.09, sat: 1.08, curve: 0.24, lo: [0.92, 0.97, 1.08], hi: [1.07, 0.99, 0.88], lift: 0.01 },
+  { t: 8.2, top: '#3c76c6', horizon: '#d4e3f0', ground: '#6b6a5e', sun: '#ffe7c8', sunI: 2.85, amb: '#bfd6f6', ambGround: '#7c7562', ambI: 1.58, fog: '#c8dbed',
+    cloud: '#ffffff', shade: '#a6b1c0', exp: 1.08, bloomT: 1.05, bloom: 0.07, sat: 1.06, curve: 0.22, lo: [0.94, 0.985, 1.05], hi: [1.04, 1.0, 0.93], lift: 0.01 },
+  // Mittag: kräftiges Blau, helles fast weißes Licht
+  { t: 12.5, top: '#2d69c4', horizon: '#c3dbf0', ground: '#6b6a5e', sun: '#fff3e2', sunI: 3.05, amb: '#c2daff', ambGround: '#857b6a', ambI: 1.62, fog: '#c4d8ec',
+    cloud: '#ffffff', shade: '#a9b3c0', exp: 1.04, bloomT: 1.08, bloom: 0.07, sat: 1.07, curve: 0.24, lo: [0.94, 0.985, 1.05], hi: [1.035, 1.0, 0.94], lift: 0.01 },
+  { t: 16.5, top: '#3370c2', horizon: '#d6dde4', ground: '#6b6a5e', sun: '#ffe6bc', sunI: 2.9, amb: '#c6d6ef', ambGround: '#82785f', ambI: 1.52, fog: '#ced8e2',
+    cloud: '#fffaf2', shade: '#a7afbb', exp: 1.08, bloomT: 1.05, bloom: 0.07, sat: 1.09, curve: 0.24, lo: [0.94, 0.98, 1.05], hi: [1.05, 1.0, 0.91], lift: 0.01 },
+  // goldene Stunde
+  { t: 18.6, top: '#4266a8', horizon: '#ffb676', ground: '#5c4b40', sun: '#ffab5c', sunI: 2.55, amb: '#d4b8aa', ambGround: '#6e5848', ambI: 1.16, fog: '#e7b892',
+    cloud: '#ffc694', shade: '#8f7484', exp: 1.18, bloomT: 1.0, bloom: 0.09, sat: 1.15, curve: 0.25, lo: [0.9, 0.96, 1.1], hi: [1.08, 0.99, 0.86], lift: 0.01 },
+  // Sonnenuntergang
+  { t: 19.7, top: '#2d3e78', horizon: '#ff8752', ground: '#4a3a38', sun: '#ff763a', sunI: 1.7, amb: '#a68aa0', ambGround: '#5a4440', ambI: 0.95, fog: '#c78876',
+    cloud: '#ff9e70', shade: '#5e4a66', exp: 1.34, bloomT: 0.95, bloom: 0.11, sat: 1.13, curve: 0.25, lo: [0.88, 0.95, 1.12], hi: [1.09, 0.97, 0.84], lift: 0.012 },
+  // blaue Stunde nach dem Untergang (Mond übernimmt ab ≈ 20:20)
+  { t: 20.6, top: '#121b42', horizon: '#76587a', ground: '#1c1a22', sun: '#8c94d2', sunI: 0.4, amb: '#686a9a', ambGround: '#3a2e2a', ambI: 0.64, fog: '#47405a',
+    cloud: '#5a4a6a', shade: '#1e1e30', exp: 1.66, bloomT: 0.82, bloom: 0.17, sat: 0.94, curve: 0.26, lo: [0.86, 0.94, 1.14], hi: [1.07, 0.97, 0.86], lift: 0.013 },
+  { t: 21.6, same: 0 },
+  { t: 24, same: 0 },
+];
+// Bewölkt/Regen: Himmel und Licht werden grau (gemischt mit w.dark)
+const SKY_GREY = { top: '#8792a0', horizon: '#b4bcc4', ground: '#5f5f5a', amb: '#c4ccd6', cloud: '#9aa1aa', shade: '#5d636c' };
+const TC_COLORS = ['top', 'horizon', 'ground', 'sun', 'amb', 'ambGround', 'fog', 'cloud', 'shade'];
+const TC_NUMS = ['sunI', 'ambI', 'exp', 'bloomT', 'bloom', 'sat', 'curve', 'lift'];
+// „same: i“ übernimmt die Werte von Eintrag i; Farben als THREE.Color (linear) vorbereiten
+for (const k of TIMECYCLE) {
+  if (k.same !== undefined) Object.assign(k, TIMECYCLE[k.same], { t: k.t });
+  for (const c of TC_COLORS) if (typeof k[c] === 'string') k[c] = new THREE.Color(k[c]);
+}
+// Kugelflächen-Licht (SH, 9 Werte) aus einer Himmelsfunktion: Himmelslicht trifft Flächen je nach Richtung verschieden
+// (Westseiten abends warm, Oberseiten blau), statt des gleichförmigen Halbkugel-Lichts. Gleiches Maß wie
+// THREE.HemisphereLight (Kalibrierung in skyProbe).
+const SH_DIRS = (() => {
+  const N = 192, out = [];
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i + 0.5) / N * 2, r = Math.sqrt(1 - y * y), a = i * 2.399963229728653;
+    out.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r));
+  }
+  return out;
+})();
+// three.js teilt das Licht der Halbkugel nicht durch π, die Bestrahlung aus SH schon (gemessen, siehe PROJEKT.md v3.18.0)
+const PROBE_SCALE = 1 / Math.PI;
 
 class Atmosphere {
   // ctx: { scene, renderer, sun, hemi, sunDir (Vector3, zur Sonne) }
@@ -56,6 +108,14 @@ class Atmosphere {
       top: new THREE.Color(), horizon: new THREE.Color(), ground: new THREE.Color(), sun: new THREE.Color(),
       hemiSky: new THREE.Color(), hemiGround: new THREE.Color(), tmp: new THREE.Color(), cloud: new THREE.Color(), shade: new THREE.Color(),
     };
+    // Werte der Licht-Tabelle zur jetzigen Uhrzeit (TIMECYCLE)
+    this.tc = { lo: new THREE.Vector3(), hi: new THREE.Vector3() };
+    for (const c of TC_COLORS) this.tc[c] = new THREE.Color();
+    // Himmelslicht als Kugelflächen-Licht; ersetzt draußen das Halbkugel-Licht (drinnen blendet game.js es aus)
+    this.probe = new THREE.LightProbe();
+    this.probeOn = !/[?&]probe=0\b/.test(location.search);
+    if (this.probeOn) this.scene.add(this.probe);
+    this.probeKey = '';
     this.skyMat = this.makeSkyMaterial();
     this.skyMat.userData.node = kit => kit.sky(this.skyMat); // Node-Zwilling für WebGPU (js/tsl-materials.js)
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(3000, 48, 24), this.skyMat);
@@ -63,7 +123,7 @@ class Atmosphere {
     this.scene.add(this.dome);
     this.rain = this.makeRain();
     this.scene.add(this.rain);
-    this.scene.background = new THREE.Color(SKY_DAY.horizon);
+    this.scene.background = new THREE.Color('#c8dbec');
     // Umgebungsbild aus einer eigenen kleinen Szene mit derselben Himmelskuppel
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envScene = new THREE.Scene();
@@ -246,20 +306,18 @@ class Atmosphere {
     // Licht kommt tagsüber von der Sonne (nicht flacher als 9°, sonst flimmern die Schatten), nachts vom Mond
     if (elev > -2) this.sunDir.set(this.sunTrue.x, Math.max(this.sunTrue.y, 0.16), this.sunTrue.z).normalize();
     else this.sunDir.set(-0.35, 0.82, -0.45).normalize();
-    const n = this.night, g = w.dark, C = this.c, gd = this.golden * (1 - g * 0.7);
+    const n = this.night, g = w.dark, C = this.c, tc = this.lookup(this.clock);
 
-    // Himmelsfarben: Tag (klar → grau), dann zur Nacht
-    // Tag → Abendrot → Bewölkung (grau) → Nacht
-    const mix4 = (out, key, tg) => out.set(SKY_DAY[key]).lerp(C.tmp.set(SKY_DUSK[key]), gd)
-      .lerp(C.tmp.set(SKY_GREY[key] || SKY_DAY[key]), tg).lerp(C.tmp.set(SKY_NIGHT[key]), n);
-    mix4(C.top, 'top', g);
-    mix4(C.horizon, 'horizon', g);
-    mix4(C.ground, 'ground', g * 0.5);
-    mix4(C.hemiSky, 'hemiSky', g);
-    C.hemiGround.set(SKY_DAY.hemiGround).lerp(C.tmp.set(SKY_DUSK.hemiGround), gd).lerp(C.tmp.set(SKY_NIGHT.hemiGround), n);
-    C.sun.set(SKY_DAY.sun).lerp(C.tmp.set(SKY_DUSK.sun), this.golden).lerp(C.tmp.set(SKY_NIGHT.sun), n);
-    C.cloud.set('#ffffff').lerp(C.tmp.set('#ffc59a'), gd).lerp(C.tmp.set('#9aa1aa'), g).lerp(C.tmp.set('#1c2232'), n);
-    C.shade.set('#a9b3c0').lerp(C.tmp.set('#8a6f80'), gd).lerp(C.tmp.set('#5d636c'), g).lerp(C.tmp.set('#0b0e16'), n);
+    // Himmelsfarben aus der Licht-Tabelle; Bewölkung mischt Grau hinein (nachts kaum, dort ist alles dunkel)
+    const gg = g * (1 - n * 0.85);
+    C.top.copy(tc.top).lerp(C.tmp.set(SKY_GREY.top).multiplyScalar(1 - n * 0.9), gg);
+    C.horizon.copy(tc.horizon).lerp(C.tmp.set(SKY_GREY.horizon).multiplyScalar(1 - n * 0.85), gg);
+    C.ground.copy(tc.ground).lerp(C.tmp.set(SKY_GREY.ground).multiplyScalar(1 - n * 0.85), gg * 0.5);
+    C.hemiSky.copy(tc.amb).lerp(C.tmp.set(SKY_GREY.amb).multiplyScalar(1 - n * 0.7), gg);
+    C.hemiGround.copy(tc.ambGround);
+    C.sun.copy(tc.sun);
+    C.cloud.copy(tc.cloud).lerp(C.tmp.set(SKY_GREY.cloud).multiplyScalar(1 - n * 0.85), gg);
+    C.shade.copy(tc.shade).lerp(C.tmp.set(SKY_GREY.shade).multiplyScalar(1 - n * 0.85), gg);
 
     const su = this.skyMat.uniforms;
     su.uTop.value.copy(C.top); su.uHorizon.value.copy(C.horizon); su.uGround.value.copy(C.ground);
@@ -267,11 +325,13 @@ class Atmosphere {
     su.uCover.value = w.cloud; su.uDark.value = g; su.uNight.value = n; su.uTime.value = this.time;
 
     // Licht: Bewölkung schwächt die Sonne (weichere Schatten), das Himmelslicht nimmt etwas zu
-    const dayI = U.lerp(SKY_DAY.sunI, SKY_DUSK.sunI, this.golden) * w.sun * U.smoothstep(-4, 5, elev);
-    this.sun.intensity = U.lerp(dayI, SKY_NIGHT.sunI * (1 - g * 0.6), U.smoothstep(0.6, 1, n));
-    this.sun.color.copy(C.sun);
-    this.hemi.intensity = U.lerp(U.lerp(SKY_DAY.hemiI, SKY_DUSK.hemiI, this.golden) * (1 + (1 - w.sun) * 0.35), SKY_NIGHT.hemiI, n);
+    // nachts scheint der Mond (Tabellenwert um Mitternacht), tagsüber die Sonne nach Höhe und Wetter
+    const dayI = tc.sunI * w.sun * U.smoothstep(-4, 5, elev), moon = U.smoothstep(0.6, 1, n);
+    this.sun.intensity = U.lerp(dayI, TIMECYCLE[0].sunI * (1 - g * 0.6), moon);
+    this.sun.color.copy(C.sun).lerp(TIMECYCLE[0].sun, moon);
+    const ambI = tc.ambI * (1 + (1 - w.sun) * 0.35 * (1 - n));
     this.hemi.color.copy(C.hemiSky); this.hemi.groundColor.copy(C.hemiGround);
+    if (this.probeOn) { this.hemi.intensity = 0; this.skyProbe(C, ambI, w.cloud, elev); } else this.hemi.intensity = ambI;
 
     // Nebel und Sichtweite: klarer Tag weit, Regen und Nebel nah
     const fog = this.scene.fog;
@@ -280,7 +340,8 @@ class Atmosphere {
     // Smartphones bauen das Umland nur in einem kleineren Umkreis: Nebel davor, damit kein Rand zu sehen ist
     if (window.QUALITY && window.QUALITY.fogFar) far = Math.min(far, window.QUALITY.fogFar);
     fog.far = far; fog.near = Math.min(far * 0.12, 320);
-    fog.color.copy(C.horizon).lerp(C.tmp.set('#9aa2aa'), (1 - w.vis) * 0.5 * (1 - n));
+    // Dunstfarbe aus der Tabelle (weicher als der Horizont, sonst wird abends alles orange)
+    fog.color.copy(tc.fog).lerp(C.tmp.set(SKY_GREY.horizon).multiplyScalar(1 - n * 0.85), gg).lerp(C.tmp.set('#9aa2aa'), (1 - w.vis) * 0.5 * (1 - n));
     this.scene.background.copy(fog.color);
     su.uFogCol.value.copy(fog.color); su.uHaze.value = U.clamp((1 - w.vis) * 1.1, 0, 0.97);
     // Mit Nachbearbeitung: Nebel dort (Höhennebel, Sonnenstreuung), in den Materialien aus
@@ -290,7 +351,12 @@ class Atmosphere {
       P.fogCol.copy(fog.color); P.fogDensity = 2.1 / far;
       P.sunDir.copy(this.sunTrue); P.sunCol.copy(C.sun).multiplyScalar(1 + this.golden * 1.5);
       P.sunVis = w.sun * (1 - n) * (1 - g * 0.6); P.night = n; P.wet = this.wet; P.cloud = w.cloud; P.cloudT = this.time; P.golden = this.golden;
-      post.exposure = U.lerp(U.lerp(1.08, 1.2, this.golden), 1.85, n) * (1 + g * 0.12);
+      post.exposure = tc.exp * (1 + g * 0.12);
+      // Bloom und Farblook aus der Tabelle; trübes Wetter: weniger Sättigung und Kontrast, Tönung schwächer
+      P.bloomT = tc.bloomT; P.bloom = tc.bloom * (1 + g * 0.3);
+      const G = P.grade || (P.grade = { lo: new THREE.Vector3(), hi: new THREE.Vector3() }), one = this._one || (this._one = new THREE.Vector3(1, 1, 1));
+      G.sat = tc.sat * (1 - gg * 0.2); G.curve = tc.curve * (1 - gg * 0.3); G.lift = tc.lift;
+      G.lo.copy(tc.lo).lerp(one, gg * 0.5); G.hi.copy(tc.hi).lerp(one, gg * 0.6);
       fog.near = 1e7; fog.far = 2e7;
     }
 
@@ -312,7 +378,7 @@ class Atmosphere {
   // Umgebungsbild nur neu rechnen, wenn sich der Himmel sichtbar geändert hat (höchstens alle 2 s)
   updateEnv(dt, force) {
     this.envTimer -= dt;
-    const key = [this.night, this.w.cloud, this.w.dark, this.golden].map(v => Math.round(v * 12)).join(',');
+    const key = [this.night, this.w.cloud, this.w.dark, this.golden, this.clock / 6].map(v => Math.round(v * 12)).join(',');
     if (!force && (key === this.envKey || this.envTimer > 0)) return;
     this.envKey = key; this.envTimer = 2;
     const old = this.envRT;
@@ -320,6 +386,49 @@ class Atmosphere {
     this.envRT = this.pmrem.fromScene(this.envScene, 0.02, 0.1, 500);
     this.scene.environment = this.envRT.texture;
     if (old) old.dispose();
+  }
+
+  // Werte der Licht-Tabelle zur Uhrzeit h (weich zwischen den Einträgen gemischt)
+  lookup(h) {
+    const T = TIMECYCLE, o = this.tc;
+    let i = 0;
+    while (i < T.length - 2 && T[i + 1].t <= h) i++;
+    const a = T[i], b = T[i + 1], f = U.smoothstep(0, 1, (h - a.t) / Math.max(1e-6, b.t - a.t));
+    for (const c of TC_COLORS) o[c].copy(a[c]).lerp(b[c], f);
+    for (const k of TC_NUMS) o[k] = a[k] + (b[k] - a[k]) * f;
+    const va = this._va || (this._va = new THREE.Vector3()), vb = this._vb || (this._vb = new THREE.Vector3());
+    o.lo.copy(va.fromArray(a.lo)).lerp(vb.fromArray(b.lo), f);
+    o.hi.copy(va.fromArray(a.hi)).lerp(vb.fromArray(b.hi), f);
+    return o;
+  }
+
+  // Kugelflächen-Licht aus einem einfachen Himmelsmodell: oben Himmelslicht (amb), zum Horizont die Horizontfarbe, zur
+  // Sonne hin wärmer und heller, unten die Rückstrahlung vom Boden (ambGround). Nur neu, wenn sich etwas merklich ändert.
+  skyProbe(C, ambI, cloud, elev) {
+    const key = [C.hemiSky.r, C.hemiSky.g, C.hemiSky.b, C.horizon.r, C.horizon.g, C.sun.r, ambI, this.sunTrue.x, this.sunTrue.z, cloud]
+      .map(v => Math.round(v * 60)).join(',');
+    if (key === this.probeKey) return;
+    this.probeKey = key;
+    const sh = this.probe.sh, coef = sh.coefficients, basis = this._basis || (this._basis = new Array(9).fill(0));
+    for (const c of coef) c.set(0, 0, 0);
+    const col = this._pc || (this._pc = new THREE.Color()), hz = this._hz || (this._hz = new THREE.Color());
+    // Horizont als Mischung aus Himmelslicht und Horizontfarbe (der Himmelsverlauf selbst ist für Licht zu farbig)
+    hz.copy(C.hemiSky).lerp(C.horizon, 0.45);
+    const sd = this.sunTrue, glow = Math.max(0, U.smoothstep(-6, 4, elev)) * (1 - cloud * 0.7);
+    for (const d of SH_DIRS) {
+      if (d.y >= 0) {
+        col.copy(hz).lerp(C.hemiSky, Math.pow(d.y, 0.6));
+        // Himmel zur Sonne hin heller (Streulicht), auch kurz nach Untergang
+        const mu = Math.max(0, d.x * sd.x + d.y * sd.y + d.z * sd.z);
+        col.lerp(C.sun, Math.min(0.6, (mu * mu * mu * 0.45 + mu * 0.12) * glow));
+      } else col.copy(C.hemiGround).lerp(hz, 0.25 * (1 + d.y));
+      THREE.SphericalHarmonics3.getBasisAt(d, basis);
+      for (let k = 0; k < 9; k++) { coef[k].x += col.r * basis[k]; coef[k].y += col.g * basis[k]; coef[k].z += col.b * basis[k]; }
+    }
+    // Maß: gleichförmiges Licht L ergäbe mit THREE.HemisphereLight(L, L, I) dieselbe Helligkeit
+    const s = 4 * Math.PI / SH_DIRS.length * ambI * PROBE_SCALE;
+    for (const c of coef) c.multiplyScalar(s);
+    this.probe.intensity = 1;
   }
 
   get weatherName() { return WEATHER[this.kind].name; }
