@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.14.0 „Ampeln und Verkehrsregeln“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.15.0 „Licht und Wetter“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -147,7 +147,7 @@ und müssen dort bleiben.
 | `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (seit v3.9.0 `THREE_VERSION` 0.186.1 per `import()` als ES-Modul und stellt es als `window.THREE` bereit; Ersatz `three.min.js` r160, erzwingbar mit `?three=160`; jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
 | `js/materials.js` | Materialbibliothek (seit v3.11.0, `Mat`): Voreinstellungen `MAT_PRESETS` (Lack, Chrom, Glas, Gummi, Kunststoff, Metall …), `Mat.make(voreinstellung, werte, schlüssel)` stuft je Grafikstufe ab (voll Physical/Standard, mobil Standard, leicht Lambert) und lässt unbekannte Werte weg; Budget `Mat.aniso`, `Mat.size` (gemalte Texturen); KTX2-Lader (`Mat.ktx2`, `Mat.loadKTX2`, three.js-Erweiterung `KTX2Loader` mit Basis-Transcoder vom CDN, Import-Map in `index.html`) |
-| `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
+| `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, seit v3.15.0 Spiegelungen (SSR; Spiegelstärke im Alphakanal des Szenenbilds: 1…2 nasse Straße, 3…4 Glas), Wolkenschatten und Lichtstrahlen (Viertelauflösung, radial verwischt), Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
 | `js/landscape.js` | Landschaft im Umland (seit v2.5.0): Bodenbedeckungskarte je Kachel aus den OSM-Flächen (`paintCover`: r Acker, g Wiese, b Wald, Feldraine an Feldgrenzen, weichgezeichnet; zweite Karte mit Reihenrichtung je Feld), Geländematerial (`terrainMaterial`: Gras-, Ackerboden- und Waldbodentextur aus der Leinwand, Farbe aus dem unscharfen Luftbild, Ackerart nach Fotofarbe mit Saatreihen, Furchen, Stoppeln, Fahrgassen; Relief über die Normale), 3D-Bewuchs um die Kamera (`update`/`makeCell`: Gras, Getreide, Blumen, Farn als Instanzen in 8-m-Zellen bis 88 m, sinkt am Rand ein), Kronendach-Hülle über fernen Wäldern (`buildCanopy`), Feld- und Waldwege (`splitRural`, `buildTracks`, `trackMaterial`: Fahrspuren, Grasnarbe, Schotter, Asphalt), Dörfer (`buildVillage`: Gärten mit Staketen- und Lattenzaun, Tor und Einfahrt zur Straße, Hecken, Obstbäume, Rundballen an Scheunen) |
@@ -174,6 +174,7 @@ und müssen dort bleiben.
 | `js/interiors.js` | Innenräume (`Room`): Raumhülle, Fenster mit Ausblick, Möbel aus Quadern mit gemalten Texturen, Kollision als Rechtecke (`collide`, `walker` ersetzt die Welt-Abfragen für die Spielfigur), Kamera innerhalb der Wände (`clampCam`), Stellen zum Benutzen; drei Grundrisse `buildSmallRoom`/`buildModernRoom`/`buildLuxuryRoom` |
 | `js/weapons.js` | Waffen (seit v3.3.0): `WEAPONS` (Werte je Waffe), `WEAPON_SHOPS`, Umrisse fürs HUD, 3D-Modelle (`weaponModel`, in der rechten Hand über `Player.setWeapon`), `Weapons`: Auswahl, Nachladen, Schießen (freies Zielen aus der Kamera oder Zielhilfe `pickTarget`), Strahltest `ray` gegen Passanten und Polizisten (Zylinder), Autos (Quader) und Häuser/Boden (`wallHit`, Schritte von 0,5 m), Wirkung `applyHit`, Nahkampf, Granaten, Pickups (Geld, Waffen), Leuchtspuren, Mündungsfeuer, Schüsse der Polizei (`npcShot`), Waffenladen-Menü, Waffenanzeige, Fadenkreuz und Zielmarkierung |
 | `js/gfx-webgpu.js` | WebGPU-Probe (seit v3.10.0, `GfxProbe`): lädt `three.webgpu.js` vom selben CDN wie `three.module.js` (gemeinsames `three.core.js`), `WebGPURenderer` auf eigener Leinwand unter der durchsichtigen WebGL-Leinwand (Eingabe bleibt dort), blendet ShaderMaterials (Himmel, Wasser) aus, Nebelfarbe als Hintergrund, ohne Umgebungsbild; Messanzeige (Backend, Bildzeit, CPU-Zeit des Zeichnens, Zeichenaufrufe, Dreiecke), `game.gfx.stats`; `measureWebGL` für `?gfx=stats` |
+| `js/carlights.js` | Scheinwerferkegel nachts (seit v3.15.0, `CarLights`): Lichtteppich auf der Fahrbahn und zwei Lichtkegel je fahrendem Auto als Instanzen (bis 64, additiv, Alphakanal unberührt), Kegel bei Regen/Nebel stärker; das eigene Auto hat das echte SpotLight aus `game.js` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
@@ -286,6 +287,37 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.15.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Licht und Wetter – Phase 10 des Grafik-Fahrplans
+  (7.1).** Fünf Commits (10a–10e).
+  - **10a Gestaffelte Schatten** (`game.js`, `CSM`): zweites Richtungslicht ohne Helligkeit mit grober Schattenkarte
+    (2048², ± 720 m, Mitte 360 m vor der Kamera, auf 20 m gerastet, nur alle 0,8 s neu). Der Lichtbaustein von three.js
+    (`ShaderChunk.lights_fragment_begin`, beim Start per Muster ersetzt; passt das Muster nicht, z. B. bei `?three=160`,
+    bleibt alles wie bisher) nimmt innen die scharfe Karte, am Rand und außerhalb die grobe. Nur Ultra/Hoch. Ferne
+    Häuser werfen jetzt Schatten aufeinander. Kosten: ≈ 2 ms im Bild der Neuberechnung
+  - **10b Wolkenschatten** (`post.js` `cloudShadow`): Wolkendecke in 1.500 m entlang der Sonnenrichtung auf Boden und
+    Häuser projiziert, zieht mit dem Wind; Stärke nach Sonnensicht (klar wenige, bedeckt kaum Kontrast, nachts keine)
+  - **10c Spiegelungen** (`post.js` `ssr`, `world.js` Straßen- und Fassadenshader): Straßen schreiben die Nässe (mit
+    Pfützen), Fenster die Glasstärke in den Alphakanal des HDR-Bildes (über 1, damit Laub mit Alpha-Kanten nicht stört);
+    die Nachbearbeitung verfolgt den gespiegelten Strahl durch das Tiefenbild (Ultra 40, Hoch 28 Schritte, 5 Halbierungen).
+    Nachts spiegeln sich Laternen, Fenster und Ampeln auf nasser Straße; ohne Treffer bleibt die Himmelsspiegelung der
+    Materialien. Bei 1080p im Rauschen der Messung. Debug: `game.post.debugSSR`, Vergleich `game.post.noSSR`
+  - **10d Lichtstrahlen** (`post.js` `raysMaskMat`, `raysBlurMat`): Himmel um die Sonne als Maske (Häuser und Wolken
+    verdecken), zweimal radial verwischt, nur wenn die Sonne vor der Kamera steht; abends wärmer. Shader bleibt auf allen
+    Bloom-Stufen gleich (kein Neuübersetzen beim Umschauen). Debug: `game.post.debugRays`, Vergleich `game.post.noRays`
+  - **10e Scheinwerferkegel** (`js/carlights.js`, siehe 5)
+  - **Getestet (Chromium, Stufe Hoch):** Abendblick über die Stadt mit und ohne grobe Schattenkarte, Übergang ohne Kante;
+    Wolkenschatten von oben; nasse Lossaustraße nachts mit und ohne Spiegelungen, Glasmaske und Treffer in der
+    Debug-Ansicht; Gegenlicht bei 19 Uhr mit und ohne Strahlen; Kleinwagen nachts im Regen. Mittel und Niedrig zeichnen
+    richtig (dort ohne CSM und Spiegelungen); keine fehlerhaften Shader-Programme
+  - Beim Testen behoben: Shader der Nachbearbeitung brach ohne Spiegelungen ab (`SSR_STEPS` fehlte → schwarzes Bild auf
+    Mittel/Niedrig); Laub wurde als nasse Fläche gelesen (Markierung jetzt über 1); Lichtstrahlen viel zu stark;
+    Lichtkegel erzeugten NaN (`pow` mit leicht negativer Basis), das sich über den Bloom als weißer Fleck ausbreitete
+- ⚠️ Grenzen v3.15.0: Spiegelungen nur, was im Bild ist (Screen-Space: Ränder, Dinge hinter der Kamera fehlen) und scharf
+  (keine Unschärfe nach Rauheit); nur Straßen, Markierungen und Fassadenglas spiegeln (nicht Autos, Plätze aus dem
+  Luftbild, Wasser). Wolkenschatten passen nicht genau zu den Wolken am Himmel. Lichtteppiche liegen als Ebene in
+  Fahrzeugneigung (an Kuppen leicht schwebend) und beleuchten nur additiv. Die grobe Schattenkarte springt alle 0,8 s
+  (nur in der Ferne sichtbar). WebGPU-Probe ohne diese Effekte (nur WebGL-Kette)
 
 - ✅ v3.14.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Ampeln und Verkehrsregeln: die
   offenen Punkte aus Phase 9.** Neue Datei `js/signals.js` (siehe 5).
@@ -1118,13 +1150,14 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 7 | (v3.11.0) PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
 | ✅ 8 | (v3.12.0) Leistung: Zeitscheiben, Höhen im Worker, vereinfachte ferne Kacheln (HLOD) bis 4,6 km, Bäume in wenigen InstancedMeshes (statt `BatchedMesh`, siehe 6), Impostors und Impostor-Wald | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
 | ✅ 9 | (v3.13.0, Rest v3.14.0) Straßen: Kreuzungsflächen mit Gehweg-Ecken, Zebrastreifen/Furten/Halt-/Wartelinien aus OSM, Kanaldeckel, Gullys, Flickstellen, Leitpfosten; Ampelmasten mit Schaltung, KI-Verkehr hält an Ampeln/Linien/Zebrastreifen, Haifischzähne, Fahrbahnpfeile | `world.js`, `region.js`, `js/signals.js` (neu), `traffic.js` | L |
-| 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
+| ✅ 10 | (v3.15.0) Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js`, `world.js`, `js/carlights.js` (neu) | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–9 (v3.5.0–v3.14.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 10** (Licht und Wetter: gestaffelte Schatten, Spiegelungen auf nassen Straßen und
-Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts; dabei die Ampellichter nachts als Lichtquelle). Phase 9
-ist mit v3.14.0 komplett; Ausbau später: Fußgänger queren an Zebrastreifen und Ampeln, Strafe fürs Rotfahren, Abbiegephasen.
+**Stand:** Phasen 1–10 (v3.5.0–v3.15.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+Nächster Schritt nach Freigabe: **Phase 11** (WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung, danach Entscheidung
+über den Standard-Renderer; dabei die neuen Effekte aus Phase 10 mitnehmen). Ausbau Phase 10 später: unscharfe
+Spiegelungen nach Rauheit, Autolack und Wasser in die Spiegelungen, Ampel- und Laternenlicht als Lichtteppiche.
+Ausbau Phase 9 später: Fußgänger queren an Zebrastreifen und Ampeln, Strafe fürs Rotfahren, Abbiegephasen.
 Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
 Bodenbedeckung im Worker, WebGPU-Probe mit den weniger gewordenen Zeichenaufrufen neu messen. Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
@@ -1155,9 +1188,8 @@ Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 - [ ] Straßenlaternen aus OSM `highway=street_lamp` (Ampeln: erledigt in v3.14.0)
 - [ ] Touch-Steuerung für Smartphone und Tablet
 - [x] ~~Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)~~ Erledigt in v2.4.0 (Uhr, Abendrot, Wetter)
-- [ ] Grafik weiter: zweites Fenstermuster (Rundbogen-, Sprossen- und Ladenfenster) je Haus, Balkone, Gauben und
-  Dachüberstände als Geometrie, Kanaldeckel auf der Fahrbahn, Scheinwerferkegel der KI-Autos nachts,
-  Wolkenschatten auf dem Boden
+- [x] ~~Grafik weiter: Kanaldeckel, Scheinwerferkegel der KI-Autos, Wolkenschatten~~ Erledigt in v3.13.0/v3.15.0
+  (zweites Fenstermuster, Balkone und Gauben seit v3.6.0/v3.8.0)
 - [x] ~~Ferne Wälder als Baumkulisse (Hülle über den Waldflächen) bis an den Sichtrand~~ Erledigt in v2.5.0
 - [x] ~~Feldwege/Hecken fertig laden~~ Erledigt am 23.10.2026 (100 %)
 - [ ] Landschafts-Boden auch für die Innenstadt (Festungsberg, Hofgarten, Itzaue); Hecken und Zäune als Hindernisse;
