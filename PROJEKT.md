@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.16.0 „WebGPU: Material-Weiche“ (Phase 11a; Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.17.0 „WebGPU voll (Probe)“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -174,6 +174,8 @@ und müssen dort bleiben.
 | `js/interiors.js` | Innenräume (`Room`): Raumhülle, Fenster mit Ausblick, Möbel aus Quadern mit gemalten Texturen, Kollision als Rechtecke (`collide`, `walker` ersetzt die Welt-Abfragen für die Spielfigur), Kamera innerhalb der Wände (`clampCam`), Stellen zum Benutzen; drei Grundrisse `buildSmallRoom`/`buildModernRoom`/`buildLuxuryRoom` |
 | `js/weapons.js` | Waffen (seit v3.3.0): `WEAPONS` (Werte je Waffe), `WEAPON_SHOPS`, Umrisse fürs HUD, 3D-Modelle (`weaponModel`, in der rechten Hand über `Player.setWeapon`), `Weapons`: Auswahl, Nachladen, Schießen (freies Zielen aus der Kamera oder Zielhilfe `pickTarget`), Strahltest `ray` gegen Passanten und Polizisten (Zylinder), Autos (Quader) und Häuser/Boden (`wallHit`, Schritte von 0,5 m), Wirkung `applyHit`, Nahkampf, Granaten, Pickups (Geld, Waffen), Leuchtspuren, Mündungsfeuer, Schüsse der Polizei (`npcShot`), Waffenladen-Menü, Waffenanzeige, Fadenkreuz und Zielmarkierung |
 | `js/tsl-materials.js` | Node-Fassungen der eigenen Shader für den WebGPURenderer (seit v3.16.0, `NodeKit`): Rauschen (`hash`, `noise`, `fbm`), WebGL-Uniform → TSL-Uniform (`u`, folgt jedem Bild), Boden mit Luftbild (`detail`), Straßen (`road`), Laub (`leaf`), Dächer (`roof`), Himmel (`sky`) und Regen (`rain`) als Node-Zwillinge (`twin`). WebGL-Materialien tragen `userData.tsl` (Umwandlung) bzw. `userData.node` (ShaderMaterial-Zwilling) |
+| `js/tsl-facade.js` | Fassaden für WebGPU (seit v3.17.0, `NodeKit.facade`): World.facadeShader Zweig für Zweig in TSL; gemeinsame Zwischenwerte als Variablen vor den Zweigen (siehe 6, v3.17.0); Testansicht `?fcdbg=G` |
+| `js/tsl-post.js` | Nachbearbeitung für WebGPU (seit v3.17.0, `NodeKit.post`): RenderPipeline mit MRT (Farbe, Normale, Spiegelstärke `tslRefl`), GTAO, Bloom, FXAA (three.js-Zusätze über die Import-Map), Spiegelungen, Wolkenschatten, Höhennebel, Lichtstrahlen, Belichtung, ACES, Farbkorrektur; Testschalter `?pp=noao,nossr,norays,nobloom,nocomp` |
 | `js/gfx-webgpu.js` | WebGPU-Probe (seit v3.10.0, `GfxProbe`; seit v3.16.0 mit Material-Weiche in `NodeLibrary.fromMaterial`, Zwillingstausch beim Zeichnen und eigenem PMREM für das Umgebungsbild): lädt `three.webgpu.js` vom selben CDN wie `three.module.js` (gemeinsames `three.core.js`), `WebGPURenderer` auf eigener Leinwand unter der durchsichtigen WebGL-Leinwand (Eingabe bleibt dort), blendet ShaderMaterials (Himmel, Wasser) aus, Nebelfarbe als Hintergrund, ohne Umgebungsbild; Messanzeige (Backend, Bildzeit, CPU-Zeit des Zeichnens, Zeichenaufrufe, Dreiecke), `game.gfx.stats`; `measureWebGL` für `?gfx=stats` |
 | `js/carlights.js` | Scheinwerferkegel nachts (seit v3.15.0, `CarLights`): Lichtteppich auf der Fahrbahn und zwei Lichtkegel je fahrendem Auto als Instanzen (bis 64, additiv, Alphakanal unberührt), Kegel bei Regen/Nebel stärker; das eigene Auto hat das echte SpotLight aus `game.js` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
@@ -289,7 +291,34 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🔄 v3.16.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Phase 11a – WebGPU-Fundament.** Neue Datei
+- ✅ v3.17.0 (03.11.2026, Branch `grafik/regionale-architektur`): **WebGPU voll – Phase 11b–11f des Grafik-Fahrplans.**
+  Fünf Commits (11b–11f), dazu 11a (v3.16.0, unten). Mit `?gfx=webgpu` zeichnet jetzt alles in TSL: Gelände, Feldwege,
+  Kronendach, Bewuchs (11b), Fassaden (11c, neue Datei `js/tsl-facade.js`), Lichtkegel, Wiegen von Laub und Gras (11d),
+  die ganze Nachbearbeitung als Node-Kette (11e, `js/tsl-post.js`) und gestaffelte Schatten über `CSMShadowNode` (11f).
+  - **Entscheidung (11f): WebGL bleibt Standard.** Gemessen (Stufe Hoch, 544 × 347, Median über 6 s): Stadt von oben am
+    Abend WebGL 16,7 ms Bild / 6,0 ms CPU, WebGPU 18,9 / 16,8; Straße WebGL 16,7 / 4,6, WebGPU 16,7 / 14,0. WebGPU braucht
+    fürs Zeichnen etwa dreimal so viel CPU-Zeit; neue Ansichten haken beim ersten Übersetzen 1–9 s; mit GTAO ohne MSAA
+    (FXAA statt dessen). Wieder prüfen, wenn three.js Render-Bundles bzw. vorab übersetzte Pipelines bietet
+  - **Gefundene Fallen (für spätere Arbeit wichtig):** (1) Der WebGPURenderer teilt einen gebauten Shader zwischen allen
+    Materialien mit gleichem `customProgramCacheKey`, und nur das erste wird über `fromMaterial` umgewandelt: Texturen je
+    Material deshalb über `materialReference` mit Gettern auf `THREE.Material.prototype` (`tslMap`, `tslCover`,
+    `tslField`); beim Zeichnen liest three.js aus dem Original-Material. (2) TSL legt einen mehrfach benutzten Knoten dort
+    als Variable an, wo er zuerst erzeugt wird; liegt das in einem nicht ausgeführten Zweig, ist er anderswo 0 –
+    gemeinsame Werte vor den Zweigen mit `.toVar()` festlegen. (3) Int32-Attribute (Wandprofil) liest WebGPU ohne
+    `gpuType = IntType` als Float-Bits. (4) Rückrufe an Texturknoten laufen nicht (eigene Aktualisierung). (5) Ein
+    `mrtNode` am Material erzeugt im Schattendurchgang eine leere Ausgabe (ungültiges WGSL): Spiegelstärke über eine
+    Shader-Eigenschaft. (6) Ein Licht mit `shadow.autoUpdate = false` (WebGL-CSM aus 10a) zerstört unter WebGPU die
+    Schattentextur – auf dem WebGPU-Weg aus. (7) Neues PMREM-Rendertarget = alle spiegelnden Materialien neu gebunden
+    (Hänger 0,5–3 s): Rendertarget weiterverwenden
+  - **Getestet (Chromium, echtes WebGPU):** Stadtfassaden mit Fenstern, Gewänden, Gesimsen, nachts Leuchtfenster und
+    Laternenschein; Wiese und Wald bei Dörfles-Esbach (gleiche Farben wie WebGL); nasse Lossaustraße nachts mit
+    Spiegelungen, Nebel, Belichtung; Stadt am Abend mit gestaffelten Schatten; keine Konsolenfehler. WebGL-Weg nach jedem
+    Schritt unverändert
+  - ⚠️ Grenzen der WebGPU-Probe: Gras sinkt am Rand nicht ein (blendet aus), Laub-Phase je Instanz statt nach Ort;
+    Dächer ohne unscharfe Mittelfarbe auf steilen Flächen; Lichtstrahlen mit 24 Proben in voller Auflösung; der Hash je
+    Haus rechnet auf WebGPU etwas anders (andere zufällige Fensterraster); `?three=160` ohne WebGPU
+
+- ✅ v3.16.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Phase 11a – WebGPU-Fundament.** Neue Datei
   `js/tsl-materials.js` (siehe 5). Die WebGPU-Probe (`?gfx=webgpu`) hängt sich in die Umwandlung der Materialien
   (`renderer.library.fromMaterial`, einmal je Material) und setzt dort die TSL-Fassung ein; der WebGL-Weg bleibt
   unverändert (nur `userData`-Einträge). In TSL übersetzt: Boden mit Luftbild, Straßen (Körnung, Pfützen,
@@ -298,8 +327,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   - **Getestet (Chromium, echtes WebGPU):** Stadt von oben mit Wolken und Ziegeldächern, nasse Lossaustraße im Regen,
     Nachthimmel mit Sternen; 60 fps nach dem ersten Übersetzen (das erste Bild einer neuen Ansicht braucht 1–4 s, weil
     WebGPU die Shader erst dann baut). WebGL-Weg danach geprüft: unverändert, keine fehlerhaften Programme
-  - Noch nicht in TSL (Probe zeigt Grundmaterial bzw. blendet aus): Fassaden, Landschaft, Wasser, Lichtkegel,
-    Nachbearbeitung (deshalb auf WebGPU auch kein Nebel, kein Bloom), gestaffelte Schatten; Laub wiegt nicht im Wind
+  - Rest in v3.17.0 (oben)
 
 - ✅ v3.15.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Licht und Wetter – Phase 10 des Grafik-Fahrplans
   (7.1).** Fünf Commits (10a–10e).
@@ -1164,14 +1192,12 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 8 | (v3.12.0) Leistung: Zeitscheiben, Höhen im Worker, vereinfachte ferne Kacheln (HLOD) bis 4,6 km, Bäume in wenigen InstancedMeshes (statt `BatchedMesh`, siehe 6), Impostors und Impostor-Wald | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
 | ✅ 9 | (v3.13.0, Rest v3.14.0) Straßen: Kreuzungsflächen mit Gehweg-Ecken, Zebrastreifen/Furten/Halt-/Wartelinien aus OSM, Kanaldeckel, Gullys, Flickstellen, Leitpfosten; Ampelmasten mit Schaltung, KI-Verkehr hält an Ampeln/Linien/Zebrastreifen, Haifischzähne, Fahrbahnpfeile | `world.js`, `region.js`, `js/signals.js` (neu), `traffic.js` | L |
 | ✅ 10 | (v3.15.0) Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js`, `world.js`, `js/carlights.js` (neu) | L |
-| 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
+| ✅ 11 | (v3.16.0–v3.17.0) WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung, CSM; Entscheidung: WebGL bleibt Standard (WebGPU ≈ 3× CPU-Zeit) | `js/tsl-materials.js`, `js/tsl-facade.js`, `js/tsl-post.js` (neu), `gfx-webgpu.js` | XL |
 
-**Stand:** Phasen 1–10 (v3.5.0–v3.15.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6). **Phase 11 läuft**
-in Teilschritten: ✅ 11a Fundament (Material-Weiche, Himmel, Regen, Umgebungsbild, Boden, Straßen, Laub, Dächer; v3.16.0) ·
-11b Landschafts-Shader (`landscape.js`: Gelände, Feldwege, Kronendach, Bewuchs) · 11c Fassadenshader (≈ 500 Zeilen) ·
-11d Wasser, Lichtkegel, Wiegen des Laubs · 11e Nachbearbeitung als Node-Kette (Spiegelstärke dann über einen zweiten
-Ausgabekanal statt Alpha) · 11f gestaffelte Schatten auf WebGPU, Messung und Entscheidung über den Standard-Renderer.
-Nächster Schritt: **11b**. Ausbau Phase 10 später: unscharfe
+**Stand:** Phasen 1–11 (v3.5.0–v3.17.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6). Der
+Grafik-Fahrplan ist abgeschlossen; WebGL bleibt Standard, WebGPU ist mit `?gfx=webgpu` vollständig zuschaltbar.
+Nächste sinnvolle Schritte: WebGPU-CPU-Last senken (Render-Bundles, weniger Zeichenaufrufe), Pipelines vorab übersetzen
+(`renderer.compileAsync`), damit neue Ansichten nicht haken; danach erneut messen. Ausbau Phase 10 später: unscharfe
 Spiegelungen nach Rauheit, Autolack und Wasser in die Spiegelungen, Ampel- und Laternenlicht als Lichtteppiche.
 Ausbau Phase 9 später: Fußgänger queren an Zebrastreifen und Ampeln, Strafe fürs Rotfahren, Abbiegephasen.
 Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
