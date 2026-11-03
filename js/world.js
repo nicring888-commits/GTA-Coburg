@@ -2573,6 +2573,7 @@ class World {
   removeTreeLod(m) { if (this.treeLod) this.treeLod = this.treeLod.filter(e => e.m !== m); }
   updateTreeLod(x, z) {
     for (const e of this.treeLod || []) {
+      if (e.update) { e.update(x, z); continue; } // Baumgruppe einer Umland-Kachel (TreeSet in js/region.js)
       const dx = Math.max(e.minX - x, 0, x - e.maxX), dz = Math.max(e.minZ - z, 0, z - e.maxZ), d = Math.hypot(dx, dz);
       const nearNow = e.m.geometry === e.near;
       if (!nearNow && d < 220) e.m.geometry = e.near;

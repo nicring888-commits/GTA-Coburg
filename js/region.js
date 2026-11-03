@@ -103,6 +103,80 @@ const REGION_TREE_DENSITY = { forest: 1 / 115, orchard: 1 / 140, park: 1 / 500, 
   scrub: 1 / 380, residential: 1 / 1700, meadow: 1 / 5000, farmyard: 1 / 2500 };
 const tileKey = (ti, tj) => (ti + 512) * 1024 + (tj + 512);
 
+// Bäume einer Art in einer Kachel (seit v3.12.0, Grafik-Phase 8): wenige InstancedMeshes statt je eines pro 250-m-Gruppe.
+// Die Instanzen liegen nach Zellen sortiert (4 × 4 je Kachel): nahe Zellen (Blattkarten) in einem Mesh, ferne (grobe Hülle)
+// in je einem Mesh pro Kachelviertel, damit Unsichtbares weiter ausgeblendet wird. Wechselt eine Zelle zwischen nah und
+// fern, werden die Puffer neu zusammengesetzt (beim Fahren alle paar Sekunden, ≈ 0,1 ms).
+const TREE_CELLS = 4;
+class TreeSet {
+  // mats: Float32Array (16 je Baum), cols: Float32Array (3 je Baum) oder null, start: Zellgrenzen (TREE_CELLS² + 1)
+  constructor(t, near, far, mat, mats, cols, start, cw, ch) {
+    Object.assign(this, { t, near, far, mat, mats, cols, start, cw, ch });
+    const N = TREE_CELLS, S = start;
+    this.n = S[N * N];
+    this.mask = -1;
+    // Viertel der Zelle k und Größe jedes Viertels
+    this.quad = k => (Math.floor((k % N) * 2 / N)) + 2 * Math.floor(Math.floor(k / N) * 2 / N);
+    const qn = [0, 0, 0, 0];
+    for (let k = 0; k < N * N; k++) qn[this.quad(k)] += S[k + 1] - S[k];
+    this.farM = qn.map(c => c ? this.mesh(far, c) : null);
+    this.nearM = null;
+    this.m = this; // Schlüssel für World.removeTreeLod
+  }
+  mesh(geo, cap) {
+    const m = new THREE.InstancedMesh(geo, this.mat, cap);
+    if (this.cols) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    m.castShadow = true; m.receiveShadow = true; m.count = 0;
+    this.t.group.add(m);
+    return m;
+  }
+  // Zelle k nah unter 220 m, wieder fern ab 250 m (wie die Bäume der Innenstadt)
+  update(x, z) {
+    const t = this.t, N = TREE_CELLS;
+    let mask = 0;
+    for (let k = 0; k < N * N; k++) {
+      if (this.start[k + 1] === this.start[k]) continue;
+      const x0 = t.x0 + (k % N) * this.cw, z0 = t.z0 + Math.floor(k / N) * this.ch;
+      const d = Math.hypot(Math.max(x0 - x, 0, x - x0 - this.cw), Math.max(z0 - z, 0, z - z0 - this.ch));
+      if (d < 220 || (d <= 250 && this.mask > 0 && (this.mask >> k) & 1)) mask |= 1 << k;
+    }
+    if (mask !== this.mask) this.fill(mask);
+  }
+  fill(mask) {
+    this.mask = mask;
+    const N = TREE_CELLS, S = this.start;
+    let nNear = 0;
+    for (let k = 0; k < N * N; k++) if ((mask >> k) & 1) nNear += S[k + 1] - S[k];
+    if (nNear && (!this.nearM || this.nearM.instanceMatrix.count < nNear)) {
+      if (this.nearM) { this.t.group.remove(this.nearM); this.nearM.dispose(); }
+      this.nearM = this.mesh(this.near, Math.min(this.n, Math.ceil(nNear * 1.3)));
+    }
+    const put = (m, at, k) => {
+      const a = S[k], b = S[k + 1];
+      m.instanceMatrix.array.set(this.mats.subarray(a * 16, b * 16), at * 16);
+      if (this.cols) m.instanceColor.array.set(this.cols.subarray(a * 3, b * 3), at * 3);
+      return at + b - a;
+    };
+    const fc = [0, 0, 0, 0];
+    let n = 0;
+    for (let k = 0; k < N * N; k++) {
+      if (S[k + 1] === S[k]) continue;
+      if ((mask >> k) & 1) n = put(this.nearM, n, k);
+      else { const q = this.quad(k); fc[q] = put(this.farM[q], fc[q], k); }
+    }
+    const done = (m, c) => {
+      if (!m) return;
+      m.count = c; m.visible = c > 0;
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      if (c) m.computeBoundingSphere();
+    };
+    this.farM.forEach((m, q) => done(m, fc[q]));
+    done(this.nearM, n);
+  }
+  meshes() { return [...this.farM, this.nearM].filter(Boolean); }
+}
+
 class Region {
   constructor(world, R) {
     this.world = world;
@@ -1812,21 +1886,14 @@ class Region {
     if (!pts.length) return;
     yield;
     const A = this.treeAssets(), rnd = U.rng(t.key);
-    const leaves = pts.filter(p => p[2] === 0), pines = pts.filter(p => p[2] === 1), bushes = pts.filter(p => p[2] === 2);
-    // alles in Gruppen von 250 m, damit nur die nahen Gruppen die detaillierten Formen zeichnen (LOD)
-    const group = (list, near, mat) => {
-      const groups = new Map();
-      for (const p of list) { const k = Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
-      const out = new Map();
-      for (const [k, l] of groups) out.set(k, { m: new THREE.InstancedMesh(near, mat || A.leafMat, l.length), n: 0, list: l });
-      return out;
-    };
-    const lms = group(leaves, A.leaf), bms = group(bushes, A.bush), pms = group(pines, A.pine), tms = group(leaves.concat(pines), A.trunk, A.trunkMat);
-    const gk = p => Math.floor(p[0] / 250) + ',' + Math.floor(p[1] / 250);
+    // je Art (0 Laubbaum, 1 Nadelbaum, 2 Busch, 3 Stamm) und Zelle (4 × 4 je Kachel) Matrizen und Farben sammeln
+    const N = TREE_CELLS, cw = this.tw / N, ch = this.th / N;
+    const bins = [0, 1, 2, 3].map(() => Array.from({ length: N * N }, () => ({ m: [], c: [] })));
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     const greens = ['#5f8d3e', '#4f7d35', '#6a9a45', '#577f3a', '#7a9e4a', '#46703a'];
     const bushGreens = ['#5a7f38', '#6b8c3f', '#4d7334', '#7d9445', '#5f7a3a'];
-    const trees = [], treeGrid = new U.Grid(16);
+    const trees = [], treeGrid = new U.Grid(16), col = new THREE.Color();
+    const add = (kind, cell, c) => { const b = bins[kind][cell]; for (let i = 0; i < 16; i++) b.m.push(m4.elements[i]); if (c) b.c.push(c.r, c.g, c.b); };
     let k = 0;
     for (const p of pts) {
       if (++k % 1500 === 0) yield;
@@ -1834,27 +1901,35 @@ class Region {
       q.setFromAxisAngle(up, rnd() * 6.28);
       ps.set(p[0], this.heightAt(p[0], p[1]) - 0.2, p[1]); sc.set(s, s * (0.85 + rnd() * 0.35), s);
       m4.compose(ps, q, sc);
-      const kind = p[2];
+      const kind = p[2], cell = U.clamp(Math.floor((p[0] - t.x0) / cw), 0, N - 1) + N * U.clamp(Math.floor((p[1] - t.z0) / ch), 0, N - 1);
       if (kind === 2) {
-        const col = new THREE.Color(bushGreens[Math.floor(rnd() * bushGreens.length)]).multiplyScalar(0.8 + rnd() * 0.35);
-        const g = bms.get(gk(p)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col);
+        col.set(bushGreens[Math.floor(rnd() * bushGreens.length)]).multiplyScalar(0.8 + rnd() * 0.35);
+        add(2, cell, col);
         continue;
       }
-      const tg = tms.get(gk(p)); tg.m.setMatrixAt(tg.n++, m4);
-      const col = new THREE.Color(kind ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
-      const g = (kind ? pms : lms).get(gk(p)); g.m.setMatrixAt(g.n, m4); g.m.setColorAt(g.n++, col);
+      add(3, cell, null);
+      col.set(kind ? '#3f6634' : greens[Math.floor(rnd() * greens.length)]).multiplyScalar(0.85 + rnd() * 0.3);
+      add(kind, cell, col);
       trees.push(p[0], p[1], 0.35 * s);
       treeGrid.insert(trees.length / 3 - 1, p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1);
     }
+    yield;
     t.trees = trees; t.treeGrid = treeGrid; // Kollision erst, wenn die Bäume zu sehen sind
     if (t.canopy) t.canopy.visible = false;
     t.treeMeshes = [];
-    for (const [gs, near, far] of [[lms, A.leaf, A.leafFar], [bms, A.bush, A.bushFar], [pms, A.pine, A.pineFar], [tms, A.trunk, A.trunkFar]]) for (const g of gs.values()) {
-      const m = g.m;
-      m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); t.group.add(m);
-      t.treeMeshes.push(m);
-      this.world.addTreeLod(m, near, far, g.list);
-    }
+    const forms = [[A.leaf, A.leafFar, A.leafMat], [A.pine, A.pineFar, A.leafMat], [A.bush, A.bushFar, A.leafMat], [A.trunk, A.trunkFar, A.trunkMat]];
+    bins.forEach((cells, kind) => {
+      const start = new Int32Array(N * N + 1);
+      cells.forEach((b, c) => { start[c + 1] = start[c] + b.m.length / 16; });
+      const n = start[N * N];
+      if (!n) return;
+      const mats = new Float32Array(n * 16), cols = kind === 3 ? null : new Float32Array(n * 3);
+      cells.forEach((b, c) => { mats.set(b.m, start[c] * 16); if (cols) cols.set(b.c, start[c] * 3); });
+      const set = new TreeSet(t, forms[kind][0], forms[kind][1], forms[kind][2], mats, cols, start, cw, ch);
+      set.update(this.px !== undefined ? this.px : t.x0, this.pz !== undefined ? this.pz : t.z0);
+      t.treeMeshes.push(set);
+      (this.world.treeLod || (this.world.treeLod = [])).push(set);
+    });
   }
   // Gehölze aus dem Luftbild: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser werden zu Büschen
   // (Hecken, schmale Streifen) und Bäumen (große Flecken)
@@ -1896,7 +1971,7 @@ class Region {
     if (t.canopy) t.canopy.visible = true;
     for (const m of t.villageMeshes || []) { t.group.remove(m); if (m.isInstancedMesh) m.dispose(); else m.geometry.dispose(); }
     t.villageMeshes = null;
-    for (const m of t.treeMeshes || []) { t.group.remove(m); this.world.removeTreeLod(m); m.dispose(); }
+    for (const set of t.treeMeshes || []) { this.world.removeTreeLod(set.m); for (const m of set.meshes()) { t.group.remove(m); m.dispose(); } }
     t.treeMeshes = null; t.trees = null; t.treeGrid = null;
   }
 
