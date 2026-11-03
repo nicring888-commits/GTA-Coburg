@@ -1497,6 +1497,75 @@ class World {
                   relief = 0.86 + 0.14 * (1.0 - min(rib, 1.0));
                 }
               }
+            } else if (style > 5.5) {
+              // ===== Halle (seit v3.7.0, js/archetypes.js): Stil 6 Wand, 7 Front mit Toren bzw. Glasfront. Feld „Tür“ = Art × 16 +
+              // Tore; Art 0 Stahlhalle (Trapezblech, Lichtband, Rolltore), 1 Gewerbe (Sandwichpaneele, Fensterband im Büroteil,
+              // Sektionaltore), 2 Markt (Paneele, Glasfront mit Eingang), 3 Agrarhalle (Betonwand, Holz- oder Blechschalung, Schiebetor)
+              fFlat = 1.0;
+              float hk = floor(vProfC.y / 16.0 + 0.01), nG = vProfC.y - 16.0 * hk;
+              float Hh = eave - base;
+              bool front = style > 6.5;
+              if (hk < 0.5 || hk > 2.5) {
+                // senkrechte Rippen (Trapezblech alle 0,25 m, Agrar Boden-Deckel-Schalung 0,3 m), aus der Ferne gemittelt
+                float pr = hk > 2.5 ? 0.3 : 0.25, f = fract(uLoc / pr);
+                float rb = smoothstep(0.0, 0.06, f) * (1.0 - smoothstep(0.34, 0.42, f));
+                rb = mix(rb, 0.4, smoothstep(0.03, 0.08, fwidth(uLoc / pr)));
+                relief = 0.86 + 0.14 * rb;
+              } else {
+                // Sandwichpaneele, waagrechte Fugen alle 1 m bzw. 1,2 m
+                float pw = hk > 1.5 ? 1.2 : 1.0, j = step(fract(h / pw), 0.035);
+                j = mix(j, 0.035, smoothstep(0.02, 0.05, fwidth(h / pw)));
+                relief = 1.0 - 0.3 * j;
+              }
+              // Sockel aus Beton (Agrarhalle: Betonwand bis 1,8–2,8 m mit Fugen alle 6 m)
+              float sock = hk > 2.5 ? 1.8 + fract(bh * 3.3) : 0.35 + fract(bh * 5.1) * 0.45;
+              if (h < sock) { diffuseColor.rgb = vec3(0.6, 0.59, 0.56) * sampledDiffuseColor.rgb; relief = 1.0 - 0.3 * step(fract(uLoc / 6.0), 0.012); }
+              // Abschluss oben: Attika- bzw. Traufblech (Gewerbe und Markt breiter, oft in Firmenfarbe dunkel)
+              float bandH = hk > 0.5 && hk < 2.5 ? 0.55 : 0.2;
+              // (mit Attika über der Traufe, aber nicht im Giebeldreieck)
+              if (vWPos.y > eave - bandH && (vWPos.y < eave + 0.02 || vProfB.y - eave < 0.05)) { diffuseColor.rgb = (fract(bh * 6.7) < 0.5 ? vec3(0.22, 0.23, 0.25) : wallBase * 0.72) * sampledDiffuseColor.rgb; relief = 1.0; }
+              // Lichtband unter der Traufe (Stahlhalle), Fensterband im Büroteil (Gewerbe)
+              float officeW = W * mix(0.25, 0.6, fract(bh * 4.3));
+              bool office = hk > 0.5 && hk < 1.5 && uLoc < officeW && (!front || nG < 0.5);
+              if (hk < 0.5 && Hh > 5.0 && h > Hh - 2.0 && h < Hh - 1.05 && uLoc > 0.6 && uLoc < W - 0.6) {
+                diffuseColor.rgb = vec3(0.62, 0.68, 0.7) * sampledDiffuseColor.rgb;
+                frame = step(fract(uLoc / 1.05), 0.05); frameC = vec3(0.55, 0.56, 0.57);
+                relief = 0.9; fGlassVar = 0.5;
+              } else if (office && uLoc > 0.6 && ((h > 1.0 && h < 2.25) || (Hh > 6.4 && h > 4.0 && h < 5.2))) {
+                glass = 1.0 - step(fract(uLoc / 1.35), 0.06); frame = 1.0 - glass; frameC = vec3(0.22, 0.23, 0.24);
+                fLit = glass * step(0.55, fh(vec2(floor(uLoc / 1.35), floor(h / 3.0)) + bh * 5.0));
+              }
+              if (front && hk > 1.5 && hk < 2.5) {
+                // Markt: Glasfront mit Pfosten alle 1,25 m, Kämpfer auf 2,6 m, Schiebetür am Eingang
+                float g0 = W * mix(0.06, 0.18, fract(bh * 2.1)), g1 = W * mix(0.45, 0.85, fract(bh * 8.9));
+                if (uLoc > g0 && uLoc < g1 && h > 0.12 && h < Hh - bandH - 0.15) {
+                  float xx = uLoc - g0;
+                  frame = max(step(fract(xx / 1.25), 0.05), step(abs(h - 2.6), 0.05));
+                  glass = 1.0 - frame; frameC = vec3(0.2, 0.21, 0.22); fShop = glass * step(h, 2.6);
+                  if (xx > 1.3 && xx < 3.7 && h < 2.4) { glass = 0.6; frame = step(abs(xx - 2.5), 0.03) + step(2.33, h); fShop = 0.6; }
+                  diffuseColor.rgb = wallBase; relief = 1.0;
+                }
+              } else if (front && nG > 0.5) {
+                // Tore gleichmäßig über die Wand; Stahlhalle Rolltor, Gewerbe Sektionaltor mit Fensterreihe, Agrar Schiebetor
+                float gw = hk > 2.5 ? 5.0 : hk > 0.5 ? 3.6 : 4.5, gh = min(Hh - 0.8, hk > 2.5 ? 4.6 : hk > 0.5 ? 3.9 : 4.6);
+                gw = min(gw, (W - 1.0) / nG - 0.8);
+                float gap = (W - nG * gw) / (nG + 1.0), k = floor((uLoc - gap) / (gw + gap)), xx = uLoc - gap - k * (gw + gap);
+                if (k >= 0.0 && k < nG && xx > 0.0 && xx < gw && h < gh && gw > 2.2) {
+                  vec3 gC; float ln;
+                  if (hk > 2.5) { gC = fract(bh * 3.9) < 0.5 ? vec3(0.42, 0.3, 0.19) : vec3(0.36, 0.43, 0.36); ln = step(fract(xx / 0.3), 0.08) + step(abs(xx - gw * 0.5), 0.04); }
+                  else if (hk > 0.5) { gC = fract(bh * 3.9) < 0.6 ? vec3(0.9, 0.9, 0.88) : vec3(0.23, 0.24, 0.26); ln = step(fract(h / 0.55), 0.05);
+                    if (h > 2.6 && h < 3.0 && fract(xx / 0.9) > 0.1) { glass = 1.0; } }
+                  else { gC = fract(bh * 3.9) < 0.4 ? vec3(0.7, 0.71, 0.7) : fract(bh * 3.9) < 0.7 ? vec3(0.25, 0.36, 0.52) : vec3(0.86, 0.86, 0.83); ln = step(fract(h / 0.11), 0.2); }
+                  ln = mix(min(ln, 1.0), 0.15, smoothstep(0.02, 0.05, fwidth(h)));
+                  float edge = step(min(min(xx, gw - xx), gh - h), 0.08);
+                  diffuseColor.rgb = gC * (1.0 - 0.18 * ln) * (1.0 - 0.45 * edge) * sampledDiffuseColor.rgb;
+                  relief = 0.9 + 0.1 * (1.0 - ln);
+                }
+                // Gehtür neben dem ersten Tor (Stahlhalle, Gewerbe)
+                float dx0 = gap - 1.6;
+                if (hk < 1.5 && dx0 > 0.4 && uLoc > dx0 && uLoc < dx0 + 1.0 && h < 2.1) { diffuseColor.rgb = vec3(0.3, 0.31, 0.33) * sampledDiffuseColor.rgb; relief = 0.8 + 0.2 * step(0.05, min(uLoc - dx0, dx0 + 1.0 - uLoc)); }
+              }
+              diffuseColor.rgb = mix(diffuseColor.rgb, frameC * sampledDiffuseColor.rgb, frame);
             } else if (style > 0.5 && style < 2.5) {
               // ===== Landhaus (oberfränkisches Dorf): Fenster in Feldern, nicht streng gereiht, Haustür, Läden =====
               fRural = 1.0; fFlat = 1.0;

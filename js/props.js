@@ -41,6 +41,12 @@ const SIGN_BRANDS = [
   [/Riemann/, '#7a1e22', '#f3e7cf'], [/Apotheke/, '#ffffff', '#d4001a'], [/Rossmann/, '#e2001a', '#ffffff'],
   [/Ernsting/, '#ffffff', '#e2001a'], [/TK Maxx/, '#ffffff', '#c8102e'], [/Bijou Brigitte/, '#000000', '#d8b56d'],
   [/^BARCELONA$/, '#b3261e', '#ffffff'], [/Netto/, '#ffe500', '#d4001a'], [/NORMA/, '#e30613', '#ffffff'], [/TEDi/, '#e30613', '#ffffff'],
+  // Märkte, Baumärkte und Tankstellen im Umland (seit v3.7.0)
+  [/^Lidl/i, '#0050aa', '#fff000'], [/^Aldi/i, '#00205b', '#ffffff'], [/edeka/i, '#ffd400', '#1f4e9c'], [/rewe/i, '#cc071e', '#ffffff'],
+  [/^penny/i, '#cd1719', '#ffffff'], [/kaufland/i, '#e10915', '#ffffff'], [/^tegut/i, '#e2001a', '#ffffff'], [/marktkauf/i, '#ffffff', '#e30613'],
+  [/^OBI$/i, '#ff7e21', '#ffffff'], [/toom/i, '#e30613', '#ffffff'], [/Sonderpreis Baumarkt/i, '#ffd300', '#d40f14'],
+  [/^JYSK/i, '#143c8c', '#ffffff'], [/Dehner/i, '#005c2e', '#ffffff'], [/^Aral/i, '#0b4ea2', '#ffffff'], [/^Shell/i, '#fbce07', '#dd1d21'],
+  [/^Esso/i, '#ffffff', '#d31f26'], [/TotalEnergies/i, '#ed0000', '#ffffff'], [/^AVIA/i, '#e2001a', '#ffffff'], [/^JET$/i, '#ffd200', '#1a1a1a'],
 ];
 const SIGN_KINDS = {
   'amenity=fast_food': ['#b8322a', '#ffd84a'], 'amenity=restaurant': ['#23402f', '#e8c766'],
@@ -288,7 +294,8 @@ class CityProps {
   }
 
   // Ladenschilder für eine Liste [Name, Art, x, z] an die Hauswand zur nächsten Straße setzen (auch fürs Umland).
-  // opts: atlas (Pixel), maxDist (vom Markt), crowded(x, z, r), mark(x, z), addArm(o) für Nasenschild-Arme
+  // opts: atlas (Pixel), maxDist (vom Markt), crowded(x, z, r), mark(x, z), addArm(o) für Nasenschild-Arme,
+  // roadDist (Suchweite zur Straße), big(Haus) → { h, top } für große Schrift an Hallen
   signsFor(S, opts) {
     const W = this.world, out = { meshes: [], mats: [], placed: 0 };
     if (!S || !S.length) return out;
@@ -330,7 +337,7 @@ class CityProps {
     for (const [name, kind, px, pz] of S) {
       if (Math.hypot(px, pz) > (opts.maxDist ?? 1600)) continue;
       if (typeof VENUES !== 'undefined' && VENUES.some(v => v.road && v.name === name)) continue; // eigenes Schild über der Tür (venues.js)
-      const r = W.nearestRoad(px, pz, 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
+      const r = W.nearestRoad(px, pz, opts.roadDist || 45, s => s.k === 'road' || s.k === 'plaza' || s.k === 'foot');
       if (!r) continue;
       // Haus des Ladens: Punkt selbst oder auf der Linie Straße → Laden (bis 8 m dahinter)
       let dx = px - r.x, dz = pz - r.z;
@@ -353,12 +360,14 @@ class CityProps {
         const d = Math.hypot(r.x - c[0], r.z - c[1]);
         if (!best || d < best.d) best = { ax, az, bx, bz, len, nx, nz, d };
       }
-      if (!best || best.d > 25) continue;
+      // Halle (opts.big, Umland): größere Schrift oben unter der Attika; Hallen stehen oft weit hinter dem Hof
+      const big = opts.big ? opts.big(b) : null, sH = big ? big.h : H;
+      if (!best || best.d > (big ? 80 : 25)) continue;
       const ex = (best.bx - best.ax) / best.len, ez = (best.bz - best.az) / best.len;
       const st = (SIGN_BRANDS.find(s => s[0].test(name)) || [null, ...(SIGN_KINDS[kind] || SIGN_DEFAULT)]).slice(1);
       // Platz auf der Wand: dem Laden gegenüber, ganz auf der Wand, nicht auf einem anderen Schild
       const tex = paint(name, st[0], st[1]);
-      let w = Math.min(tex.w, best.len - 0.4);
+      let w = Math.min(tex.w * sH / H, best.len - 0.4);
       if (w < 1.1) continue;
       const half = best.len / 2 - w / 2 - 0.2;
       let along = U.clamp((px - best.ax) * ex + (pz - best.az) * ez - best.len / 2, -half, half);
@@ -373,8 +382,9 @@ class CityProps {
       const ground = W.heightAt(fx + best.nx * 1.5, fz + best.nz * 1.5);
       // Schreibrichtung so, dass die Vorderseite zur Straße zeigt (bei schmaler Wand wird die Schrift gestaucht)
       const qx = best.nz, qz = -best.nx;
-      quad(tex, [fx + best.nx * 0.1, ground + 3.55, fz + best.nz * 0.1], qx, qz, w, H);
-      if (FOOD_KINDS.test(kind) && best.len > 3) {
+      const sy = big ? Math.max(ground + 3.55, big.top - sH / 2 - 0.75) : ground + 3.55;
+      quad(tex, [fx + best.nx * 0.1, sy, fz + best.nz * 0.1], qx, qz, w, sH);
+      if (FOOD_KINDS.test(kind) && best.len > 3 && !big) {
         // Nasenschild: zwei Seiten, damit die Schrift von beiden Richtungen lesbar ist
         const bw = Math.min(1.25, tex.w * 0.5), bh = H * 0.8, off = 0.18 + bw / 2;
         const sx = fx + ex * (w / 2 + 0.35), sz = fz + ez * (w / 2 + 0.35);

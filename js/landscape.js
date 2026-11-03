@@ -732,6 +732,33 @@ Landscape.prototype.buildTracks = function (t, list) {
     t.group.add(m);
   });
 };
+// Gewerbe- und Industrieflächen (seit v3.7.0): Stabgitterzaun (1,8 × Doppelstabmatte) am Rand der OSM-Fläche, wenn
+// Hallen darin stehen; offen an Zufahrten und Straßen, Gleisen, Feldwegen, Gehsteigen, Wasser und Häusern. Die
+// Ränder des Kachel-Ausschnitts (zugeschnittene Fläche) bekommen keinen Zaun.
+Landscape.prototype.siteFences = function (t, out) {
+  const R = this.region, x0 = t.x0 - 0.5, z0 = t.z0 - 0.5, x1 = t.x1 + 0.5, z1 = t.z1 + 0.5;
+  const onCut = (ax, az, bx, bz) => (Math.abs(ax - x0) < 0.1 && Math.abs(bx - x0) < 0.1) || (Math.abs(ax - x1) < 0.1 && Math.abs(bx - x1) < 0.1) ||
+    (Math.abs(az - z0) < 0.1 && Math.abs(bz - z0) < 0.1) || (Math.abs(az - z1) < 0.1 && Math.abs(bz - z1) < 0.1);
+  const nearRail = (x, z) => t.d.rails.some(r => { for (let k = 0; k + 3 < r.length; k += 2) { const c = U.closestOnSeg(x, z, r[k], r[k + 1], r[k + 2], r[k + 3]); if (Math.hypot(c[0] - x, c[1] - z) < 5) return true; } return false; });
+  const wet = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0;
+  let no = 100000;
+  for (const a of t.d.areas) {
+    if (a.k !== 'industrial') continue;
+    if (!t.buildings.some(b => b.hk >= 0 && U.pointInPoly((b.bb.minX + b.bb.maxX) / 2, (b.bb.minZ + b.bb.maxZ) / 2, a.p))) continue;
+    const ring = a.p, n = ring.length / 2;
+    no++;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], L = Math.hypot(bx - ax, bz - az);
+      if (L < 2 || onCut(ax, az, bx, bz)) continue;
+      const dx = (bx - ax) / L, dz = (bz - az) / L;
+      for (let d = 0; d + 1.9 < L; d += 2) {
+        const x = ax + dx * (d + 1), z = az + dz * (d + 1);
+        if (R.inCore(x, z) || R.insideBuilding(x, z, 1.2) || R.nearRoad(x, z, 5) || this.onTrack(x, z, t, 1.5) || R.walkAt(x, z) !== null || wet(x, z) || nearRail(x, z)) continue;
+        out.push([ax + dx * d, az + dz * d, Math.atan2(-dz, dx), no]);
+      }
+    }
+  }
+};
 // liegt der Punkt auf einem Feldweg?
 Landscape.prototype.onTrack = function (x, z, t, margin = 0.5) {
   if (!t || !t.trackGrid) return false;
@@ -759,10 +786,14 @@ Landscape.prototype.villageAssets = function () {
   for (const y of [0.06, 1.0]) for (const o of [-0.012, 0.012]) mesh.push(box(2, 0.02, 0.01, 1, y, o - 0.04));
   for (let i = 1; i < 10; i++) mesh.push(box(0.012, 0.98, 0.012, i * 0.2, 0.53, -0.04));
   const wall = [box(2, 0.62, 0.24, 1, 0.31, -0.1), box(2.02, 0.06, 0.3, 1, 0.65, -0.1)];
+  // Stabgitterzaun an Gewerbeflächen (seit v3.7.0, mit 1,8 hochskaliert): Pfosten, zwei Holme, vier Stäbe – leichter als
+  // die Doppelstabmatte, weil davon kilometerweit Felder stehen
+  const site = [box(0.06, 1.1, 0.06, 0, 0.55, 0), box(2, 0.025, 0.012, 1, 0.06, -0.04), box(2, 0.025, 0.012, 1, 1.0, -0.04)];
+  for (let i = 1; i < 5; i++) site.push(box(0.014, 0.98, 0.014, i * 0.4, 0.53, -0.04));
   const privacy = [box(0.09, 1.85, 0.09, 0, 0.92, 0), box(1.9, 1.75, 0.035, 1, 0.92, -0.05), box(1.9, 0.06, 0.06, 1, 1.82, -0.05)];
   this._village = {
     picket: U.mergeParts(picket.map(g => [g, 0, 0, 0])), rail: U.mergeParts(rail.map(g => [g, 0, 0, 0])),
-    mesh: U.mergeParts(mesh.map(g => [g, 0, 0, 0])), wall: U.mergeParts(wall.map(g => [g, 0, 0, 0])),
+    mesh: U.mergeParts(mesh.map(g => [g, 0, 0, 0])), site: U.mergeParts(site.map(g => [g, 0, 0, 0])), wall: U.mergeParts(wall.map(g => [g, 0, 0, 0])),
     privacy: U.mergeParts(privacy.map(g => [g, 0, 0, 0])),
     bale: U.mergeParts([[bale, 0, 0, 0]]),
     woodMat: new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true }),
@@ -774,7 +805,7 @@ Landscape.prototype.villageAssets = function () {
 // Obstbäume und Büsche im Garten (gehen als Punkte an buildTrees). Rundballen an Scheunen.
 Landscape.prototype.buildVillage = function (t, pts, free) {
   const R = this.region, A = this.villageAssets(), rnd = U.rng(t.key * 101 + 9);
-  const fences = { picket: [], rail: [], mesh: [], wall: [], privacy: [] }, bales = [];
+  const fences = { picket: [], rail: [], mesh: [], wall: [], privacy: [], site: [] }, bales = [];
   const drive = new Bucket(), drive2 = new Bucket(), white = new THREE.Color('#ffffff');
   // Einfassung je Bautyp: [Art, Anteil] vorn bzw. seitlich/hinten ('open' = nichts, 'hedge' = Hecke). Alter Ortskern wie
   // bisher (Staketen-/Lattenzaun, Hecke), Nachkriegszeit Jägerzaun, Mauer, Maschendraht, Hecke; Neubau meist offen,
@@ -879,11 +910,14 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
       if (free(x, z, 1.5)) pts.push([x, z, rnd() < 0.18 ? 1 : rnd() < 0.5 ? 2 : 0, 0.5 + rnd() * 0.3]);
     }
   }
+  this.siteFences(t, fences.site);
   const meshes = [];
   const cols = { picket: ['#ece8df', '#d8d2c4', '#7a5a3c', '#6e7466'], rail: ['#8a6a48', '#6f5438', '#9c8466'] };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), ps = new THREE.Vector3();
   Object.assign(cols, fenceCol);
-  for (const kind of ['picket', 'rail', 'mesh', 'wall', 'privacy']) {
+  cols.site = ['#3d4f3a', '#2f3234', '#2f3234', '#5d6266'];
+  const tall = new THREE.Vector3(1, 1.8, 1);
+  for (const kind of ['picket', 'rail', 'mesh', 'wall', 'privacy', 'site']) {
     const list = fences[kind];
     if (!list.length) continue;
     const m = new THREE.InstancedMesh(A[kind], A.woodMat, list.length);
@@ -892,7 +926,7 @@ Landscape.prototype.buildVillage = function (t, pts, free) {
     let lastHouse = -1, hc = null;
     list.forEach((f, i) => {
       q.setFromAxisAngle(up, f[2]); ps.set(f[0], R.heightAt(f[0], f[1]) - 0.05, f[1]);
-      m4.compose(ps, q, one); m.setMatrixAt(i, m4);
+      m4.compose(ps, q, kind === 'site' ? tall : one); m.setMatrixAt(i, m4);
       if (f[3] !== lastHouse || !hc) { lastHouse = f[3]; hc = col[Math.floor(pick() * col.length)]; }
       m.setColorAt(i, c.set(hc));
     });

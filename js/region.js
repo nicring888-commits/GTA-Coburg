@@ -1218,10 +1218,20 @@ class Region {
       life.glow = glows;
     }
     // Ladenschilder an den Fassaden und begehbare Lokale (Döner, Gasthaus, Café, Mode, Drogerie, Bücher)
-    if (t.d.shops.length && this.props && this.props.signsFor) {
+    // dazu Firmennamen (OSM name) an Gewerbe- und Industriehallen; an Hallen größere Schrift unter der Attika
+    // (Punkt: Ecke der Halle, die der Straße am nächsten liegt, 1 m nach innen – große Hallen liegen weit von der Straße)
+    const firms = t.buildings.filter(b => b.hk >= 0 && b.n && !t.d.shops.some(q => q.name === b.n)).map(b => {
+      const cx = (b.bb.minX + b.bb.maxX) / 2, cz = (b.bb.minZ + b.bb.maxZ) / 2, r = this.nearestRoad(cx, cz, 200, null);
+      let x = cx, z = cz, bd = Infinity;
+      if (r) for (let i = 0; i < b.p.length; i += 2) { const d = Math.hypot(b.p[i] - r.x, b.p[i + 1] - r.z); if (d < bd) { bd = d; x = b.p[i]; z = b.p[i + 1]; } }
+      const l = Math.hypot(cx - x, cz - z) || 1;
+      return [b.n, 'office=company', x + (cx - x) / l * 1.5, z + (cz - z) / l * 1.5];
+    });
+    if ((t.d.shops.length || firms.length) && this.props && this.props.signsFor) {
       const placed = new U.Grid(20);
-      const res = this.props.signsFor(t.d.shops.map(q => [q.name, q.kind, q.x, q.z]), {
-        atlas: 1024, maxDist: Infinity,
+      const res = this.props.signsFor(t.d.shops.map(q => [q.name, q.kind, q.x, q.z]).concat(firms), {
+        atlas: 1024, maxDist: Infinity, roadDist: 80,
+        big: b => b.hk >= 0 ? { h: b.hk === HALL.MARKT ? 1.25 : 1.05, top: b.top } : null,
         crowded: (x, z, r) => placed.query(x, z, r).some(o => Math.hypot(o.x - x, o.z - z) < r),
         mark: (x, z) => placed.insert({ x, z }, x, z, x, z),
       });
@@ -1229,6 +1239,8 @@ class Region {
       life.signMats = res.mats;
       for (const mt of res.mats) mt.emissiveIntensity = this.night ? 0.85 : 0;
     }
+    // Preismasten der Tankstellen, Ortstafeln an den Ortseingängen (js/archetypes.js)
+    SiteKit.lifeSigns(this, t, life);
     if (this.property) {
       let n = 0;
       for (const q of t.d.shops) {
@@ -1249,7 +1261,7 @@ class Region {
     this.lifeChanged = true;
     if (!life) return;
     for (const m of life.meshes) { t.group.remove(m); if (m.isInstancedMesh) m.dispose(); else if (m.geometry) m.geometry.dispose(); }
-    for (const mt of life.signMats || []) { if (mt.map) mt.map.dispose(); mt.dispose(); }
+    for (const mt of (life.signMats || []).concat(life.ownMats || [])) { if (mt.map) mt.map.dispose(); mt.dispose(); }
     if (this.property) for (const v of life.venues) this.property.removeVenue(v);
   }
   // Gehwege aller Orte in der Nähe (für die Fußgänger)
@@ -1276,6 +1288,7 @@ class Region {
       if (!t || !t.life) continue;
       if (t.life.glow) t.life.glow.visible = n;
       for (const mt of t.life.signMats || []) mt.emissiveIntensity = n ? 0.85 : 0;
+      for (const mt of t.life.ownMats || []) mt.emissiveIntensity = n ? 0.35 : 0;
     }
   }
 
@@ -1288,6 +1301,19 @@ class Region {
     const BAY_W = 3.2 * 4, BAY_H = 3.1 * 4;
     const photoCol = new THREE.Color(ORTHO_TINT);
     const tuv = (x, z) => [(x - t.x0) / this.tw, 1 - (z - t.z0) / this.th];
+    // Läden in Hallen (Markt) und Tankstellen unter den OSM-Tankdächern (js/archetypes.js)
+    const shopPts = t.d.shops.filter(q => q.kind !== 'amenity=fuel'), fuelRoof = new Map(), agrar = [];
+    for (const q of t.d.shops) {
+      if (q.kind !== 'amenity=fuel') continue;
+      let best = null, bd = 25;
+      for (const b of list) {
+        if (b.t !== 'roof' && b.t !== 'carport') continue;
+        const bb = U.polyBBox(b.p), a = Math.abs(U.polyArea(b.p)), d = Math.hypot((bb.minX + bb.maxX) / 2 - q.x, (bb.minZ + bb.maxZ) / 2 - q.z);
+        if (a >= 50 && a <= 900 && d < bd && !fuelRoof.has(b)) { bd = d; best = b; }
+      }
+      if (best) fuelRoof.set(best, q.name);
+    }
+    t.fuelSites = [];
     for (const b of list) {
       const ring = b.p, n = ring.length / 2;
       let minH = Infinity, maxH = -Infinity;
@@ -1296,7 +1322,10 @@ class Region {
       const area = U.polyArea(ring), absA = Math.abs(area), sgn = area > 0 ? 1 : -1;
       const arch = b.a || 0, neben = arch === ARCH.NEBEN, agNeu = arch === ARCH.AGRAR_NEU, indus = arch === ARCH.INDUSTRIE;
       const farm = FARM_TYPES.has(b.t) || arch === ARCH.AGRAR_ALT || agNeu, hall = HALL_TYPES.has(b.t) || indus;
-      const plainType = PLAIN_TYPES.has(b.t) || farm || hall || isCanopy || neben;
+      // Halle je Art (Stahl, Gewerbe, Markt, Agrar) bzw. runder Behälter (js/archetypes.js)
+      const shopIn = absA >= 150 && (hall || arch === 7) && shopPts.some(q => U.pointInPoly(q.x, q.z, ring));
+      const hk = SiteKit.hallKind(b, arch, absA, shopIn), tank = ROUND_TANKS.has(b.t) ? SiteKit.round(ring) : null;
+      const plainType = (PLAIN_TYPES.has(b.t) || farm || hall || isCanopy || neben || !!tank) && hk < 0;
       // kleines Wohnhaus: eigene Fenster, Haustür und Dach je Bautyp (Landhaus nur im historischen Kern)
       const rural = !plainType && arch <= ARCH.NEUBAU && RURAL_HOUSES.has(b.t) && absA >= 30 && absA <= 300 && b.h < 14 && n <= 12;
       // Garage (mit Tor zur Straße), Garagenzeile, Gartenschuppen; Bauzeit vom Nachbarhaus (tools/classify-buildings.js)
@@ -1305,12 +1334,13 @@ class Region {
       const shed = neben && !garage && !isCanopy && absA < 40;
       const era = b.e || 0;
       // Nebengebäude ohne Typ (Garage, Schuppen) bekämen sonst die geschätzten 8 m eines Hauses
-      const eaveH = rural ? this.eaveHeight(arch, b.h, rnd) : garage ? 2.55 + rnd() * 0.4 : shed ? Math.min(b.h, 2.3 + rnd() * 0.3)
+      const eaveH = hk >= 0 ? SiteKit.hallEave(hk, b.h, rnd) : rural ? this.eaveHeight(arch, b.h, rnd) : garage ? 2.55 + rnd() * 0.4 : shed ? Math.min(b.h, 2.3 + rnd() * 0.3)
         : neben && b.t === 'yes' ? Math.min(b.h, 2.9 + rnd() * 0.5) : b.h;
       const top = Math.max(minH + eaveH, maxH + (garage || shed ? 1.4 : 2.2)), base = isCanopy ? top - 0.6 : minH - 2;
       const bb = U.polyBBox(ring), cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
       const pick = list => list[Math.floor(rnd() * list.length)];
-      const hex = farm ? pick(agNeu ? AGRAR_NEU_WALLS : BARN_WALLS) : indus ? pick(INDUSTRIE_WALLS) : hall ? '#c5c1b7'
+      const hex = hk >= 0 ? SiteKit.hallWall(hk, rnd) : tank ? (b.t === 'digester' ? pick(['#8f9a8c', '#b5b8b2', '#6f7f6c']) : b.t === 'slurry_tank' ? '#a9a59c' : '#d2d5d4')
+        : farm ? pick(agNeu ? AGRAR_NEU_WALLS : BARN_WALLS) : indus ? pick(INDUSTRIE_WALLS) : hall ? '#c5c1b7'
         : garage ? pick(GARAGE_WALLS[era]) : shed && /shed|hut|allotment_house|yes/.test(b.t) ? pick(SHED_WALLS)
         : neben ? pick(NEBEN_WALLS) : PLAIN_TYPES.has(b.t) ? '#a7a39a'
         : /church|chapel|cathedral/.test(b.t) ? '#e6dfcc' : b.t === 'castle' ? '#d8ccae' : pick(ARCH_WALLS[arch] || RURAL_FACADES);
@@ -1319,7 +1349,7 @@ class Region {
       const wb = plainType && !garage ? plain.get(cx, cz) : walls.get(cx, cz), pb = plain.get(cx, cz);
       // Dachform (js/houses.js) vor den Wänden festlegen: Pultdach hebt die hohe Wand an, Flachdach bekommt eine Attika
       const f4 = n === 4 ? HouseKit.frame(ring) : null;
-      const plan = rural && n === 4 ? HouseKit.plan(arch, b.rs || 0, f4.a / Math.max(0.5, f4.d), eaveH < 4.2, rnd)
+      const plan = hk >= 0 ? SiteKit.hallPlan(hk, b.rs || 0, f4, rnd) : rural && n === 4 ? HouseKit.plan(arch, b.rs || 0, f4.a / Math.max(0.5, f4.d), eaveH < 4.2, rnd)
         : rural && arch === ARCH.NEUBAU && (b.rs === 5 || (!b.rs && rnd() < 0.3)) ? { kind: 'flat', par: 0.35 }
         : garage && (era === 3 || (era !== 0 && !(era === 2 && rnd() < 0.4))) && b.rs !== 1 ? { kind: 'flat', par: era === 3 ? 0.25 : 0 } : null;
       const yHigh = plan && plan.kind === 'pult' ? top + 2 * f4.d * Math.tan(plan.pitch * Math.PI / 180) : top;
@@ -1327,12 +1357,12 @@ class Region {
         : plan.kind === 'flat' ? top + plan.par : top;
       // Haustür: an der längsten Wand, die zur nächsten Straße zeigt (Garage: Tor zur Straße)
       let doorWall = -1, doorSlot = 0;
-      if (rural || garage) {
-        const road = rural ? this.nearestRoad(cx, cz, 45, null) : road0;
+      if (rural || garage || hk >= 0) {
+        const road = hk >= 0 ? this.nearestRoad(cx, cz, 90, null) : rural ? this.nearestRoad(cx, cz, 45, null) : road0;
         let best = -Infinity;
         for (let i = 0; i < n; i++) {
           const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
-          if (len < (garage ? 2.6 : 3.6)) continue;
+          if (len < (garage ? 2.6 : hk >= 0 ? 6 : 3.6)) continue;
           const ox = sgn * (bz - az) / len, oz = -sgn * (bx - ax) / len;
           const tx = road ? road.x - (ax + bx) / 2 : ox, tz = road ? road.z - (az + bz) / 2 : oz, tl = Math.hypot(tx, tz) || 1;
           const score = (ox * tx + oz * tz) / tl + len * 0.02;
@@ -1344,7 +1374,7 @@ class Region {
           }
         }
       }
-      let along = 0;
+      let along = 0, frontW = null;
       const sideBase = [];
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1];
@@ -1356,10 +1386,13 @@ class Region {
         // Boden an dieser Wand: höchstes Gelände an ihr (Fenster und Tür darüber)
         const gnd = Math.max(minH, this.heightAt(ax, az), this.heightAt(bx, bz), this.heightAt((ax + bx) / 2, (az + bz) / 2));
         sideBase.push(gnd);
-        const style = (rural ? (i === doorWall ? 2 : 1) : garage ? (i === doorWall ? 5 : 4) : 0) + styleCode;
+        const style = (rural ? (i === doorWall ? 2 : 1) : garage ? (i === doorWall ? 5 : 4) : hk >= 0 ? (i === doorWall ? 7 : 6) : 0) + styleCode;
+        // Halle: Feld „Tür“ = Art × 16 + Tore (nur an der Front zur Straße)
+        const hDoor = hk >= 0 ? hk * 16 + (i === doorWall ? SiteKit.gates(hk, len) : 0) : 0;
+        if (hk >= 0 && i === doorWall) frontW = { ax, az, bx, bz, len, ox, oz, g: gnd, nG: hDoor - hk * 16 };
         // Garage: Feld „Tür“ = Bauzeit × 16 + Zahl der Tore (Doppelgarage am Neubau mit einem breiten Tor)
         const gDoors = garage && i === doorWall ? era * 16 + (era === 3 && len < 7.2 ? 1 : U.clamp(Math.floor((len - 0.35) / 2.95), 1, 12)) : 0;
-        const pr = plainType && !garage ? null : rectProfile(along, len, profTop, gnd, style, garage ? gDoors : i === doorWall ? doorSlot : 0);
+        const pr = plainType && !garage ? null : rectProfile(along, len, profTop, gnd, style, garage ? gDoors : hk >= 0 ? hDoor : i === doorWall ? doorSlot : 0);
         along += len;
         const A0 = [ax, base, az], B0 = [bx, base, bz], B1 = [bx, wt, bz], A1 = [ax, wt, az];
         wb.tri(A0, B0, B1, wallCol, [u0, v0], [u1, v0], [u1, v1], ox, 0, oz, pr);
@@ -1387,12 +1420,27 @@ class Region {
       // Dach: mit Luftbild das Foto von oben, sonst Ziegel- oder Flachdachfarbe
       const rt = t.photo ? { b: roofs.get(cx, cz), uv: tuv } : { b: plain.get(cx, cz) };
       const roofCol = t.photo ? photoCol : U.color(b.r || HIP_TYPES.has(b.t) ? TILE_ROOFS[Math.floor(rnd() * TILE_ROOFS.length)] : '#7c7973', 0.12, rnd);
-      if (isCanopy) { W.flatRoof({ b: pb }, [ring], base, roofCol, -1); this.carportPosts(pb, ring, base, minH, rnd); }
+      if (isCanopy) {
+        W.flatRoof({ b: pb }, [ring], base, roofCol, -1);
+        if (fuelRoof.has(b)) t.fuelSites.push(SiteKit.fuelStation(this, t, rt, pb, ring, base, fuelRoof.get(b), rnd));
+        else this.carportPosts(pb, ring, base, minH, rnd);
+      }
+      // Markt: Vordach über der Glasfront; Stahl- und Gewerbehallen: Vordächer über den Toren
+      if (frontW && hk === HALL.MARKT) SiteKit.marketCanopy(W, pb, frontW, frontW.g, top, rnd);
+      else if (frontW && frontW.nG > 0 && hk !== HALL.AGRAR) SiteKit.gateCanopies(W, pb, frontW, frontW.g, hk, frontW.nG, top - frontW.g, rnd);
+      if (hk === HALL.AGRAR && f4 && absA >= 300) agrar.push(f4);
       const RF = ARCH_ROOF[arch] || ARCH_ROOF[0];
       let info = null;
       // Straßenseite in v (für Gauben): Seite der Haustür
       const streetSide = f4 && doorWall >= 0 ? Math.sign(((ring[doorWall * 2] + ring[((doorWall + 1) % n) * 2]) / 2 - f4.c[0]) * f4.vx + ((ring[doorWall * 2 + 1] + ring[((doorWall + 1) % n) * 2 + 1]) / 2 - f4.c[1]) * f4.vz) || 1 : 1;
-      if (plan && plan.kind === 'flat') HouseKit.flat(W, rt, pb, ring, top, plan, garage ? (era === 3 ? 5 : 3) : arch, roofCol, wallCol, rnd);
+      if (plan && plan.kind === 'lowgable') SiteKit.lowGable(W, rt, walls.get(cx, cz), pb, f4, top, plan.pitch, Math.min(...sideBase), wallCol, roofCol, 6 + styleCode, hk * 16, minH, BAY_W, BAY_H);
+      else if (tank) {
+        // Biogas-Speicher mit Kuppel, Silo mit Kegeldach, Tank und Güllebehälter flach geneigt
+        const kc = t.photo ? roofCol : U.color(b.t === 'digester' ? '#6f8a5e' : '#9a9c9a', 0.05, rnd);
+        if (b.t === 'digester') SiteKit.dome(W, rt, ring, tank, top, tank.r * 0.55, kc, 5);
+        else SiteKit.cone(W, rt, ring, tank, top, tank.r * (b.t === 'silo' ? 0.35 : b.t === 'slurry_tank' ? 0.2 : 0.12), kc);
+      }
+      else if (plan && plan.kind === 'flat') HouseKit.flat(W, rt, pb, ring, top, plan, garage ? (era === 3 ? 5 : 3) : arch, roofCol, wallCol, rnd);
       else if (plan && plan.kind === 'pult') HouseKit.pult(W, rt, pb, f4, top, yHigh, plan.side, RF, roofCol, rnd);
       else if (plan && (plan.kind === 'hip' || plan.kind === 'tent')) HouseKit.hip(W, rt, pb, ring, top, roofCol, plan, RF, rnd);
       else if (plan && plan.kind === 'halfhip') info = HouseKit.halfHip(W, rt, walls.get(cx, cz), pb, ring, top, sideBase, wallCol, roofCol, plan, RF, styleCode, minH, BAY_W, BAY_H, rnd);
@@ -1406,11 +1454,15 @@ class Region {
       if (info) HouseKit.dormers(W, rt, pb, info, arch, wallCol, roofCol, streetSide, info.chimU !== undefined ? info.chimU : null, rnd);
       if (!plainType && (rural || arch === ARCH.MFH)) this.balconies(pb, ring, sgn, sideBase, top, arch, era, rural, f4, info, doorWall, rnd);
       if (!isCanopy) {
-        const rec = { p: ring, bb, top, n: b.n, t: b.t, a: arch, e: era };
+        const rec = { p: ring, bb, top, n: b.n, t: b.t, a: arch, e: era, hk };
         t.buildings.push(rec);
         t.polyGrid.insert(rec, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
       }
     }
+    // Fahrsilos an modernen Höfen, Stellplatz-Linien auf Parkplätzen (js/archetypes.js)
+    t.silos = [];
+    for (const f of agrar) if (rnd() < 0.55) { const p = SiteKit.bunkerSilo(this, t, plain.get(f.c[0], f.c[1]), f, rnd); if (p) t.silos.push(p); }
+    for (const a of t.d.areas) if (a.k === 'parking') { const bb = U.polyBBox(a.p); SiteKit.parkingLines(this, t, plain.get((bb.minX + bb.maxX) / 2, (bb.minZ + bb.maxZ) / 2), a); }
     const mats = W.buildingMaterials();
     walls.meshes(mats.wall, { cast: true, receive: true }).forEach(m => t.group.add(m));
     plain.meshes(mats.plain, { cast: true, receive: true }).forEach(m => t.group.add(m));

@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.6.0 „Haustypen, Gehsteige, Fußgänger“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 02.11.2026
+**Version:** 3.7.0 „Gewerbe, Industrie, Höfe, Ortsränder“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -157,6 +157,7 @@ und müssen dort bleiben.
 | `js/race.js` | Rennstrecken (aus Wegpunkten über das Netz berechnet), Start-Säulen, Checkpoints, KI-Gegner mit Gummiband, Zeitnahme, Preisgeld, Bestzeiten |
 | `js/pedestrians.js` | Fußgänger: Wegenetz aus Fußwegen, Plätzen und Gehsteigen, Laufen, Stehenbleiben, Paare, Flucht, Umfallen, feste Café-Gäste; alle Figuren als 5 InstancedMeshes. Seit v3.6.0: Zahl nach Gegend und Tageszeit (`capacity`: Weglänge × Wegart × Belebtheit im Umkreis, Grenze in `game.js` je Sekunde), Auswahl der Wege nach Belebtheit (`act`), Laufspur auf dem Gehsteig (`walk`), überzählige gehen außer Sicht |
 | `js/houses.js` | Haustyp-Bibliothek (seit v3.6.0, `HouseKit`): `plan` (Dachform aus OSM `roof:shape` bzw. je Bautyp), `halfHip` (Krüppelwalm mit Giebelwänden), `hip` (Walm-/Zeltdach), `pult` (Pultdach mit Blende), `flat` (Attika, Bungalow-Blende, Rand), `dormers` (Schlepp-, Satteldach-, Flachdachgauben), `balcony` (Beton, Holz, Stahl, Glas). Alles als Dreiecke in den Kachel-Töpfen, keine zusätzlichen Zeichenaufrufe |
+| `js/archetypes.js` | Gewerbe, Industrie, Höfe, Ortsränder (seit v3.7.0, `SiteKit`): `hallKind` (Halle je Art: Stahlhalle, Gewerbe, Markt, Agrar aus Bautyp, OSM-Typ, Fläche und Laden im Haus), `hallPlan` (flaches Satteldach bzw. Attika), `lowGable`, `gates`, `marketCanopy` (Vordach über der Glasfront, Einkaufswagen-Box), `gateCanopies`; `round`/`dome`/`cone` (Biogas-Kuppel, Silo, Tank, Güllebehälter); `bunkerSilo` (Fahrsilos mit Folie und Reifen, Wände als Hindernis); `fuelStation` (Tankstelle unter dem OSM-Tankdach: Blende in Markenfarbe `FUEL_BRANDS`, Zapfinseln als Hindernis, Leuchtfelder); `parkingLines` (Stellplatz-Linien); `townEntries`/`placeName`/`lifeSigns` (Ortstafeln am Ortseingang, Preismasten; eigener kleiner Schriftatlas je Kachel, nur in Spielernähe) |
 | `js/venues.js` | Läden und Lokale zum Hineingehen (seit v1.4.0): `VENUES` (Ort, Typ), `VENUE_MENUS` (Speisekarten, Sortimente), sieben Innenraum-Bauer auf Basis der Raum-Klasse aus `interiors.js`, erweitert `Property` um `placeVenue`, `venueRoom`, `openVenueMenu` |
 | `js/townlife.js` | Stadtleben (seit v1.4.1): Pfandsammler am Markt (`updateCollector`), Schulhöfe mit Kindern, Ball, Tischtennis und Aufsicht (`SCHOOLS`, `yardCells`, `updateYard`), nachts leer |
 | `js/props.js` | Stadtdetails: Laternen, Möbel, Markisen, echte Ladenschilder (`shopSigns`, Texturatlas), Schilder, Café-Terrassen, Marktplatz (Denkmal, Stände, Bratwurststand), Brunnen, Tauben; `mergeGeos` fasst Formen zusammen |
@@ -249,7 +250,7 @@ Seit v1.0.0 außerdem: `game.police.crime(0, 'Test', 3)` (3 Sterne), `game.races
 `game.atmo.clock = 19.5` (Uhrzeit), `game.atmo.setWeather('rain', true)`, `game.post.cycle()`, `game.post.debugAO = true`,
 `game.world.region.debugArch = true` (Umland-Häuser nach Bautyp einfärben: rot historisch, dunkelrot Fachwerk, gelb 1950er–70er,
 grün 1970er–90er, blau Neubau, violett Mehrfamilienhaus, türkis Gewerbe), `game.world.region.archAt(x, z)`,
-`game.world.walkAt(x, z)` (Gehsteig-Höhe oder null), `game.world.region.liveliness(x, z)` (Belebtheit 0…1), `game.peds.cap` und
+`game.world.walkAt(x, z)` (Gehsteig-Höhe oder null), seit v3.7.0 die Hallen-Art `game.world.region.insideBuilding(x, z, 0).hk` (0 Stahl, 1 Gewerbe, 2 Markt, 3 Agrar), je Kachel `t.fuelSites` und `t.silos`, `SiteKit.townEntries(region, kachel)`, `game.world.region.liveliness(x, z)` (Belebtheit 0…1), `game.peds.cap` und
 `game.simulate(sekunden, dt, zeichnen)`, das die Spielschleife ohne Bildschirm rechnet (zum Testen, wenn das
 Browserfenster verdeckt ist; mit `zeichnen = false` sehr schnell). Tasten lassen sich über `game.keys.KeyW = true` usw. setzen.
 
@@ -267,6 +268,58 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.7.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Gewerbe, Industrie, moderne Höfe und Ortsränder –
+  Phase 3 des Grafik-Fahrplans (7.1).** Alles im Umland; Innenstadt unverändert (der neue Shader-Zweig greift nur ab
+  Stil 6, die neuen Markenfarben treffen keinen Laden der Innenstadt). Keine neuen Daten: alles aus `data/region.js`
+  (Bautyp, OSM-Typ, Läden mit `shop=*`/`amenity=fuel`, Flächen `industrial`/`parking`, Dachform).
+  - **Hallen je Art** (`js/archetypes.js` `hallKind`): Stahlhalle (Industrie ab 150 m²), Gewerbehalle (Gewerbe ab 300 m²
+    und ≤ 13 m, `retail`/`commercial`), Markt (Laden aus OSM im Grundriss: Discounter, Baumarkt, Autohaus), Agrarhalle
+    (moderne Landwirtschaft ab 120 m²). Fassadenshader Stil 6/7 (`world.js`): Trapezblech mit Rippen bzw.
+    Sandwichpaneele, Betonsockel (Agrar: Betonwand 1,8–2,8 m, darüber Holz- oder Blechschalung), Attika-/Traufband,
+    Lichtband unter der Traufe (Stahlhalle), Fensterband im Büroteil (Gewerbe), an der Front zur Straße Rolltore
+    (Stahl), Sektionaltore mit Fensterreihe (Gewerbe), Schiebetore (Agrar), Gehtür; Markt mit Glasfront, Kämpfer und
+    Schiebetür. Farben je Art (`HALL_WALLS`)
+  - **Dächer:** Stahl- und Agrarhallen mit vier Ecken bis 45 m Tiefe flaches Satteldach (5–11° bzw. 12–20°, Überstand,
+    Ortgangblech, Giebel mit Wandprofil), sonst Flachdach mit Attika; OSM-Dachform hat Vorrang. Verwinkelte
+    Agrarhallen behalten das Walmdach
+  - **Markt:** Vordach auf zwei Stützen über der Glasfront, Einkaufswagen-Box; großes Markenschild unter der Attika
+    (Netto, Lidl, Aldi, Edeka, Rewe, Penny, Kaufland, Norma, OBI, toom … in Markenfarben, `SIGN_BRANDS`)
+  - **Firmenschilder:** Hallen mit OSM-Namen bekommen ihr Schild an der Wand zur Straße (größere Schrift an Hallen,
+    `signsFor` mit `big`/`roadDist`, Hallen bis 80 m hinter der Straße); Vordächer über den Toren
+  - **Tankstellen** (20 von 23 haben ein OSM-Tankdach): Blende in Markenfarbe mit Streifen (Aral, Shell, Esso, Total,
+    Avia, JET, Eni/Agip, bft, HEM, BayWa, OIL!), Dach mit Luftbild, Zapfinseln mit Säulen und Stützen (Hindernisse für
+    Autos und Figuren), Leuchtfelder; Preismast an der Straße mit Marke und Preisen für Super E10, Super, Diesel (quer
+    zur Straße, nachts beleuchtet)
+  - **Höfe:** Biogas-Speicher mit Kuppel, Silos mit Kegeldach, Tanks und Güllebehälter flach geneigt; Fahrsilos (2–3
+    Kammern, Betonwände als Hindernis, Silage unter schwarzer Folie mit Reifenreihen, manche Kammer leer) neben großen
+    Agrarhallen, nur auf der Hoffläche (nicht auf Acker, Wiese, Wald, Straße, Feldweg, in Häusern, an steilem Gelände)
+  - **Parkplätze:** Stellplatz-Linien (2,5 × 5 m) an den Rändern jeder OSM-Parkfläche
+  - **Gewerbeflächen:** Stabgitterzaun 2 m am Rand von `landuse=industrial` mit Hallen, offen an Straßen und Zufahrten,
+    Gleisen, Feldwegen, Gehsteigen, Wasser; Kachel-Schnittkanten ohne Zaun
+  - **Ortsränder:** Ortstafeln (gelb, Ortsname, „Landkreis Coburg“; Stadtteile ohne Zusatz) an Haupt-, Neben- und
+    Gemeindeverbindungsstraßen, wo nach ≥ 100 m freier Strecke Bebauung beginnt (Höfe und Nebengebäude zählen nicht);
+    rechts in Fahrtrichtung, Rückseite als Ortsende rot durchgestrichen
+  - **Getestet (Chromium, 1280 × 720):** Netto Untersiemau (Glasfront, Vordach, Schild, Stellplätze), Aral Coburg-Nord
+    (Blende, Inseln, Preismast, Tag und Nacht), Industriegebiet Neustadt/Haarbrücken (Stahl- und Gewerbehallen, Tore,
+    Zaun, Firmenschild „Prysmian“), Biogasanlage bei Schorkendorf (Kuppeln, Agrarhalle), Fahrsilo am Hof, Ortstafel
+    Schorkendorf (Vorder- und Rückseite). Kollision: Zapfinseln und Fahrsilo-Wände halten auf, 216 Laufproben im
+    Gewerbegebiet (0 in Häuser geschoben), Auto fahren (118 m in 15 s). Wand-Shader neu übersetzt ohne Fehler.
+    **Leistung gegen v3.6.0** (bester von 3, 3 × 3 Kacheln neu gebaut, Stufe Hoch): Kachelaufbau Seßlach 20,3 → 20,5 ms,
+    Ebersdorf 27,3 → 27,3, Unterlauter 29,0 → 28,1, Rödental 43,6 → 42,7, Neustadt 36,9 → 38,6 (−3 bis +5 %, im
+    Rauschen); Bäume/Gärten/Zäune +0–5 %; Zeichenaufrufe (Meshes) +1–2 %; geladene Dreiecke +5–10 %. Bildzeit nicht
+    neu gemessen
+  - Beim Testen behoben: Ortstafel zeigte dem Ankommenden die Rückseite; Fahrsilos standen mitten im Acker; Markt- und
+    Firmenschilder fehlten, weil Hallen weiter als 45 m (Straßensuche) bzw. 25 m (Wand) von der Straße liegen;
+    Zaunfelder zu schwer (Doppelstabmatte: 1 Mio. Dreiecke in einem Gewerbegebiet → eigenes leichtes Feld); ein
+    GLSL-Kommentar hatte eine Zeile auskommentiert (alle Wände unsichtbar)
+- ⚠️ Grenzen v3.7.0: Die Front einer Halle ist die Wand zur nächsten Straße, nicht immer die echte Torseite; Glasfront,
+  Tore und Vordach sind geschätzt (Vordach und Glasfront liegen nicht immer genau übereinander). Fahrsilos sind
+  erfunden (OSM kennt `bunker_silo` hier nicht) und durch die strengen Regeln selten. Tankstellen ohne OSM-Tankdach
+  (3 von 23) bekommen nichts; Leuchtfelder unter dem Dach leuchten nachts nicht. Ortstafeln nur an Straßen, die in
+  der Kachel verlaufen (an Kachelgrenzen kann eine fehlen); Ortsname nach dem nächsten Ortspunkt, Zusatz immer
+  „Landkreis Coburg“ statt der Gemeinde. Zäune und Ortstafeln sind keine Hindernisse; Firmen ohne OSM-Namen haben kein
+  Schild.
 
 - ✅ v3.6.0 (02.11.2026, Branch `grafik/regionale-architektur`): **Haustypen, Grundstücke, Gehsteige und Fußgänger –
   Phase 2 des Grafik-Fahrplans (7.1).** Alles im Umland (ganzer Landkreis und Coburger Stadtteile); Innenstadt unverändert.
@@ -840,7 +893,7 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 |---|---|---|---|
 | ✅ 1 | **Bautyp-Erkennung + Stilweiche (v3.5.0):** jedes Haus im Landkreis bekommt beim Umwandeln einen Bautyp (historischer Kern, Siedlung 50er–70er, EFH 80er/90er, Neubau ab 2000, Mehrfamilienhaus, Gewerbe, Industrie, Landwirtschaft, Nebengebäude, Sonderbau) aus Denkmal-Kennung, Ortskern-Abstand (Kirchen, Ortsmittelpunkte), Parzellen-Regelmäßigkeit, Sackgassen/Wendehämmer, Grundriss, OSM-Merkmalen. Das Spiel wählt danach Dachneigung, Farben, Sockel, Fenster, Läden, Fachwerk (nur belegt) und Gärten | `tools/classify-buildings.js` (neu), `tools/convert-region.js`, `data/region.js`, `js/region.js`, `js/world.js` (`facadeShader`), `js/landscape.js` (`buildVillage`), `tools/arch-stats.js` (neu) | M |
 | ✅ 2 | Haustyp-Bibliothek und Umgebung (v3.6.0): Dachformen je Bautyp, Gauben, Balkone, Garagen/Carports, Zäune und Einfassungen, Gehsteige, Fußgängerverteilung nach Gegend und Tageszeit | `js/houses.js` (neu), `region.js`, `world.js`, `landscape.js`, `pedestrians.js`, `player.js`, `game.js`, `tools/convert-region.js`, `tools/classify-buildings.js` | L |
-| 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder: Hallen, Discounter, Tankstellen, Parkplätze, Zäune, Firmenschilder, Stahlhallen, Fahrsilos | `region.js`, `props.js`, `archetypes.js` | M |
+| ✅ 3 | Gewerbe, Industrie, moderne Höfe, Ortsränder (v3.7.0): Hallen je Art mit Fassaden, Toren und Dächern, Discounter mit Glasfront und Vordach, Tankstellen, Parkplätze, Zäune, Firmenschilder, Biogas/Silos, Fahrsilos, Ortstafeln | `js/archetypes.js` (neu), `region.js`, `world.js` (Stil 6/7), `props.js`, `landscape.js`, `boot.js` | M |
 | 4 | Fassaden je Bautyp über eine Tabelle (Putz, Klinker, Holz, Blech; Kunststofffenster, Rollläden, Raffstores, bodentiefe Fenster); Innenstadt historisch genauer (zweites Fenstermuster, Gewände, Gauben, Gründerzeit-Gesimse; Fachwerk nur belegt nach `recherche/referenz-coburg.md`) | `world.js`, `props.js` | L |
 | 5 | three.js aktuell über ES-Modul in `js/boot.js` (als `window.THREE`), WebGL bleibt | `index.html`, `js/boot.js`, kleine Anpassungen | M |
 | 6 | WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
@@ -850,9 +903,10 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phase 1 (v3.5.0) und Phase 2 (v3.6.0) umgesetzt und getestet (02.11.2026, auf dem Branch, siehe 6).
-Nächster Schritt nach Freigabe: **Phase 3** (Gewerbe, Industrie, moderne Höfe, Ortsränder). Offene Entscheidung: Branch
-nach Durchsicht auf `main` übernehmen (löst Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
+**Stand:** Phase 1 (v3.5.0), Phase 2 (v3.6.0) und Phase 3 (v3.7.0, 03.11.2026) umgesetzt und getestet (auf dem
+Branch, siehe 6). Nächster Schritt nach Freigabe: **Phase 4** (Fassaden je Bautyp über eine
+Tabelle, Innenstadt historisch genauer). Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
+Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
 ### 7.2 Weitere Vorhaben
 
