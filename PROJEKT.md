@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.11.0 „Materialbibliothek, KTX2-Luftbilder“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.14.0 „Ampeln und Verkehrsregeln“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
 
 ---
 
@@ -152,10 +152,11 @@ und müssen dort bleiben.
 | `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
 | `js/landscape.js` | Landschaft im Umland (seit v2.5.0): Bodenbedeckungskarte je Kachel aus den OSM-Flächen (`paintCover`: r Acker, g Wiese, b Wald, Feldraine an Feldgrenzen, weichgezeichnet; zweite Karte mit Reihenrichtung je Feld), Geländematerial (`terrainMaterial`: Gras-, Ackerboden- und Waldbodentextur aus der Leinwand, Farbe aus dem unscharfen Luftbild, Ackerart nach Fotofarbe mit Saatreihen, Furchen, Stoppeln, Fahrgassen; Relief über die Normale), 3D-Bewuchs um die Kamera (`update`/`makeCell`: Gras, Getreide, Blumen, Farn als Instanzen in 8-m-Zellen bis 88 m, sinkt am Rand ein), Kronendach-Hülle über fernen Wäldern (`buildCanopy`), Feld- und Waldwege (`splitRural`, `buildTracks`, `trackMaterial`: Fahrspuren, Grasnarbe, Schotter, Asphalt), Dörfer (`buildVillage`: Gärten mit Staketen- und Lattenzaun, Tor und Einfahrt zur Straße, Hecken, Obstbäume, Rundballen an Scheunen) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
+| `js/signals.js` | Verkehrsregelung (seit v3.14.0, `TrafficControl` als `region.control`): Ampelkreuzungen (Knoten mit ≥ 3 Straßen und OSM-Ampel/Furt bis 32 m) und Fußgängerampeln auf der Strecke, Schaltung je Ort (`state`: Gruppe 0 = Arme parallel zum ersten, Gruppe 1 quer; 13 s grün, 2,5 s gelb, 1,5 s alles rot, 1 s rot-gelb; Fußgängerampel 40-s-Umlauf), Regeln je Arm (`rules`: Halt-/Wartelinie, Haifischzähne, Fahrbahnpfeile, Lage der Linie hinter einer Furt), Haltepunkte je Kante für den Verkehr (`stopsOn`), Masten mit Lichtern als Instanzen je Kachel bzw. Innenstadt (`build`, Lichter alle 0,15 s in der Nähe geschaltet) |
 | `js/tile-worker.js` | Höhengitter einer Umland-Kachel (seit v3.12.0, `TileHeights`): Catmull-Rom aus dem groben Raster, Kleinrelief (an Straßen auslaufend), ausgehobene Gewässer, `roadNear`. Läuft als normales Skript (Region rechnet damit dringende Kacheln) und als Worker (Region bestellt die Höhen der nächsten Kacheln vorab, `prefetch`; Ergebnis bitgleich). Ohne Worker: `file://` oder `?worker=0` |
 | `js/world.js` | Baut die Welt: Höhenmodell (Catmull-Rom auf 12,5 m verfeinert), Bodentextur (Leinwand, 1 px/m), Straßenbänder, Gebäude (LoD2-Flächen bzw. eigene Extrusion aus OSM, in 250-m-Kacheln für Sichtbarkeitsprüfung), Bäume (instanziert), Stadtplan. Dazu Kollision (`collideCircle`), `heightAt`, `insideBuilding`, `nearestRoad` |
 | `js/vehicle.js` | Automodelle (Pkw, Sportwagen mit Spoiler, Taxi mit Dachschild, Streifenwagen mit Blaulicht), Fahrwerte je Typ, Arcade-Fahrphysik (Längs- und Seitenhaftung, Handbremse, Steigung, Teilschritte gegen Durchtunneln), Schaden, Brand, Wrack, Auto-gegen-Auto-Kollision |
-| `js/traffic.js` | KI-Verkehr auf dem Straßennetz: fährt rechts, beachtet Einbahnstraßen, bremst vor Kurven, Hindernissen und dem Spieler |
+| `js/traffic.js` | KI-Verkehr auf dem Straßennetz: fährt rechts, beachtet Einbahnstraßen, bremst vor Kurven, Hindernissen und dem Spieler; seit v3.14.0 Verkehrsregeln (`ruleLimit`: rote Ampel, Stopp, Vorfahrt achten mit `clear`, Zebrastreifen mit `crossingBusy`) |
 | `js/player.js` | Spielfigur mit Lauf-Animation, Springen, Kollision mit Häusern, Bäumen und Autos; mit anderem Aussehen auch Polizisten |
 | `js/ui.js` | Minikarte (dreht mit, Markierungen für Polizei, Checkpoints, Rennstarts, Läden, ferne am Rand), großer Stadtplan (Zoom, Verschieben, Klick = Reise), Ortsschilder, Geld, Sterne, Lebens- und Schadensbalken, große Meldungen |
 | `js/game.js` | Szene, Licht und Schatten (folgt dem Spieler, Größe je Qualitätsstufe), Tag/Nacht folgt der Uhr (`syncNight`), Eingabe, Kamera (weicht Hauswänden aus), Ton (WebAudio: Motor, Hupe, Aufprall, Martinshorn, Explosion, Signaltöne), Spielstand (Geld, Leben), Spawn am Bahnhof, Straftaten, Verhaftet/Erledigt, Feuer und Explosionen, Lackiererei und Händler, Hauptschleife |
@@ -285,6 +286,33 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.14.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Ampeln und Verkehrsregeln: die
+  offenen Punkte aus Phase 9.** Neue Datei `js/signals.js` (siehe 5).
+  - **Ampelmasten:** 167 Ampelkreuzungen (64 in der Innenstadt) und 23 Fußgängerampeln aus den OSM-Ampeln und -Furten.
+    Je ankommendem Arm ein Mast rechts an der Haltlinie (3,5 m, schwarzes Gehäuse, gelb-schwarze Kontrastblende, Schirme),
+    Lichter rot/gelb/grün schalten wirklich (Leuchtfarben über 1, damit der Bloom sie aufgreift). Auch in der Innenstadt
+  - **KI-Verkehr hält:** an Rot und Rot-Gelb (bei Gelb nur, wenn das Bremsen noch geht), an Stoppschildern (1,2 s stehen),
+    an Wartelinien, bis kein bevorrechtigtes Auto (Verkehr, Spieler, Polizei, Mitspieler) mehr auf die Kreuzung zufährt
+    (nach 9 s fährt es trotzdem, keine Blockaden), und an Zebrastreifen, solange ein Fußgänger oder die Spielfigur auf der
+    Fahrbahn quert. Haltepunkt an Ampeln mit Furt vor deren Haltlinie
+  - **Haifischzähne** hinter der Wartelinie an Mini-Kreiseln (dort jetzt an allen Armen Wartelinien) und wo ein OSM-Schild
+    „Vorfahrt achten“ vor einer Haupt- oder Kreisstraße steht. **Fahrbahnpfeile** (geradeaus, links, rechts, kombiniert
+    nach den abgehenden Armen) an Ampelkreuzungen und an Armen großer Straßen, 5 m hinter der letzten Linie
+  - **Fehler aus v3.13.0 behoben:** Halt- und Wartelinien an Kreuzungen und die Haltlinien an Fußgängerfurten lagen auf der
+    abfahrenden statt auf der ankommenden Spur (Seitenvorzeichen vertauscht: in Spielkoordinaten liegt rechts von (ux, uz)
+    bei (−uz, ux)); die Leitpfosten zeigten den Rückstrahler der falschen Seite. Die Regeln für die Linien stehen jetzt an
+    einer Stelle (`TrafficControl.rules`), Markierungen und Verkehr nutzen dieselben
+  - **Getestet (Chromium):** Masten und Lichter Lossaustraße (Innenstadt) und Rodacher Straße/Querstraße (Umland), Pfeil
+    geradeaus + links hinter der Furt, Haifischzähne Kürengrund (Dörfles-Esbach), Leitpfosten COs 29. Verkehr 2 × 40 s an
+    der Rodacher Straße: an Rot gestanden, über die Linie nur bei Grün oder nach „durchfahren“ bei Gelb (2 Fälle, beide
+    noch bei Gelb entschieden). Zebrastreifen: Auto hält 6,3 m vor der Mitte, solange die Spielfigur auf der Gegenspur
+    steht, und fährt weiter, sobald sie weg ist. Keine Konsolenfehler
+- ⚠️ Grenzen v3.14.0: Ampelphasen sind geschätzt (zwei Gruppen, keine eigenen Abbiegephasen, kein grüner Pfeil); keine
+  Fußgängersignale an Kreuzungen, Fußgänger selbst queren noch nicht. Polizei, Rennfahrer und Spieler ignorieren die
+  Regeln (auch keine Strafe fürs Rotfahren). Wer bei der Vorfahrt Vorrang hat, schätzt `clear` nur über Abstand und
+  Fahrtrichtung. Pfeile an Einbahnstraßen und Mehrspurigkeit nur einfach (ein Pfeil je Richtung, keine Spurtrennung).
+  Masten der Innenstadt ohne Kreuzungsflächen stehen nach geschätzter Rücknahme
 
 - ✅ v3.13.0 (03.11.2026, Branch `grafik/regionale-architektur`): **Straßen: Kreuzungsflächen, Markierungen, Details –
   Phase 9 des Grafik-Fahrplans (7.1).** Zwei Commits (9a Daten, 9b–d Straßen).
@@ -1089,14 +1117,15 @@ ohne Freigabe (Vercel veröffentlicht `main` automatisch). Jede Phase wird einze
 | ✅ 6 | (v3.10.0) WebGPU-Probe `?gfx=webgpu`: Gelände + Häuser mit `WebGPURenderer` (WebGL2-Rückfall), Messung | `js/gfx-webgpu.js` (neu) | S |
 | ✅ 7 | (v3.11.0) PBR-Materialbibliothek (eine Fabrik für alle Materialien, später auch Node-Materialien), Texturen als Atlanten/Arrays, KTX2, Budget je Qualitätsstufe | `js/materials.js` (neu), `world.js`, `region.js`, `landscape.js`, `props.js` | M–L |
 | ✅ 8 | (v3.12.0) Leistung: Zeitscheiben, Höhen im Worker, vereinfachte ferne Kacheln (HLOD) bis 4,6 km, Bäume in wenigen InstancedMeshes (statt `BatchedMesh`, siehe 6), Impostors und Impostor-Wald | `region.js`, `world.js`, `js/tile-worker.js` (neu) | L |
-| ✅ 9 | (v3.13.0) Straßen: Kreuzungsflächen mit Gehweg-Ecken, Zebrastreifen/Furten/Halt-/Wartelinien aus OSM, Kanaldeckel, Gullys, Flickstellen, Leitpfosten | `world.js`, `region.js` | L |
+| ✅ 9 | (v3.13.0, Rest v3.14.0) Straßen: Kreuzungsflächen mit Gehweg-Ecken, Zebrastreifen/Furten/Halt-/Wartelinien aus OSM, Kanaldeckel, Gullys, Flickstellen, Leitpfosten; Ampelmasten mit Schaltung, KI-Verkehr hält an Ampeln/Linien/Zebrastreifen, Haifischzähne, Fahrbahnpfeile | `world.js`, `region.js`, `js/signals.js` (neu), `traffic.js` | L |
 | 10 | Licht und Wetter: gestaffelte Schatten (CSM), Spiegelungen auf nassen Straßen und Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts | `game.js`, `post.js`, `atmosphere.js` | L |
 | 11 | WebGPU voll: alle Shader in TSL, Node-Nachbearbeitung; danach Entscheidung über den Standard-Renderer | alle Shader-Dateien | XL |
 
-**Stand:** Phasen 1–9 (v3.5.0–v3.13.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
+**Stand:** Phasen 1–9 (v3.5.0–v3.14.0, bis 03.11.2026) umgesetzt und getestet (auf dem Branch, siehe 6).
 Nächster Schritt nach Freigabe: **Phase 10** (Licht und Wetter: gestaffelte Schatten, Spiegelungen auf nassen Straßen und
-Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts). Offen aus Phase 9: Ampelmasten an den OSM-Ampeln, KI-Verkehr
-hält an Halt-/Wartelinien und Zebrastreifen, Haifischzähne und Fahrbahnpfeile. Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
+Glas, Wolkenschatten, Lichtstrahlen, Scheinwerferkegel nachts; dabei die Ampellichter nachts als Lichtquelle). Phase 9
+ist mit v3.14.0 komplett; Ausbau später: Fußgänger queren an Zebrastreifen und Ampeln, Strafe fürs Rotfahren, Abbiegephasen.
+Offen aus Phase 8: Innenstadt als vereinfachte Fassung (dann auch aus über 4 km sichtbar),
 Bodenbedeckung im Worker, WebGPU-Probe mit den weniger gewordenen Zeichenaufrufen neu messen. Offene Entscheidung: Branch nach Durchsicht auf `main` übernehmen (löst
 Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 
@@ -1123,7 +1152,7 @@ Vercel-Deployment aus) – nur auf ausdrückliche Freigabe.
 - [ ] Fußgänger als KI-Figuren auf Gehwegen und Plätzen
 - [x] ~~Brücken über die Itz mit eigener Höhe~~ Talbrücken seit v2.1.0; flache Itz-Brücken liegen weiter auf dem Gelände (das Flussbett ist dort nicht ausgehoben)
 - [ ] Spielziele: Taxi- oder Lieferaufträge zwischen Sehenswürdigkeiten, Sammelobjekte, Zeitrennen
-- [ ] Straßenlaternen und Ampeln (aus OSM `highway=street_lamp`, `traffic_signals`)
+- [ ] Straßenlaternen aus OSM `highway=street_lamp` (Ampeln: erledigt in v3.14.0)
 - [ ] Touch-Steuerung für Smartphone und Tablet
 - [x] ~~Tag-Nacht-Wechsel fließend statt per Taste, dazu Wetter (Regen, Nebel)~~ Erledigt in v2.4.0 (Uhr, Abendrot, Wetter)
 - [ ] Grafik weiter: zweites Fenstermuster (Rundbogen-, Sprossen- und Ladenfenster) je Haus, Balkone, Gauben und
