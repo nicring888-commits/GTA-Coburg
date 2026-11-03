@@ -30,6 +30,11 @@ const GfxProbe = {
       const lib = r.library, from = lib.fromMaterial.bind(lib);
       lib.fromMaterial = m => {
         const nm = from(m);
+        // Texturen folgen dem Original: das Spiel tauscht Luftbilder (map) später ohne Neuübersetzen aus, die Kopie hielte
+        // sonst die alte, schon freigegebene Textur
+        if (nm && nm !== m) for (const k of ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'aoMap', 'lightMap']) {
+          if (k in m) Object.defineProperty(nm, k, { get: () => m[k], set: v => { m[k] = v; }, configurable: true });
+        }
         if (nm && nm !== m && m.userData && m.userData.tsl) {
           try { m.userData.tsl(nm, NodeKit); } catch (e) { console.warn('TSL-Fassung fehlgeschlagen:', m.type, e.message); }
         }

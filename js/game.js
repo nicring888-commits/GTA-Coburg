@@ -100,7 +100,9 @@
   sunFar.shadow.camera.updateProjectionMatrix();
   // nur auf den großen Stufen (Ultra, Hoch); sonst ist das Licht nicht in der Szene und alles bleibt wie bisher
   const setCSM = q => {
-    const on = CSM.patched && q.shadow >= 4096 && MAX_SHADOW >= 4096;
+    // nicht mit der WebGPU-Probe: dort hat der Renderer eigene gestaffelte Schatten (js/gfx-webgpu.js, Phase 11f), und ein
+    // Licht mit shadow.autoUpdate = false zerstört dort die Schattentextur
+    const on = CSM.patched && q.shadow >= 4096 && MAX_SHADOW >= 4096 && !GfxProbe.wanted;
     if (on === CSM.on) return;
     CSM.on = on; sunFar.castShadow = on;
     if (on) { scene.add(sunFar, sunFar.target); sunFar.shadow.needsUpdate = true; } else scene.remove(sunFar, sunFar.target);

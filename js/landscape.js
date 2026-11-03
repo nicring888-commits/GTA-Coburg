@@ -260,6 +260,8 @@ class Landscape {
     const T = this.T;
     const mat = new THREE.MeshLambertMaterial({ map: this.region.placeholder(), color: ORTHO_TINT });
     const cover = t.coverTex || Landscape.blackTex(), field = t.fieldTex || Landscape.blackTex();
+    mat.userData.tile = t; // WebGPU: Bodenbedeckung je Kachel (js/tsl-materials.js)
+    mat.userData.tsl = nm => NodeKit.terrain(nm, this); // WebGPU (js/tsl-materials.js)
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, {
         coverMap: { value: cover }, fieldMap: { value: field }, grassTex: { value: T.grass }, soilTex: { value: T.soil },
@@ -425,6 +427,7 @@ class Landscape {
   canopyMaterial() {
     if (this._canopyMat) return this._canopyMat;
     const m = new THREE.MeshLambertMaterial({ color: '#4c6a34', vertexColors: true });
+    m.userData.tsl = nm => NodeKit.canopy(nm); // WebGPU (js/tsl-materials.js)
     m.onBeforeCompile = sh => {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vCW;')
@@ -489,6 +492,7 @@ class Landscape {
   }
   coverMaterial(tex) {
     const m = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide });
+    m.userData.tsl = nm => NodeKit.cover(nm); // WebGPU (js/tsl-materials.js)
     m.onBeforeCompile = sh => {
       sh.uniforms.uTime = ATMO.uniforms.uTime;
       sh.uniforms.uFade = { value: LAND.coverR };
@@ -638,6 +642,7 @@ Landscape.prototype.trackMaterial = function (surf) {
   if (this._trackMats[surf]) return this._trackMats[surf];
   const col = ['#9a8f7c', '#7d6a52', '#55575a'][surf];
   const m = new THREE.MeshLambertMaterial({ color: col, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, alphaToCoverage: true, alphaTest: 0.5 });
+  m.userData.tsl = nm => NodeKit.track(nm, this, surf); // WebGPU (js/tsl-materials.js)
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { grassTex: { value: this.T.grass }, soilTex: { value: this.T.soil }, detailMap: { value: this.detail }, uWet: ATMO.uniforms.uWet });
     sh.vertexShader = sh.vertexShader
