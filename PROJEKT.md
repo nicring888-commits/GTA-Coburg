@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.18.0-dev „GTA-V-Optik: Messstand + Licht-Tabelle (in Arbeit)“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 03.11.2026
+**Version:** 3.18.0 „GTA-V-Optik, Teil 1“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 04.11.2026
 
 ---
 
@@ -76,7 +76,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
 | Waffen | `Linke Maustaste` schießen, schlagen, Granate werfen · `Rechte Maustaste` zielen (Schulterkamera, Fadenkreuz, Zoom) · `V` beim Zielen: über das Visier (Kimme und Korn, Perlkorn, Leuchtpunkt) · `1`–`7` oder `Q` Waffe wechseln · `R` nachladen | `Linke Maustaste` Drive-by (Pistole, Maschinenpistole) |
 | Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
-| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
+| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `B` Bewegungsunschärfe an/aus (wird gespeichert, auch auf dem Startbildschirm) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
 
@@ -179,6 +179,7 @@ und müssen dort bleiben.
 | `js/gfx-webgpu.js` | WebGPU-Probe (seit v3.10.0, `GfxProbe`; seit v3.16.0 mit Material-Weiche in `NodeLibrary.fromMaterial`, Zwillingstausch beim Zeichnen und eigenem PMREM für das Umgebungsbild): lädt `three.webgpu.js` vom selben CDN wie `three.module.js` (gemeinsames `three.core.js`), `WebGPURenderer` auf eigener Leinwand unter der durchsichtigen WebGL-Leinwand (Eingabe bleibt dort), blendet ShaderMaterials (Himmel, Wasser) aus, Nebelfarbe als Hintergrund, ohne Umgebungsbild; Messanzeige (Backend, Bildzeit, CPU-Zeit des Zeichnens, Zeichenaufrufe, Dreiecke), `game.gfx.stats`; `measureWebGL` für `?gfx=stats` |
 | `js/bench.js` | Mess- und Vergleichsstand (seit v3.18.0, Grafik-Phase G0, nur mit `?bench` geladen): 12 feste Kamerapunkte in Stadt und Landkreis (`BENCH_POINTS`) × Uhrzeiten (8, 13, 19,5, 23) × Wetter (klar, Regen, Nebel); `game.bench.run(lauf, opt)` hält das Spiel an (`game.hold`), zeichnet in fester Größe 1280 × 720, wartet auf die Luftbilder, misst GPU-Zeit je Durchgang (Median), CPU-Zeit, Zeichenaufrufe, Dreiecke und speichert Bilder und `results.json` nach `bench/shots/<lauf>/` (über `/api/bench-save` in `server.js`, nur lokal); `view(id, uhr, wetter)`, `probe()` (Prüfsumme von Höhe, Kollision und Straßensuche an 500 Punkten der Innenstadt) |
 | `bench/index.html` | Vorher/Nachher-Vergleich zweier Messläufe mit Schieberegler und Messwerten (http://127.0.0.1:8175/bench/, nur mit `node server.js`) |
+| `js/parking.js` | Geparkte Autos (seit v3.18.0, `ParkKit`): Stellplätze aus den OSM-Parkflächen der Ortskacheln (gleiche Reihen wie die Stellplatz-Linien, Überschneidungen an Ecken aussortiert), 40 % belegt, höchstens 70 je Kachel, Art/Farbe/Richtung fest je Platz; Instanzen je Autoart (Lack, übrige Teile dunkel, ohne Schattenwurf); `collide` (in `Region.collide`), `nearest`, `hide`; mit `E` stellt `game.js` (`lotCar`) ein echtes `Vehicle` auf |
 | `js/carlights.js` | Scheinwerferkegel nachts (seit v3.15.0, `CarLights`): Lichtteppich auf der Fahrbahn und zwei Lichtkegel je fahrendem Auto als Instanzen (bis 64, additiv, Alphakanal unberührt), Kegel bei Regen/Nebel stärker; das eigene Auto hat das echte SpotLight aus `game.js` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
@@ -294,7 +295,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🔶 v3.18.0-dev (03.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3), Phasen G0 und G1.**
+- ✅ v3.18.0 (03.–04.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3) Teil 1: G0, G1, G2, G3a, G4a, G6a, G7a, G8a, G9a.**
   - ✅ **G0 Messstand** (Commit `d90d4b6`): GPU-Zeit je Durchgang (`EXT_disjoint_timer_query_webgl2`, Klasse `GpuTimer` in
     `post.js`; Anzeige mit `?gfx=stats`: Szene, AO, Bloom, Strahlen, Bild), Zeichenaufrufe/Dreiecke des Szenen-Durchgangs
     (`post.sceneInfo`), `js/bench.js`, `bench/index.html`, `tools/data-hash.js`, Speicher-Schnittstelle in `server.js`
@@ -308,19 +309,45 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
     grün. Shell-Heredocs in dieser Umgebung machen aus `\b` ein Steuerzeichen (zweimal passiert): Patch-Skripte als Datei
     schreiben und mit `grep -c $'\x08'` prüfen. In Patch-Skripten nie `String.replace` mit Ersatztexten, die `$'` oder
     `$&` enthalten (fügt Textteile ein; hat PROJEKT.md einmal verdoppelt, wurde repariert): `split/join` nehmen
-  - 🔶 **G1 Licht-Tabelle – eingebaut, noch NICHT im Browser getestet** (Commit „G1 (in Arbeit)“): `TIMECYCLE` in
-    `atmosphere.js` (12 Einträge über den Tag: Himmel, Sonne, Himmelslicht, Dunst, Wolken, Belichtung, Bloom,
-    Sättigung, S-Kurve, Tönung von Schatten/Lichtern, Schwarzwert; Bewölkung mischt `SKY_GREY` hinein) ersetzt
-    `SKY_DAY/DUSK/NIGHT`. Himmelslicht als `THREE.LightProbe` (SH aus einem Himmelsmodell mit 192 Richtungen, nur bei
-    Änderung neu; `?probe=0` = altes Halbkugel-Licht; drinnen blendet `setIndoor` die Probe mit aus).
-    Augenanpassung in `post.js` (`post.eye`: log. Luminanz 32 × 18 → 1 × 1, nachgeführt, Faktor 0,8–1,3 und nur zu 60 %
-    angewandt; `?adapt=0` aus; Reset bei Schnellreise und in `bench.sky`). Farblook und Bloom aus der Tabelle
-    (`P.grade`, `P.bloomT`, `P.bloom`), auch im WebGPU-Weg (`tsl-post.js`). Abweichung vom Plan: Farblook als Parameter
-    statt 3D-LUT (gleiche Wirkung, keine Textur)
-  - Offen in G1: im Browser prüfen (Konsole, alle Stufen, `?three=160`, `?gfx=webgpu`, drinnen/draußen),
-    **`PROBE_SCALE` kalibrieren** (Vergleich `?probe=0` gegen Probe bei gleicher Farbe; Annahme 1/π), Augenanpassung
-    `eye.key` an den Basisbildern einstellen, Tabellenwerte nach Bildern feinstellen, G1-Messlauf und Vergleich gegen
-    `v3.17-basis` in `bench/index.html`, Leistungsbudget prüfen (Ziel ≤ +0,3 ms), Abschnitt hier fertig schreiben
+  - ✅ **G1 Licht-Tabelle** (Commits `f91e80c`, `fbc9641`): `TIMECYCLE` in `atmosphere.js` (Einträge über den Tag:
+    Himmel, Sonne, Himmelslicht, Dunst, Wolken, Belichtung, Bloom, Sättigung, S-Kurve, Tönung von Schatten/Lichtern,
+    Schwarzwert, Zielhelligkeit `key`; Bewölkung mischt `SKY_GREY` hinein) ersetzt `SKY_DAY/DUSK/NIGHT`. Himmelslicht als
+    `THREE.LightProbe` (SH aus einem Himmelsmodell, 192 Richtungen, nur bei Änderung neu; `?probe=0` = altes
+    Halbkugel-Licht; drinnen blendet `setIndoor` die Probe aus). `PROBE_SCALE` = 1/π gemessen (Testszene: Halbkugel-Licht
+    und Probe gleich hell, Verhältnis 1,000). Augenanpassung (`post.eye`: log. Luminanz 32 × 18 → 1 × 1, nachgeführt,
+    Faktor 0,8–1,3, zu 60 % angewandt; `?adapt=0`): Zielwert je Uhrzeit aus der Tabelle (gemessen: Tag ≈ 0,2, Abend 0,08,
+    Nacht 0,02), gleicht nur Abweichungen aus (dunkle Gasse gegen offenen Platz). Farblook und Bloom aus der Tabelle, auch
+    im WebGPU-Weg. Tag: stärkere Sonne gegen weniger Himmelslicht (deutliche, kühle Schatten), tieferes Blau, mehr
+    Sättigung und Kontrast; Abend warm statt lila. Farblook als Parameter statt 3D-LUT (gleiche Wirkung, keine Textur).
+    Beim Testen behoben: Augenanpassung griff vor der Anlage auf Uniforms zu (Fehler in jedem Bild). Kosten ≈ +0,1–0,2 ms
+  - ✅ **G2 PBR-Oberflächen** (`c3baeb0`): `World.surfaceMat` – auf Stufe „voll“ `MeshStandardMaterial`, sonst Lambert (`?pbr=0`
+    zum Vergleich); gemeinsames Wandmaterial der ganzen Karte, Dächer, Straßen, Bordsteine. Rauheit in `#ifdef STANDARD`
+    (Putz/Stein 0,88, Rahmen 0,5, Glas 0,07–0,15, Asphalt 0,84 → nass 0,3, Pfützen 0,05, Dächer 0,72/0,32), kein doppeltes
+    Umgebungs-Diffuslicht (`iblIrradiance = 0`). +0,04 ms. **WebGPU-Probe vorerst ohne PBR** (dort bis 1 s je Bild; Nachzug G10)
+  - ✅ **G3a Laub und Gras** (`b1c497f`): Durchscheinen bei Gegenlicht, Farbton/Helligkeit je Baum aus seiner Lage, weniger
+    entsättigt; Bewuchs im Umland mit Gegenlicht. Kosten nicht messbar. Offen: Baumarten aus OSM, Waldränder, Impostors mit Normalen
+  - ✅ **G4a Bremslichter und Blinker** (`76dbc55`): eigenes Rückleuchten-Material je Auto (hell beim Verzögern und im
+    Stand mit Fahrer), Blinker an den Ecken beim Abbiegen (nur sichtbar, solange sie leuchten); rein optisch aus Tempo und
+    Kurs. Offen: CC0-Automodelle (Downloads brauchen Freigabe, siehe 7.3)
+  - ✅ **G6a Hänge** (`bbb244a`): ab ≈ 28° Erde, ab ≈ 40° Fels im Geländeshader des Umlands; Wirkung gering (Gelände sanft).
+    Offen: Geländeschatten bei tiefer Sonne, Strommasten (braucht neuen OSM-Abruf)
+  - ✅ **G7a Geparkte Autos** (`ee18686`): `js/parking.js` (siehe 5); erste Fassung mit 791 Autos in 5 Kacheln kostete 14 ms
+    GPU (Schatten, Klarlack, Menge) → 40 % / höchstens 70 je Kachel, ohne Schattenwurf: +0,1–0,6 ms. Klauen mit E getestet
+    (Fahndung durch Zeugen). Offen: Innenstadt (Parkflächen im Kerngebiet), Bushaltestellen/Schilder (neuer OSM-Abruf)
+  - ✅ **G8a Laternenlicht** (`cea9266`): bis zu 32 nächste Laternen beleuchten nachts in der Nachbearbeitung Fassaden,
+    Figuren, Autos (Kegel nach unten, 22 m, Normale aus der Tiefe, Flächenfarbe aus dem Bild); nur Ultra/Hoch, ≈ +0,5 ms nachts.
+    Beim Testen behoben: `flat` ist in GLSL ES 3 reserviert (schwarzes Bild)
+  - ✅ **G9a Bewegungsunschärfe** (`252a2b6`): ab ≈ 80 km/h Kameratempo, nur zum Bildrand, aus bei Sprüngen; Taste B,
+    Knopf auf dem Startbildschirm, `?blur=0`; gespeichert (`gta-coburg-blur`)
+  - **Rückfall geprüft:** `?gfx=webgpu` (16,7 ms, ohne PBR), `?three=160` (keine fehlerhaften Programme), `grafik=mobil`
+    (Lambert, ohne Nachbearbeitung, unverändert), Wohnung betreten/verlassen (Probe aus/an), `node tools/mp-test.js`
+    27/27, Daten-Prüfsummen unverändert, Weltprüfsumme `4a079968` in allen Läufen
+  - ⚠️ Messläufe vergleichen Lauf gegen Lauf: der Basislauf `v3.17-basis` hatte an den Stadtpunkten noch gestörte Werte
+    (bis 24 ms gegen 4 ms danach); seit `bench.idle` per `MessageChannel` (verdeckte Seite bremst `setTimeout`) sind die
+    Werte stabil
+  - **Abschlusslauf `v3.18-final`** (144 Bilder, Stufe Hoch): GPU-Median gegen G1 +0,13 ms (Szene +0,06, Bild +0,05),
+    Zeichenaufrufe +29, Dreiecke +0,13 Mio.; je Punkt 2,2–5,2 ms. Vergleich: http://127.0.0.1:8175/bench/ (Vorher
+    `v3.17-basis`, Nachher `v3.18-final`; Bilder nur lokal)
 
 - ✅ v3.17.0 (03.11.2026, Branch `grafik/regionale-architektur`): **WebGPU voll – Phase 11b–11f des Grafik-Fahrplans.**
   Fünf Commits (11b–11f), dazu 11a (v3.16.0, unten). Mit `?gfx=webgpu` zeichnet jetzt alles in TSL: Gelände, Feldwege,
@@ -1300,9 +1327,10 @@ in Richtung GTA V (Licht und Glanz wirken auf jedes Bild), G3/G4 die zweitgröß
    `?worker=0`, `file://`.
 6. Ergebnis, Messwerte und Grenzen in Abschnitt 6 eintragen, dann Freigabe der nächsten Phase.
 
-**Stand 03.11.2026 (abends):** G0 fertig und committet, G1 eingebaut und als „in Arbeit“ committet, aber noch nicht im
-Browser getestet (Details in 6). Morgen: G1 testen und kalibrieren, dann G1-Messlauf und Vorher/Nachher-Vergleich,
-danach G2.
+**Stand 04.11.2026:** G0, G1, G2, G3a, G4a, G6a, G7a, G8a, G9a umgesetzt, getestet und committet (Details in 6).
+Offen: G3 Rest (Baumarten, Waldränder), **G4 CC0-Automodelle** und **G6/G7 neue OSM-Daten** (Strommasten,
+Bushaltestellen, Schilder) – beides braucht Downloads, die vorher freigegeben werden; G5 Gebäudedetails aus der Nähe,
+G8 Lichterteppich ferner Orte, G9 Wolken mit Licht und Wasser, G10 WebGPU-Nachzug (inkl. PBR).
 
 **Entscheidungen (03.11.2026)**
 - Branch: weiter auf `grafik/regionale-architektur`.
