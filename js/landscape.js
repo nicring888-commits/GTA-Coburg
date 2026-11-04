@@ -514,7 +514,14 @@ class Landscape {
           #include <alphatest_fragment>`)
         .replace('#include <color_fragment>', `#include <color_fragment>
           diffuseColor.rgb *= mix(0.55, 1.05, vMapUv.y);   // unten im Büschel dunkler`)
-        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize(vNormal);');
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize(vNormal);')
+        // Gegenlicht durch Halme und Blätter (seit v3.18.0, Grafik-Phase G3), Spitzen stärker als der Grund
+        .replace('#include <opaque_fragment>', `
+          #if NUM_DIR_LIGHTS > 0
+            outgoingLight += diffuseColor.rgb * vec3(1.05, 1.1, 0.7) * directionalLights[0].color * 0.3 * vMapUv.y
+              * pow(clamp(dot(-normalize(vViewPosition), directionalLights[0].direction), 0.0, 1.0), 4.0);
+          #endif
+          #include <opaque_fragment>`);
     };
     m.customProgramCacheKey = () => 'cover';
     return m;

@@ -726,26 +726,41 @@ class World {
       sh.uniforms.uWet = ATMO.uniforms.uWet;
       sh.uniforms.uTime = ATMO.uniforms.uTime;
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec2 vLeafVar;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vLeafVar = vec2(0.5);
           #ifdef USE_INSTANCING
+            // Farbschwankung je Baum aus seiner Lage (seit v3.18.0, Grafik-Phase G3)
+            vLeafVar = fract(sin(instanceMatrix[3].xz * vec2(12.9898, 78.233) + instanceMatrix[3].zx * 0.0173) * 43758.5453);
             float ph = dot(instanceMatrix[3].xz, vec2(0.13, 0.21));
             float sway = max(position.y - 2.6, 0.0);
             transformed.x += sin(uTime * 1.3 + ph + position.z * 0.7) * 0.035 * sway;
             transformed.z += cos(uTime * 1.1 + ph * 1.3 + position.x * 0.6) * 0.03 * sway;
           #endif`);
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uWet;')
+        .replace('#include <common>', '#include <common>\nuniform float uWet;\nvarying vec2 vLeafVar;')
         .replace('#include <alphatest_fragment>', `
           diffuseColor.a = (diffuseColor.a - 0.5) / max(fwidth(diffuseColor.a), 1e-4) + 0.5;
           #include <alphatest_fragment>`)
         .replace('#include <color_fragment>', `#include <color_fragment>
           {
             float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-            diffuseColor.rgb = mix(vec3(l), diffuseColor.rgb, 0.85) * 0.95 * (1.0 - 0.2 * uWet);
+            // je Baum heller/dunkler und mal gelblicher, mal bläulicher Grünton (Arten, Alter, Standort)
+            vec3 tint = mix(vec3(0.9, 1.0, 1.06), vec3(1.1, 1.03, 0.82), vLeafVar.x);
+            diffuseColor.rgb = mix(vec3(l), diffuseColor.rgb, 0.98) * tint * (0.84 + 0.26 * vLeafVar.y) * 0.95 * (1.0 - 0.2 * uWet);
           }`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-          normal = normalize(vNormal);`);
+          normal = normalize(vNormal);`)
+        .replace('#include <opaque_fragment>', `
+          #if NUM_DIR_LIGHTS > 0
+          {
+            // Gegenlicht scheint durch die Blätter (Sonne hinter der Krone), gelbgrün aufgehellt
+            vec3 toCam = normalize(vViewPosition);
+            float bt = pow(clamp(dot(-toCam, directionalLights[0].direction), 0.0, 1.0), 4.0);
+            outgoingLight += diffuseColor.rgb * vec3(1.05, 1.1, 0.7) * directionalLights[0].color * bt * 0.3;
+          }
+          #endif
+          #include <opaque_fragment>`);
     };
     mat.customProgramCacheKey = () => 'leaf';
   }
