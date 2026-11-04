@@ -353,6 +353,20 @@ class Landscape {
             // Ohne Flächenangabe: grünes Foto wie Wiese behandeln
             float pg = smoothstep(0.0, 0.05, photo.g - max(photo.r, photo.b) * 0.93) * wU;
             vec3 col = urbC * (wU - pg) + grassC * (wG + pg) + fieldC * wF + woodC * wW;
+            // Steile Hänge (seit v3.18.0, Grafik-Phase G6): ab ≈ 28° Erde, ab ≈ 40° Fels mit Schichtung statt
+            // verzogenem Luftbild; Neigung aus der Geländeform, nicht in Orten und auf Straßen
+            {
+              vec3 gn = normalize(cross(dFdx(vLW), dFdy(vLW)));
+              float up = abs(gn.y);
+              float steep = smoothstep(0.89, 0.8, up) * (1.0 - wU + pg);
+              if (steep > 0.001) {
+                vec3 earth = mix(vec3(0.16, 0.12, 0.08), ph * vec3(0.9, 0.75, 0.6), 0.35) * (0.8 + 0.4 * nMid);
+                float strata = 0.85 + 0.15 * sin(vLW.y * 2.3 + lfbm(wp / 6.0) * 4.0);
+                vec3 rock = mix(vec3(0.36, 0.34, 0.31), vec3(0.5, 0.45, 0.38), nBig) * strata * (0.8 + 0.35 * dot(tri2(soilTex, wp, 1.6), vec3(0.6)));
+                vec3 bank = mix(earth, rock, smoothstep(0.8, 0.7, up));
+                col = mix(col, bank, steep * 0.85);
+              }
+            }
             diffuseColor.rgb = col;
             landH = grassH * (wG + pg) * 0.6 + fieldH * wF + dot(lT, vec3(0.33)) * 2.0 * wW * 0.5;
             landH *= near;
