@@ -11,6 +11,7 @@ const POST_QUALITY = {
   niedrig: { name: 'Niedrig', msaa: 0, ratio: 0.85, ao: 0, bloom: false, post: false, shadow: 2048, minScale: 0.6 },
 };
 const POST_ORDER = ['ultra', 'hoch', 'mittel', 'niedrig'];
+const POST_NL = 32; // Laternen, die nachts Flächen beleuchten (Grafik-Phase G8)
 
 const POST_VERT = `
   varying vec2 vUv;
@@ -117,6 +118,9 @@ class PostFX {
     let blurOn = !/[?&]blur=0\b/.test(location.search);
     try { if (localStorage.getItem('gta-coburg-blur') === '0') blurOn = false; } catch (e) { /* ohne Speicher */ }
     this.blur = { on: blurOn, k: 0, prevVP: new THREE.Matrix4(), prevPos: new THREE.Vector3(), t: 0, has: false };
+    // Laternenlicht (seit v3.18.0, Grafik-Phase G8): bis zu NL nächste Lampen um die Kamera, Lage im Blickraum; die
+    // Liste liefert lampSource(x, z, out) aus game.js (Innenstadt und Ortskacheln des Landkreises)
+    this.lamps = { list: [], t: 0, view: Array.from({ length: POST_NL }, () => new THREE.Vector4()), n: 0, source: null };
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quad.frustumCulled = false;
     this.qScene = new THREE.Scene(); this.qScene.add(this.quad);
@@ -371,6 +375,9 @@ class PostFX {
       uniform float uEyeKey;
       uniform vec3 uGradeLo, uGradeHi;   // Tönung der Schatten und Lichter
       uniform mat4 uPrevVP;              // Blick-Projektion des letzten Bildes (Bewegungsunschärfe)
+      uniform vec4 uLamp[${POST_NL}];      // Laternen: Lage im Blickraum, w = Stärke
+      uniform float uLampN;
+      uniform vec3 uViewDown;            // Richtung nach unten im Blickraum
       uniform float uBlur;
       uniform float uSat, uCurve, uLift;
       uniform vec2 uRes;
@@ -457,6 +464,35 @@ class PostFX {
         vec3 dbgSSR = vec3(0.0);
         if (d < 0.99999) {
           vec3 vp = viewPosAt(vUv);
+          #ifdef USE_LAMPS
+            // Laternenlicht: Lichtkegel nach unten, Abstand bis ≈ 22 m, Fläche nach Normale aus der Tiefe; die Farbe der
+            // Fläche wird aus dem Bild geschätzt (Farbton bleibt, mittlere Helligkeit). Boden direkt unter der Lampe hat
+            // schon den Lichtteppich, deshalb waagrechte Flächen schwächer
+            if (uLampN > 0.5) {
+              vec2 tx = uSceneTexel;
+              vec3 pr = viewPosAt(vUv + vec2(tx.x, 0.0)), pl = viewPosAt(vUv - vec2(tx.x, 0.0));
+              vec3 pu = viewPosAt(vUv + vec2(0.0, tx.y)), pd = viewPosAt(vUv - vec2(0.0, tx.y));
+              vec3 ddx = abs(pr.z - vp.z) < abs(vp.z - pl.z) ? pr - vp : vp - pl;
+              vec3 ddy = abs(pu.z - vp.z) < abs(vp.z - pd.z) ? pu - vp : vp - pd;
+              vec3 Nl = normalize(cross(ddx, ddy));
+              if (dot(Nl, vp) > 0.0) Nl = -Nl;
+              float lFlat = smoothstep(0.55, 0.9, dot(Nl, -uViewDown));
+              vec3 lsum = vec3(0.0);
+              for (int i = 0; i < ${POST_NL}; i++) {
+                if (float(i) >= uLampN) break;
+                vec3 L = uLamp[i].xyz - vp;
+                float d2 = dot(L, L);
+                if (d2 > 484.0) continue;
+                vec3 Ln = L * inversesqrt(d2);
+                float att = (1.0 - d2 / 484.0); att *= att / (1.0 + d2 * 0.035);
+                float cone = smoothstep(-0.3, 0.45, dot(-Ln, uViewDown));
+                lsum += vec3(1.0, 0.68, 0.36) * uLamp[i].w * att * cone * max(dot(Nl, Ln), 0.0);
+              }
+              float mx = max(col.r, max(col.g, col.b));
+              vec3 alb = clamp(col / max(mx, 0.025), 0.0, 1.0) * 0.6;
+              col += alb * lsum * (1.0 - 0.75 * lFlat);
+            }
+          #endif
           #ifdef USE_AO
             float ao = texture2D(tAO, vUv).r;
             col *= mix(1.0, ao, uAO);
@@ -548,6 +584,7 @@ class PostFX {
       uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() }, uCloud: { value: 0.2 }, uCloudT: { value: 0 },
       tEye: { value: null }, uEye: { value: new THREE.Vector3() }, uEyeKey: { value: 0.2 },
       uPrevVP: { value: new THREE.Matrix4() }, uBlur: { value: 0 },
+      uLamp: { value: Array.from({ length: POST_NL }, () => new THREE.Vector4()) }, uLampN: { value: 0 }, uViewDown: { value: new THREE.Vector3() },
       uGradeLo: { value: new THREE.Vector3(1, 1, 1) }, uGradeHi: { value: new THREE.Vector3(1, 1, 1) }, uSat: { value: 1 }, uCurve: { value: 0.22 }, uLift: { value: 0.012 },
     });
   }
@@ -683,7 +720,17 @@ class PostFX {
     u.uBlur.value = Bl.k; u.uPrevVP.value.copy(Bl.prevVP);
     Bl.prevVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     Bl.prevPos.copy(camera.position); Bl.t = nowB; Bl.has = true;
-    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0) + (this.blur.on ? 64 : 0);
+    // Laternen: nur nachts, Auswahl der nächsten alle 0,3 s, Lage im Blickraum jedes Bild
+    const Lm = this.lamps;
+    let nL = 0;
+    if (q.ssr && P.night > 0.3 && Lm.source) {
+      if (nowB - Lm.t > 0.3) { Lm.t = nowB; Lm.source(camera.position.x, camera.position.z, Lm.list, POST_NL); }
+      const vm = camera.matrixWorldInverse, k = U.smoothstep(0.3, 0.8, P.night) * 3.6;
+      for (const l of Lm.list) { u.uLamp.value[nL].set(l.x, l.y, l.z, 1).applyMatrix4(vm); u.uLamp.value[nL].w = k; if (++nL >= POST_NL) break; }
+      u.uViewDown.value.set(0, -1, 0).transformDirection(vm);
+    }
+    u.uLampN.value = nL;
+    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0) + (this.blur.on ? 64 : 0) + (q.ssr ? 128 : 0);
     if (c.userData.key !== want) {
       c.userData.key = want;
       c.defines = {};
@@ -695,6 +742,7 @@ class PostFX {
       if (q.bloom) c.defines.USE_RAYS = '';
       if (this.debugRays) c.defines.DEBUG_RAYS = '';
       if (this.blur.on) c.defines.USE_BLUR = '';
+      if (q.ssr) c.defines.USE_LAMPS = ''; // nur Ultra/Hoch
       c.needsUpdate = true;
     }
     u.tColor.value = T.scene.texture; u.tDepth.value = depth; u.tAO.value = T.ao.texture; u.tBloom.value = T.b1.texture;

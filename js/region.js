@@ -1961,6 +1961,7 @@ class Region {
       poles.castShadow = heads.castShadow = true; glows.visible = this.night;
       for (const m of [poles, heads, glows]) { m.computeBoundingSphere(); t.group.add(m); life.meshes.push(m); }
       life.glow = glows;
+      life.lamps = lamps; // für das Laternenlicht an Fassaden (js/post.js, seit v3.18.0)
     }
     // Ladenschilder an den Fassaden und begehbare Lokale (Döner, Gasthaus, Café, Mode, Drogerie, Bücher)
     // dazu Firmennamen (OSM name) an Gewerbe- und Industriehallen; an Hallen größere Schrift unter der Attika

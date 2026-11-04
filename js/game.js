@@ -1304,6 +1304,23 @@
   // für Tests in der Konsole
   GfxProbe.start(renderer, scene);
   post.timing = GfxProbe.statsOnly;
+  // Laternen für das Licht an Fassaden (js/post.js, Grafik-Phase G8): Lampenköpfe in der Innenstadt (props) und in den
+  // Ortskacheln des Landkreises (region life.lamps), die nächsten max Stück zur Kamera
+  post.lamps.source = (cx, cz, out, max) => {
+    const cand = [];
+    const push = (x, y, z) => { const d = (x - cx) * (x - cx) + (z - cz) * (z - cz); if (d < 6400) cand.push({ x, y, z, d }); };
+    const P = props.items || {};
+    for (const l of P.lamp || []) push(l.x + Math.sin(l.ry) * 0.9, l.y + 5.0, l.z + Math.cos(l.ry) * 0.9);
+    for (const l of P.lantern || []) push(l.x, l.y + 3.9, l.z);
+    const R = world.region;
+    if (R) for (const key of R.lifeOn) {
+      const t = R.loaded.get(key);
+      if (t && t.life && t.life.lamps) for (const l of t.life.lamps) push(l.x + Math.sin(l.ry) * 0.9, l.y + 5.0, l.z + Math.cos(l.ry) * 0.9);
+    }
+    cand.sort((a, b) => a.d - b.d);
+    out.length = 0;
+    for (let i = 0; i < Math.min(max, cand.length); i++) out.push(cand[i]);
+  };
   window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, bench: typeof Bench !== 'undefined' ? Bench : null, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
