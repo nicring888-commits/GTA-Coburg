@@ -194,6 +194,9 @@ function carGeometries(kind = 'car') {
     head: carMerge([[box(0.44, 0.13, 0.14), M4(0.6, hy, hz + 0.05)], [box(0.44, 0.13, 0.14), M4(-0.6, hy, hz + 0.05)]]),
     tail: carMerge([[box(0.5, 0.12, 0.12), M4(0.58, ty, tz - 0.02)], [box(0.5, 0.12, 0.12), M4(-0.58, ty, tz - 0.02)]]),
     plate: carMerge([[box(0.52, 0.12, 0.02), M4(0, 0.47, hz + 0.19)], [box(0.52, 0.12, 0.02), M4(0, 0.6, tz - 0.1, 0, Math.PI)]]),
+    // Blinker (seit v3.18.0, Grafik-Phase G4): links ist +x (das Auto blickt nach +z)
+    blinkL: carMerge([[box(0.1, 0.1, 0.14), M4(0.86, hy, hz + 0.1)], [box(0.12, 0.1, 0.12), M4(0.86, ty, tz - 0.06)]]),
+    blinkR: carMerge([[box(0.1, 0.1, 0.14), M4(-0.86, hy, hz + 0.1)], [box(0.12, 0.1, 0.12), M4(-0.86, ty, tz - 0.06)]]),
     roofY: S.roofY,
   };
   // Räder: Reifen, Felge mit fünf Speichen auf beiden Seiten (drehen sich mit)
@@ -261,6 +264,7 @@ function carMaterials() {
   _carMat.plate = std('kunststoff', { map: plateTexture(), roughness: 0.5 });
   _carMat.head = std('glas', { color: '#fff6dd', emissive: '#fff1c4', emissiveIntensity: 0.2, roughness: 0.15, metalness: 0.3 });
   _carMat.tail = std('glas', { color: '#7a0c0c', emissive: '#ff2020', emissiveIntensity: 0.25, roughness: 0.25 });
+  _carMat.blink = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.55, 0.08).multiplyScalar(3) });
   _carMat.policeBlue = std('lack', { color: '#1f4fa3', roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.08 });
   _carMat.lampOff = std('kunststoff', { color: '#16306b', emissive: '#0a1840', emissiveIntensity: 0.4, roughness: 0.3 });
   _carMat.lampOn = new THREE.MeshBasicMaterial({ color: '#7fb4ff' });
@@ -295,7 +299,12 @@ class Vehicle {
     this.glassMesh = add(G.glass, M.glass, 0, 0, 0);
     add(G.trim, M.trim, 0, 0, 0, false);
     add(G.head, M.head, 0, 0, 0, false);
-    add(G.tail, M.tail, 0, 0, 0, false);
+    // eigene Rückleuchten je Auto (Bremslicht), Blinker nur sichtbar, solange sie leuchten (kein Zeichenaufruf sonst)
+    this.tailMat = M.tail.clone();
+    this.tailMesh = add(G.tail, this.tailMat, 0, 0, 0, false);
+    this.blinkL = add(G.blinkL, M.blink, 0, 0, 0, false); this.blinkR = add(G.blinkR, M.blink, 0, 0, 0, false);
+    this.blinkL.visible = this.blinkR.visible = false;
+    this.lightState = { t: 0, sp: 0, h: 0, brake: 0, turn: 0, turnT: 0 };
     add(G.plate, M.plate, 0, 0, 0, false);
     const blob = add(G.blob, M.blob, 0, 0.05, 0, false);
     blob.userData.keep = true; blob.renderOrder = 1;
@@ -537,6 +546,31 @@ class Vehicle {
     g.rotation.set(-this.pitch, this.heading, this.roll, 'YXZ');
     for (const p of this.frontPivots) p.rotation.y = this.steer;
     for (const w of this.wheels) w.rotation.x = this.spin;
+    if (this.tailMat) this.signalLights();
+  }
+
+  // Bremslicht und Blinker aus dem Fahrverhalten (seit v3.18.0, Grafik-Phase G4): bremst das Auto merklich oder steht es
+  // mit Fahrer (Ampel, Stau), leuchten die Rückleuchten hell; dreht es langsam in eine Kurve (Abbiegen), blinkt die
+  // Seite noch 0,9 s nach. Rein optisch, keine Spielregel hängt daran.
+  signalLights() {
+    const L = this.lightState, now = performance.now() / 1000, dt = now - L.t;
+    if (this.wrecked) { this.blinkL.visible = this.blinkR.visible = false; return; }
+    if (dt > 0.05 || !L.t) {
+      const sp = this.speed;
+      if (L.t && dt < 1) {
+        const dec = (L.sp - sp) / dt;
+        const yaw = Math.atan2(Math.sin(this.heading - L.h), Math.cos(this.heading - L.h)) / dt;
+        const driven = this.isPlayer || !!this.ai || this.remote || this.driver;
+        L.brake = (sp > 0.5 && dec > 1.6) || (driven && Math.abs(sp) < 0.4 && !this.sleeping) ? 1 : 0;
+        if (Math.abs(yaw) > 0.4 && sp > 1 && sp < 9) { L.turn = yaw > 0 ? 1 : -1; L.turnT = 0.9; }
+        else if ((L.turnT -= dt) <= 0) L.turn = 0;
+      }
+      L.t = now; L.sp = sp; L.h = this.heading;
+    }
+    this.tailMat.emissiveIntensity = carMaterials().tail.emissiveIntensity + L.brake * 2.6;
+    const on = L.turn !== 0 && (now * 1.5) % 1 < 0.5;
+    this.blinkL.visible = on && L.turn > 0;
+    this.blinkR.visible = on && L.turn < 0;
   }
 
   // Kreise in Weltkoordinaten (für Auto-Auto-Kollisionen)
@@ -549,6 +583,7 @@ class Vehicle {
   dispose(scene) {
     scene.remove(this.group);
     this.paint.dispose();
+    if (this.tailMat) this.tailMat.dispose();
     this.disposed = true;
   }
 }
