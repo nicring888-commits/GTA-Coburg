@@ -637,10 +637,10 @@ class PostFX {
       this.pass(this.eyeMat, dst);
       T.eyeA = dst; T.eyeB = src; A.reset = false;
     }
-    u.tEye.value = T.eyeA.texture; u.uEye.value.set(A.on ? 1 : 0, A.min, A.max); u.uEyeKey.value = A.key;
     // Zusammensetzen auf den Bildschirm
     if (G) G.begin('comp');
     const c = this.compMat, u = c.uniforms;
+    u.tEye.value = T.eyeA.texture; u.uEye.value.set(A.on ? 1 : 0, A.min, A.max); u.uEyeKey.value = A.key;
     const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0);
     if (c.userData.key !== want) {
       c.userData.key = want;

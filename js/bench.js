@@ -75,7 +75,12 @@ const Bench = {
     if (E) { E.reset = true; E.fixedDt = 1 / 30; }
   },
   frame() { this.g.post.scale = 1; this.g.post.cool = 1e9; this.g.simulate(0, 1 / 30, true); },
-  idle() { return new Promise(r => setTimeout(r, 0)); },
+  // eine Aufgabe weiter (GPU-Abfragen werden erst danach fertig); MessageChannel statt setTimeout, weil der Browser
+  // setTimeout in verdeckten Seiten auf einmal pro Sekunde bremst
+  idle() {
+    const ch = this._ch || (this._ch = new MessageChannel());
+    return new Promise(r => { ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
+  },
 
   // n Bilder hintereinander zeichnen und messen (GPU-Abfragen brauchen einige Bilder bis zum Ergebnis)
   async measure(n = 45) {
@@ -155,6 +160,8 @@ const Bench = {
           res.shots.push({ id, time: t, weather: w, file: name, ...m });
           if (o.log !== false) console.log('Bench', label, name, m.gpu ? `GPU ${m.gpu.total} ms` : '', `CPU ${m.cpu} ms`, `${m.calls} Aufrufe`);
         }
+        // Zwischenstand nach jedem Ort (bricht ein Lauf ab, bleiben die Bilder vergleichbar)
+        await this.save(label, 'results.json', JSON.stringify({ ...res, partial: true }, null, 1));
       }
     } finally {
       this.restore();

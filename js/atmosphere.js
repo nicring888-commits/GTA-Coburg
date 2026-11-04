@@ -35,40 +35,42 @@ const DEG = Math.PI / 180;
 //   top/horizon/ground: Himmelskuppel · sun/sunI: Sonnenfarbe und -stärke (nachts Mond) · amb/ambGround/ambI:
 //   Himmelslicht oben und Rückstrahlung vom Boden (als Kugelflächen-Licht, siehe skyProbe) · fog: Dunstfarbe ·
 //   cloud/shade: Wolken hell/dunkel · exp: Belichtung · bloomT/bloom: Schwelle und Stärke des Leuchtens ·
-//   sat/curve: Sättigung und S-Kurve · lo/hi: Tönung der Schatten und Lichter (Faktoren um 1) · lift: angehobenes Schwarz
+//   sat/curve: Sättigung und S-Kurve · lo/hi: Tönung der Schatten und Lichter (Faktoren um 1) · lift: angehobenes Schwarz ·
+//   key: übliche mittlere Bildhelligkeit zu dieser Zeit; die Augenanpassung (js/post.js) gleicht nur Abweichungen davon aus
 const TIMECYCLE = [
-  { t: 0, top: '#040917', horizon: '#2b2633', ground: '#0c0d12', sun: '#93a8ff', sunI: 0.32, amb: '#4a5b92', ambGround: '#2c2219', ambI: 0.5, fog: '#1d202c',
-    cloud: '#1c2232', shade: '#0b0e16', exp: 1.9, bloomT: 0.75, bloom: 0.2, sat: 0.86, curve: 0.26, lo: [0.86, 0.95, 1.14], hi: [1.07, 0.97, 0.84], lift: 0.014 },
+  { t: 0, top: '#040917', horizon: '#2b2633', ground: '#0c0d12', sun: '#93a8ff', sunI: 0.32, amb: '#4a5b92', ambGround: '#2c2219', ambI: 0.56, fog: '#1d202c',
+    cloud: '#1c2232', shade: '#0b0e16', exp: 1.9, bloomT: 0.75, bloom: 0.23, sat: 0.9, curve: 0.3, lo: [0.86, 0.95, 1.14], hi: [1.07, 0.97, 0.84], lift: 0.014, key: 0.02 },
   { t: 4.6, same: 0 },
   // blaue Stunde vor dem Aufgang
   { t: 5.5, top: '#18295a', horizon: '#b4827a', ground: '#28252d', sun: '#ff9466', sunI: 0.9, amb: '#7d84b2', ambGround: '#43352f', ambI: 0.78, fog: '#8b7f8e',
-    cloud: '#d49a8a', shade: '#4a4660', exp: 1.5, bloomT: 0.9, bloom: 0.14, sat: 0.92, curve: 0.24, lo: [0.9, 0.96, 1.1], hi: [1.06, 0.99, 0.9], lift: 0.012 },
+    cloud: '#d49a8a', shade: '#4a4660', exp: 1.5, bloomT: 0.9, bloom: 0.14, sat: 0.92, curve: 0.24, lo: [0.9, 0.96, 1.1], hi: [1.06, 0.99, 0.9], lift: 0.012, key: 0.045 },
   // Sonnenaufgang: tief, warm, lange Schatten
   { t: 6.6, top: '#3a5c9e', horizon: '#ffb27c', ground: '#5a4a44', sun: '#ffa058', sunI: 2.2, amb: '#c6b0aa', ambGround: '#6b5546', ambI: 1.12, fog: '#e2b99c',
-    cloud: '#ffc8a0', shade: '#8a7286', exp: 1.24, bloomT: 1.0, bloom: 0.09, sat: 1.08, curve: 0.24, lo: [0.92, 0.97, 1.08], hi: [1.07, 0.99, 0.88], lift: 0.01 },
-  { t: 8.2, top: '#3c76c6', horizon: '#d4e3f0', ground: '#6b6a5e', sun: '#ffe7c8', sunI: 2.85, amb: '#bfd6f6', ambGround: '#7c7562', ambI: 1.58, fog: '#c8dbed',
-    cloud: '#ffffff', shade: '#a6b1c0', exp: 1.08, bloomT: 1.05, bloom: 0.07, sat: 1.06, curve: 0.22, lo: [0.94, 0.985, 1.05], hi: [1.04, 1.0, 0.93], lift: 0.01 },
-  // Mittag: kräftiges Blau, helles fast weißes Licht
-  { t: 12.5, top: '#2d69c4', horizon: '#c3dbf0', ground: '#6b6a5e', sun: '#fff3e2', sunI: 3.05, amb: '#c2daff', ambGround: '#857b6a', ambI: 1.62, fog: '#c4d8ec',
-    cloud: '#ffffff', shade: '#a9b3c0', exp: 1.04, bloomT: 1.08, bloom: 0.07, sat: 1.07, curve: 0.24, lo: [0.94, 0.985, 1.05], hi: [1.035, 1.0, 0.94], lift: 0.01 },
-  { t: 16.5, top: '#3370c2', horizon: '#d6dde4', ground: '#6b6a5e', sun: '#ffe6bc', sunI: 2.9, amb: '#c6d6ef', ambGround: '#82785f', ambI: 1.52, fog: '#ced8e2',
-    cloud: '#fffaf2', shade: '#a7afbb', exp: 1.08, bloomT: 1.05, bloom: 0.07, sat: 1.09, curve: 0.24, lo: [0.94, 0.98, 1.05], hi: [1.05, 1.0, 0.91], lift: 0.01 },
-  // goldene Stunde
-  { t: 18.6, top: '#4266a8', horizon: '#ffb676', ground: '#5c4b40', sun: '#ffab5c', sunI: 2.55, amb: '#d4b8aa', ambGround: '#6e5848', ambI: 1.16, fog: '#e7b892',
-    cloud: '#ffc694', shade: '#8f7484', exp: 1.18, bloomT: 1.0, bloom: 0.09, sat: 1.15, curve: 0.25, lo: [0.9, 0.96, 1.1], hi: [1.08, 0.99, 0.86], lift: 0.01 },
+    cloud: '#ffc8a0', shade: '#8a7286', exp: 1.24, bloomT: 1.0, bloom: 0.09, sat: 1.08, curve: 0.24, lo: [0.92, 0.97, 1.08], hi: [1.07, 0.99, 0.88], lift: 0.01, key: 0.085 },
+  // Tag: kräftige Sonne gegen schwächeres Himmelslicht (deutliche, kühle Schatten), sattes Blau, mehr Kontrast
+  { t: 8.2, top: '#356fc4', horizon: '#cfe0f0', ground: '#6b6a5e', sun: '#ffe4c0', sunI: 3.35, amb: '#b4cef4', ambGround: '#7c7562', ambI: 1.28, fog: '#c4d8ec',
+    cloud: '#ffffff', shade: '#a2adbd', exp: 1.12, bloomT: 1.05, bloom: 0.08, sat: 1.12, curve: 0.3, lo: [0.91, 0.97, 1.08], hi: [1.05, 1.0, 0.91], lift: 0.008, key: 0.17 },
+  // Mittag: tiefes Blau, helles fast weißes Licht
+  { t: 12.5, top: '#2662c2', horizon: '#bdd7ef', ground: '#6b6a5e', sun: '#fff2de', sunI: 3.55, amb: '#b8d2fb', ambGround: '#857b6a', ambI: 1.3, fog: '#c0d6ec',
+    cloud: '#ffffff', shade: '#a5afbd', exp: 1.08, bloomT: 1.08, bloom: 0.08, sat: 1.13, curve: 0.32, lo: [0.91, 0.97, 1.08], hi: [1.045, 1.0, 0.92], lift: 0.008, key: 0.21 },
+  { t: 16.5, top: '#2d6ac0', horizon: '#d2dbe4', ground: '#6b6a5e', sun: '#ffe2b4', sunI: 3.4, amb: '#bccfee', ambGround: '#82785f', ambI: 1.24, fog: '#cbd6e2',
+    cloud: '#fffaf2', shade: '#a3acb9', exp: 1.12, bloomT: 1.05, bloom: 0.08, sat: 1.15, curve: 0.32, lo: [0.91, 0.965, 1.08], hi: [1.06, 1.0, 0.89], lift: 0.008, key: 0.2 },
+  // goldene Stunde: warmes Streiflicht, Schatten blau statt lila
+  { t: 18.6, top: '#3f64a8', horizon: '#ffb070', ground: '#5c4b40', sun: '#ffa452', sunI: 2.9, amb: '#c9b4a6', ambGround: '#6e5848', ambI: 1.0, fog: '#e3b48c',
+    cloud: '#ffc48e', shade: '#86737c', exp: 1.2, bloomT: 1.0, bloom: 0.1, sat: 1.16, curve: 0.3, lo: [0.9, 0.96, 1.08], hi: [1.08, 0.99, 0.85], lift: 0.008, key: 0.12 },
   // Sonnenuntergang
-  { t: 19.7, top: '#2d3e78', horizon: '#ff8752', ground: '#4a3a38', sun: '#ff763a', sunI: 1.7, amb: '#a68aa0', ambGround: '#5a4440', ambI: 0.95, fog: '#c78876',
-    cloud: '#ff9e70', shade: '#5e4a66', exp: 1.34, bloomT: 0.95, bloom: 0.11, sat: 1.13, curve: 0.25, lo: [0.88, 0.95, 1.12], hi: [1.09, 0.97, 0.84], lift: 0.012 },
+  { t: 19.7, top: '#2c3f7c', horizon: '#ff9050', ground: '#4a3a38', sun: '#ff7a36', sunI: 1.9, amb: '#a89c8c', ambGround: '#5c4a3e', ambI: 0.85, fog: '#cc9878',
+    cloud: '#ff9f68', shade: '#5a4a5c', exp: 1.28, bloomT: 0.95, bloom: 0.12, sat: 1.02, curve: 0.28, lo: [0.96, 0.97, 1.0], hi: [1.06, 0.99, 0.88], lift: 0.01, key: 0.075 },
   // blaue Stunde nach dem Untergang (Mond übernimmt ab ≈ 20:20)
   { t: 20.6, top: '#121b42', horizon: '#76587a', ground: '#1c1a22', sun: '#8c94d2', sunI: 0.4, amb: '#686a9a', ambGround: '#3a2e2a', ambI: 0.64, fog: '#47405a',
-    cloud: '#5a4a6a', shade: '#1e1e30', exp: 1.66, bloomT: 0.82, bloom: 0.17, sat: 0.94, curve: 0.26, lo: [0.86, 0.94, 1.14], hi: [1.07, 0.97, 0.86], lift: 0.013 },
+    cloud: '#5a4a6a', shade: '#1e1e30', exp: 1.66, bloomT: 0.82, bloom: 0.17, sat: 0.94, curve: 0.26, lo: [0.86, 0.94, 1.14], hi: [1.07, 0.97, 0.86], lift: 0.013, key: 0.035 },
   { t: 21.6, same: 0 },
   { t: 24, same: 0 },
 ];
 // Bewölkt/Regen: Himmel und Licht werden grau (gemischt mit w.dark)
 const SKY_GREY = { top: '#8792a0', horizon: '#b4bcc4', ground: '#5f5f5a', amb: '#c4ccd6', cloud: '#9aa1aa', shade: '#5d636c' };
 const TC_COLORS = ['top', 'horizon', 'ground', 'sun', 'amb', 'ambGround', 'fog', 'cloud', 'shade'];
-const TC_NUMS = ['sunI', 'ambI', 'exp', 'bloomT', 'bloom', 'sat', 'curve', 'lift'];
+const TC_NUMS = ['sunI', 'ambI', 'exp', 'bloomT', 'bloom', 'sat', 'curve', 'lift', 'key'];
 // „same: i“ übernimmt die Werte von Eintrag i; Farben als THREE.Color (linear) vorbereiten
 for (const k of TIMECYCLE) {
   if (k.same !== undefined) Object.assign(k, TIMECYCLE[k.same], { t: k.t });
@@ -352,6 +354,7 @@ class Atmosphere {
       P.sunDir.copy(this.sunTrue); P.sunCol.copy(C.sun).multiplyScalar(1 + this.golden * 1.5);
       P.sunVis = w.sun * (1 - n) * (1 - g * 0.6); P.night = n; P.wet = this.wet; P.cloud = w.cloud; P.cloudT = this.time; P.golden = this.golden;
       post.exposure = tc.exp * (1 + g * 0.12);
+      if (post.eye) post.eye.key = tc.key * (1 - gg * 0.25);
       // Bloom und Farblook aus der Tabelle; trübes Wetter: weniger Sättigung und Kontrast, Tönung schwächer
       P.bloomT = tc.bloomT; P.bloom = tc.bloom * (1 + g * 0.3);
       const G = P.grade || (P.grade = { lo: new THREE.Vector3(), hi: new THREE.Vector3() }), one = this._one || (this._one = new THREE.Vector3(1, 1, 1));
