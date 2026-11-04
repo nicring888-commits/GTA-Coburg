@@ -854,6 +854,7 @@
     if (pressed.KeyN) toggleNight();
     if (pressed.KeyK) cycleWeather();
     if (pressed.KeyO) ui.toast('Grafik: ' + post.cycle(), 1.6);
+    if (pressed.KeyB) ui.toast('Bewegungsunschärfe ' + (post.toggleBlur() ? 'an' : 'aus'), 1.6);
     if (pressed.KeyM || pressed.KeyG) ui.toast(property.inside.home.venue ? 'Erst nach draußen gehen' : 'Erst die Wohnung verlassen', 1.5);
     const io = property.inside, mv = walkInput();
     mv.run = false; // drinnen wird nicht gerannt
@@ -1038,6 +1039,7 @@
     if (pressed.KeyN) toggleNight();
     if (pressed.KeyK) cycleWeather();
     if (pressed.KeyO) ui.toast('Grafik: ' + post.cycle(), 1.6);
+    if (pressed.KeyB) ui.toast('Bewegungsunschärfe ' + (post.toggleBlur() ? 'an' : 'aus'), 1.6);
     if (pressed.KeyC && (mode === 'drive' || ride)) camMode = 1 - camMode;
     const freeze = !!(races.active && races.active.t < 0);
     if (pressed.KeyE && !freeze) {

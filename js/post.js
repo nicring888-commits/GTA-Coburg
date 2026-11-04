@@ -112,6 +112,11 @@ class PostFX {
     // Augenanpassung (seit v3.18.0): mittlere Helligkeit des Bildes, träge nachgeführt; ändert die Belichtung der
     // Tabelle nur in Grenzen (dunkle Gassen heller, Blick in den hellen Himmel dunkler). eye.reset: sofort einstellen
     this.eye = { on: !/[?&]adapt=0\b/.test(location.search), reset: true, min: 0.8, max: 1.3, key: 0.2, rate: 1.4, dt: 1 / 60, last: 0 };
+    // Bewegungsunschärfe (seit v3.18.0, Grafik-Phase G9): nur bei schneller Kamerafahrt, nur zum Bildrand hin;
+    // abschaltbar (Taste B, Startbildschirm, ?blur=0), Wahl gespeichert unter gta-coburg-blur
+    let blurOn = !/[?&]blur=0\b/.test(location.search);
+    try { if (localStorage.getItem('gta-coburg-blur') === '0') blurOn = false; } catch (e) { /* ohne Speicher */ }
+    this.blur = { on: blurOn, k: 0, prevVP: new THREE.Matrix4(), prevPos: new THREE.Vector3(), t: 0, has: false };
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quad.frustumCulled = false;
     this.qScene = new THREE.Scene(); this.qScene.add(this.quad);
@@ -124,6 +129,13 @@ class PostFX {
 
   get q() { return POST_QUALITY[this.level]; }
   get enabled() { return this.q.post && this.gl2; }
+
+  // Bewegungsunschärfe an/aus (Taste B, Startbildschirm); gibt den neuen Zustand zurück
+  toggleBlur(on) {
+    this.blur.on = on === undefined ? !this.blur.on : !!on;
+    try { localStorage.setItem('gta-coburg-blur', this.blur.on ? '1' : '0'); } catch (e) { /* ohne Speicher */ }
+    return this.blur.on;
+  }
 
   // Qualitätsstufe wechseln (Taste O); gibt den Namen zurück
   cycle() {
@@ -358,6 +370,8 @@ class PostFX {
       uniform vec3 uEye;                 // x: an/aus, y: untere, z: obere Grenze des Faktors
       uniform float uEyeKey;
       uniform vec3 uGradeLo, uGradeHi;   // Tönung der Schatten und Lichter
+      uniform mat4 uPrevVP;              // Blick-Projektion des letzten Bildes (Bewegungsunschärfe)
+      uniform float uBlur;
       uniform float uSat, uCurve, uLift;
       uniform vec2 uRes;
       // Wolkenschatten (seit v3.15.0, Grafik-Phase 10b): dieselbe Rauschart wie die Wolken am Himmel (js/atmosphere.js)
@@ -423,6 +437,22 @@ class PostFX {
       vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
       void main() {
         vec3 col = texture2D(tColor, vUv).rgb;
+        #ifdef USE_BLUR
+          // Kamera-Bewegungsunschärfe: Punkt mit der Blick-Projektion des letzten Bildes zurückrechnen, entlang der
+          // Bewegung mitteln; Bildmitte (Auto, Fadenkreuz) bleibt scharf, Länge begrenzt
+          if (uBlur > 0.001) {
+            vec4 pc = uPrevVP * (uCamWorld * vec4(viewPosAt(vUv), 1.0));
+            vec2 vel = (vUv - (pc.xy / pc.w * 0.5 + 0.5)) * uBlur;
+            vel *= smoothstep(0.14, 0.6, length((vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0)));
+            float vl = length(vel);
+            if (vl > 0.035) vel *= 0.035 / vl;
+            if (vl > 0.0008) {
+              vec3 acc = col;
+              for (int i = 1; i < 8; i++) acc += texture2D(tColor, vUv + vel * (float(i) / 7.0 - 0.5)).rgb;
+              col = acc / 8.0;
+            }
+          }
+        #endif
         float d = texture2D(tDepth, vUv).r;
         vec3 dbgSSR = vec3(0.0);
         if (d < 0.99999) {
@@ -517,6 +547,7 @@ class PostFX {
       uProj: { value: new THREE.Matrix4() }, uSceneTexel: { value: new THREE.Vector2() },
       uSunVis: { value: 1 }, uRes: { value: new THREE.Vector2() }, uCloud: { value: 0.2 }, uCloudT: { value: 0 },
       tEye: { value: null }, uEye: { value: new THREE.Vector3() }, uEyeKey: { value: 0.2 },
+      uPrevVP: { value: new THREE.Matrix4() }, uBlur: { value: 0 },
       uGradeLo: { value: new THREE.Vector3(1, 1, 1) }, uGradeHi: { value: new THREE.Vector3(1, 1, 1) }, uSat: { value: 1 }, uCurve: { value: 0.22 }, uLift: { value: 0.012 },
     });
   }
@@ -641,7 +672,18 @@ class PostFX {
     if (G) G.begin('comp');
     const c = this.compMat, u = c.uniforms;
     u.tEye.value = T.eyeA.texture; u.uEye.value.set(A.on ? 1 : 0, A.min, A.max); u.uEyeKey.value = A.key;
-    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0);
+    // Bewegungsunschärfe: Stärke aus dem Kameratempo (ab ≈ 80 km/h), bei Sprüngen (Schnellreise, Messlauf) aus
+    const Bl = this.blur, nowB = performance.now() / 1000, dtB = Bl.t ? nowB - Bl.t : 0;
+    let kB = 0;
+    if (Bl.on && Bl.has && dtB > 0.004 && dtB < 0.25) {
+      const jump = camera.position.distanceTo(Bl.prevPos);
+      if (jump < 25) kB = U.smoothstep(22, 45, jump / dtB) * 0.55;
+    }
+    Bl.k += (kB - Bl.k) * 0.25;
+    u.uBlur.value = Bl.k; u.uPrevVP.value.copy(Bl.prevVP);
+    Bl.prevVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    Bl.prevPos.copy(camera.position); Bl.t = nowB; Bl.has = true;
+    const want = (q.ao ? 1 : 0) + (q.bloom ? 2 : 0) + (this.debugAO ? 4 : 0) + (q.ssr && !this.noSSR ? 8 : 0) + (this.debugSSR ? 16 : 0) + (this.debugRays ? 32 : 0) + (this.blur.on ? 64 : 0);
     if (c.userData.key !== want) {
       c.userData.key = want;
       c.defines = {};
@@ -652,6 +694,7 @@ class PostFX {
       if (this.debugSSR) c.defines.DEBUG_SSR = '';
       if (q.bloom) c.defines.USE_RAYS = '';
       if (this.debugRays) c.defines.DEBUG_RAYS = '';
+      if (this.blur.on) c.defines.USE_BLUR = '';
       c.needsUpdate = true;
     }
     u.tColor.value = T.scene.texture; u.tDepth.value = depth; u.tAO.value = T.ao.texture; u.tBloom.value = T.b1.texture;

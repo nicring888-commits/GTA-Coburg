@@ -99,6 +99,17 @@
       for (const lv of LEVELS) if (lv !== level) {
         const b = document.createElement('button'); b.textContent = lv; b.onclick = () => reloadWith(lv); el.appendChild(b);
       }
+      // Bewegungsunschärfe an/aus (seit v3.18.0; im Spiel auch Taste B)
+      const bl = document.createElement('button');
+      const blurOn = () => { try { return localStorage.getItem('gta-coburg-blur') !== '0'; } catch (e) { return true; } };
+      const label = () => { bl.textContent = 'Bewegungsunschärfe: ' + (blurOn() ? 'an' : 'aus'); };
+      bl.onclick = () => {
+        const on = !blurOn();
+        if (window.game && window.game.post) window.game.post.toggleBlur(on);
+        else try { localStorage.setItem('gta-coburg-blur', on ? '1' : '0'); } catch (e) { /* ohne Speicher */ }
+        label();
+      };
+      label(); el.append(' · ', bl);
       el.classList.remove('hidden');
     },
     get finished() { return finished; },
