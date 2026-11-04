@@ -687,13 +687,25 @@ class World {
             rPuddle = smoothstep(0.52, 0.66, g2 * 0.7 + g3 * 0.3) * uWet;
             diffuseColor.rgb *= 1.0 - 0.38 * uWet - 0.2 * rPuddle;
           }`)
+        .split('#include <roughnessmap_fragment>').join(`#include <roughnessmap_fragment>
+          #ifdef STANDARD
+            roughnessFactor = mix(mix(0.84, 0.3, uWet), 0.05, rPuddle);
+          #endif`)
+        .split('#include <lights_fragment_maps>').join(`#include <lights_fragment_maps>
+          #ifdef STANDARD
+            iblIrradiance = vec3(0.0); // Himmelslicht kommt aus LightProbe/Halbkugel, nicht doppelt aus dem Umgebungsbild
+          #endif`)
         .replace('#include <opaque_fragment>', `
           {
             vec3 V = normalize(vRPos - cameraPosition);
             vec3 Rf = reflect(V, vec3(0.0, 1.0, 0.0));
             float fres = 0.03 + 0.97 * pow(1.0 - max(-V.y, 0.0), 5.0);
             vec3 sky = mix(uSkyHorizon, uSkyTop, pow(max(Rf.y, 0.0), 0.6));
-            outgoingLight = mix(outgoingLight, sky, uWet * (0.1 + 0.75 * fres) * (0.45 + 0.55 * rPuddle) * (1.0 - uNight * 0.6));
+            float wk = uWet * (0.1 + 0.75 * fres) * (0.45 + 0.55 * rPuddle) * (1.0 - uNight * 0.6);
+            #ifdef STANDARD
+              wk *= 0.85; // PBR spiegelt den Himmel schon (unscharf) über das Umgebungsbild
+            #endif
+            outgoingLight = mix(outgoingLight, sky, wk);
           }
           #include <opaque_fragment>
           // Spiegelstärke für die Nachbearbeitung (js/post.js, seit v3.15.0): Alpha 1 … 2 = waagrechte nasse Fläche (das
@@ -795,7 +807,15 @@ class World {
             diffuseColor.rgb *= 1.0 - 0.3 * uWet;
           }`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-          normal = normalize(normal + (viewMatrix * vec4(rfBumpW, 0.0)).xyz);`);
+          normal = normalize(normal + (viewMatrix * vec4(rfBumpW, 0.0)).xyz);`)
+        .split('#include <roughnessmap_fragment>').join(`#include <roughnessmap_fragment>
+          #ifdef STANDARD
+            roughnessFactor = mix(0.72, 0.32, uWet);
+          #endif`)
+        .split('#include <lights_fragment_maps>').join(`#include <lights_fragment_maps>
+          #ifdef STANDARD
+            iblIrradiance = vec3(0.0); // Himmelslicht kommt aus LightProbe/Halbkugel, nicht doppelt aus dem Umgebungsbild
+          #endif`);
     };
     mat.customProgramCacheKey = () => 'roof';
     return mat;
@@ -1219,11 +1239,11 @@ class World {
   }
 
   finishRoads(chunks, marks) {
-    const mat = (o) => this.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 }));
+    const mat = (o) => this.roadShader(this.surfaceMat({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 }));
     const order = { path: 0, track: 0, foot: 1, steps: 1, plaza: 2, road: 3 };
     for (const k in chunks) chunks[k].meshes(mat(order[k]), { receive: true }).forEach(m => this.group.add(m));
     marks.meshes(mat(5), { receive: true }).forEach(m => this.group.add(m));
-    this.curbs.meshes(this.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true })), { receive: true }).forEach(m => this.group.add(m));
+    this.curbs.meshes(this.roadShader(this.surfaceMat({ vertexColors: true })), { receive: true }).forEach(m => this.group.add(m));
     this.curbs = null;
     this.bridgeParts.meshes(new THREE.MeshLambertMaterial({ vertexColors: true }), { cast: true, receive: true }).forEach(m => this.group.add(m));
     this.bridgeParts = null;
@@ -1559,6 +1579,15 @@ class World {
     return this._facadeTex;
   }
 
+  // Oberflächen der Welt (seit v3.18.0, Grafik-Phase G2): auf Stufe „voll“ MeshStandardMaterial mit Rauheit je Baustoff
+  // und Nässe (Glanzlichter der Sonne, Spiegelung des Himmels nach Rauheit), sonst wie bisher Lambert. Die Shader-Ergänzungen
+  // unten setzen die Rauheit nur in #ifdef STANDARD; der Lambert-Weg bleibt bitgleich. ?pbr=0 schaltet zum Vergleich ab.
+  surfaceMat(opts) {
+    // WebGPU-Probe (?gfx=webgpu) vorerst ohne: dort brachen die Bildraten ein (bis 1 s je Bild), Nachzug in G10
+    if (World.pbr === undefined) World.pbr = Mat.budget.level === 'voll' && !(typeof GfxProbe !== 'undefined' && GfxProbe.wanted) && !/[?&]pbr=0\b/.test(location.search);
+    return World.pbr ? new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.85, metalness: 0 }, opts)) : new THREE.MeshLambertMaterial(opts);
+  }
+
   // Shader-Ergänzung für Hauswände (Innenstadt und Umland): Gewände in eigener Farbe, Glas mit Spiegelung von Himmel
   // und Gegenüber, Vorhänge, Sockel, Geschossgesimse, Verwitterung, Kontaktschatten am Boden und Schaufenster in der
   // Altstadt. Die Wand-UV ist (Länge / 12,8 m, Höhe über Grund / 12,4 m). Mit Wandprofil (aProfA/B/C, siehe Bucket)
@@ -1613,6 +1642,7 @@ class World {
           float winShut(float k) { return k < 1.5 ? 1.0 : k < 2.5 ? 0.0 : k < 4.5 ? 2.0 : k < 5.5 ? 3.0 : k < 6.5 ? 2.0 : 3.0; }
           float winDiv(float k) { return k < 2.5 ? 2.0 : k < 4.5 ? 1.0 : k < 5.5 ? 0.0 : k < 6.5 ? 1.0 : 0.0; }
           float fGlass = 0.0, fShop = 0.0, fCurtain = 0.0, fGlassVar = 0.0, fFlat = 0.0, fLit = 0.0, fRural = 0.0;
+          float fRough = 0.88; // Rauheit (nur PBR): Putz/Stein rau, Rahmen halbmatt, Glas glatt
           vec2 fUv = vec2(0.0), fUvG = vec2(0.0);
           // Oberkante der Wand an der Stelle u (Linienzug links – First – rechts aus dem Wandprofil)
           float topAt(float u) {
@@ -2038,6 +2068,7 @@ class World {
             if (shop) glassC = mix(vec3(0.03, 0.03, 0.035), mix(vec3(0.2, 0.17, 0.13), vec3(0.14, 0.15, 0.17), wr), smoothstep(0.6, 2.5, h) * 0.8);
             diffuseColor.rgb = mix(diffuseColor.rgb, glassC, glass);
             fGlass = glass; fGlassVar = fh(cell * 1.7 + bh * 3.0);
+            fRough = mix(mix(0.88, 0.5, frame), 0.07 + 0.08 * fGlassVar, glass) * (1.0 - 0.42 * uWet * (1.0 - glass));
             // Putz: großflächige Flecken und senkrechte Schmutzfahnen
             vec2 wp = vec2(vWPos.x + vWPos.z, vWPos.y);
             float big = texture2D(detailMap, wp * 0.045).r;
@@ -2059,6 +2090,9 @@ class World {
             float fres = 0.08 + 0.92 * pow(1.0 - max(dot(-V, N), 0.0), 4.0);
             vec3 sky = R.y > 0.0 ? mix(uSkyHorizon, uSkyTop, pow(R.y, 0.6)) : mix(uSkyHorizon * 0.45, uSkyGround * 0.35, clamp(-R.y * 3.0, 0.0, 1.0));
             float k = fGlass * (0.12 + 0.55 * fres) * (1.0 - uNight * 0.85) * (1.0 - fCurtain * 0.5) * (1.0 - fShop * 0.45);
+            #ifdef STANDARD
+              k *= 0.45; // PBR spiegelt den Himmel schon über das Umgebungsbild
+            #endif
             sky = mix(sky, uSkyGround * 0.6, fGlassVar * 0.6);
             outgoingLight = mix(outgoingLight, sky, k);
             float hb = vWPos.y - vProfB.w;
@@ -2080,6 +2114,14 @@ class World {
         .replace('#include <emissivemap_fragment>', `
           #ifdef USE_EMISSIVEMAP
             totalEmissiveRadiance *= texture2D(emissiveMap, fUvG).rgb * (1.0 - fFlat) * step(0.5, fGlass) * (1.0 - fRural);
+          #endif`)
+        .split('#include <roughnessmap_fragment>').join(`#include <roughnessmap_fragment>
+          #ifdef STANDARD
+            roughnessFactor = fRough;
+          #endif`)
+        .split('#include <lights_fragment_maps>').join(`#include <lights_fragment_maps>
+          #ifdef STANDARD
+            iblIrradiance = vec3(0.0); // Himmelslicht kommt aus LightProbe/Halbkugel, nicht doppelt aus dem Umgebungsbild
           #endif`);
     };
     mat.customProgramCacheKey = () => 'facade';
@@ -2208,11 +2250,11 @@ class World {
       }
     }
     if (this.lod2) console.info(`Gebäude: ${this.lod2Count} aus LoD2, ${osmBuilt} aus OSM ergänzt`);
-    const wallMat = new THREE.MeshLambertMaterial({
+    const wallMat = this.surfaceMat({
       vertexColors: true, map: tex.color, emissive: new THREE.Color('#ffffff'), emissiveMap: tex.lit, emissiveIntensity: 0,
     });
     this.facadeShader(wallMat, tex);
-    const plainMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide });
+    const plainMat = this.surfaceMat({ vertexColors: true, side: THREE.FrontSide, roughness: 0.9 });
     this.windowMaterials.push(wallMat);
     this._buildingMats = { wall: wallMat, plain: plainMat };
     walls.meshes(wallMat, { cast: true, receive: true }).forEach(m => this.group.add(m));
@@ -2220,7 +2262,7 @@ class World {
     for (const [ti, bucket] of photoRoofs) {
       const g = bucket.geometry();
       if (!g) continue;
-      const m = new THREE.Mesh(g, this.roofShader(new THREE.MeshLambertMaterial({ map: this.ortho[ti].tex, vertexColors: true })));
+      const m = new THREE.Mesh(g, this.roofShader(this.surfaceMat({ map: this.ortho[ti].tex, vertexColors: true })));
       m.castShadow = true; m.receiveShadow = true;
       this.group.add(m);
     }

@@ -980,7 +980,7 @@ class Region {
       t.terrainMat = new THREE.MeshLambertMaterial({ map: this.placeholder(), color: ORTHO_TINT });
       this.world.addDetail(t.terrainMat, this._detail);
     }
-    t.roofMat = this.world.roofShader(new THREE.MeshLambertMaterial({ map: this.placeholder(), vertexColors: true }));
+    t.roofMat = this.world.roofShader(this.world.surfaceMat({ map: this.placeholder(), vertexColors: true }));
     t.mats = [t.terrainMat, t.roofMat];
     const flag = this.ortho && this.ortho.tiles[t.ti + ',' + t.tj];
     t.photo = !!flag;
@@ -1142,7 +1142,7 @@ class Region {
   // ---------------- Straßen ----------------
   roadMaterials() {
     if (!this._roadMat) {
-      const mat = o => this.world.roadShader(new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 }));
+      const mat = o => this.world.roadShader(this.world.surfaceMat({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1 - o, polygonOffsetUnits: -2 - o * 2 }));
       this._roadMat = mat(3); this._markMat = mat(5);
     }
     return [this._roadMat, this._markMat];
