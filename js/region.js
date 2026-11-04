@@ -1963,6 +1963,8 @@ class Region {
       life.glow = glows;
       life.lamps = lamps; // für das Laternenlicht an Fassaden (js/post.js, seit v3.18.0)
     }
+    // geparkte Autos auf den Parkflächen der Kachel (js/parking.js, seit v3.18.0)
+    if (typeof ParkKit !== 'undefined') ParkKit.build(this, t, life);
     // Ladenschilder an den Fassaden und begehbare Lokale (Döner, Gasthaus, Café, Mode, Drogerie, Bücher)
     // dazu Firmennamen (OSM name) an Gewerbe- und Industriehallen; an Hallen größere Schrift unter der Attika
     // (Punkt: Ecke der Halle, die der Straße am nächsten liegt, 1 m nach innen – große Hallen liegen weit von der Straße)
@@ -2677,6 +2679,11 @@ class Region {
       if (t.rivers) {
         out.x = x; out.z = z;
         if (pushFromRivers(t.rivers, out, r, this.world._tmp, y)) { x = out.x; z = out.z; moved = true; }
+      }
+      // geparkte Autos (js/parking.js, seit v3.18.0)
+      if (t.life && t.life.lot) {
+        out.x = x; out.z = z;
+        if (ParkKit.collide(t.life.lot, x, z, r, out)) { x = out.x; z = out.z; moved = true; }
       }
       if (!t.treeGrid) continue;
       const TR = t.trees, tl = t.treeGrid.query(x, z, r + 1, this.world._tmp);

@@ -475,6 +475,19 @@
     return list;
   }
 
+  // geparktes Auto auf einem Parkplatz (js/parking.js) in Reichweite; take: als echtes Auto aufstellen und zurückgeben
+  function lotCar(x, z, take) {
+    if (!world.region || typeof ParkKit === 'undefined') return null;
+    const L = ParkKit.nearest(world.region, x, z, 3.2);
+    if (!L || !take) return L;
+    ParkKit.hide(L);
+    const v = new Vehicle(scene, L.color, L.kind);
+    v.place(L.x, L.z, L.h, world);
+    v.lotTheft = true;
+    parked.push(v);
+    return v;
+  }
+
   function nearestCar(x, z, maxD) {
     let best = null, bd = maxD;
     for (const c of enterable()) {
@@ -489,6 +502,10 @@
     if (unit) {
       police.takeCar(c); parked.push(c);
       police.crime(1, 'Streifenwagen geklaut!', 2);
+    } else if (c.lotTheft) {
+      c.lotTheft = false;
+      if (police.witness(c.x, c.z, 120) || Math.random() < 0.3) police.crime(0, 'Autodiebstahl! Jemand hat die Polizei gerufen', 1);
+      else ui.toast(`${c.spec.name} geklaut`, 1.8);
     } else if (c.ai) {
       traffic.release(c); parked.push(c);
       if (c.kind === 'police') police.crime(1, 'Streifenwagen geklaut!', 2);
@@ -1047,7 +1064,10 @@
       else if (mode === 'drive') {
         if (Math.abs(car.speed) < 6 || car.burning) { exitCar(); if (races.active) races.stop('Rennen abgebrochen'); }
         else ui.toast('Erst langsamer fahren', 1.2);
-      } else { const c = nearestCar(player.x, player.z, 4.2); if (c && c.remote) net.requestEnter(c); else if (c) enterCar(c); }
+      } else {
+        const c = nearestCar(player.x, player.z, 4.2) || lotCar(player.x, player.z, true);
+        if (c && c.remote) net.requestEnter(c); else if (c) enterCar(c);
+      }
     }
     if (pressed.KeyR && mode === 'drive' && !freeze) resetCar();
     if (pressed.KeyG && !freeze && !ride) { property.openGarage(); return; }
@@ -1212,6 +1232,8 @@
     } else {
       ui.setSpeed(0, '', false);
       const c = nearestCar(player.x, player.z, 4.2);
+      const lc = !c && lotCar(player.x, player.z, false);
+      if (lc) prompt = `<kbd>E</kbd> ${VEHICLE_KINDS[lc.kind].name} klauen`;
       if (c && c.remote) prompt = net.prompt(c);
       else if (c) prompt = c.kind === 'police' && (c.ai || police.units.some(u => u.car === c)) ? '<kbd>E</kbd> Streifenwagen klauen'
         : c.ai ? `<kbd>E</kbd> ${c.spec.name} klauen` : c.ownedId ? `<kbd>E</kbd> Einsteigen: dein ${c.spec.name}` : '<kbd>E</kbd> Einsteigen';
