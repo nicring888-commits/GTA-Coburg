@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.18.0 „GTA-V-Optik, Teil 1“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 04.11.2026
+**Version:** 3.19.0 „GTA-V-Optik, Teil 2“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 10.11.2026
 
 ---
 
@@ -149,7 +149,7 @@ und müssen dort bleiben.
 | `js/materials.js` | Materialbibliothek (seit v3.11.0, `Mat`): Voreinstellungen `MAT_PRESETS` (Lack, Chrom, Glas, Gummi, Kunststoff, Metall …), `Mat.make(voreinstellung, werte, schlüssel)` stuft je Grafikstufe ab (voll Physical/Standard, mobil Standard, leicht Lambert) und lässt unbekannte Werte weg; Budget `Mat.aniso`, `Mat.size` (gemalte Texturen); KTX2-Lader (`Mat.ktx2`, `Mat.loadKTX2`, three.js-Erweiterung `KTX2Loader` mit Basis-Transcoder vom CDN, Import-Map in `index.html`) |
 | `js/post.js` | Nachbearbeitung (seit v2.4.0, ohne Zusatzbibliothek): Szene in HDR-Bild (HalfFloat) mit MSAA und Tiefentextur, SSAO in halber Auflösung mit tiefenbewusstem Weichzeichner, seit v3.15.0 Spiegelungen (SSR; Spiegelstärke im Alphakanal des Szenenbilds: 1…2 nasse Straße, 3…4 Glas), Wolkenschatten und Lichtstrahlen (Viertelauflösung, radial verwischt), Luftperspektive (Höhennebel nach Tiefe, Sonnenstreuung), Bloom (Dual-Kawase-Kette bis 1/32), Belichtung, ACES, Farbkorrektur (entsättigt, warme Lichter, kühle Schatten, S-Kurve), Vignette, Körnung. Qualitätsstufen `POST_QUALITY` (Ultra/Hoch/Mittel/Niedrig: MSAA, Pixelverhältnis, SSAO-Proben, Schattenkarte; Niedrig ohne Nachbearbeitung), dynamische Auflösung (`adapt`: bei > 22 ms pro Bild 10 % kleiner, bei Luft langsam wieder größer), `debugAO` zeigt nur die Verdeckung |
 | `js/atmosphere.js` | Himmelskuppel (Sonne, Wolken, Sterne, Dunst), Uhr mit Sonnenstand (`clock`; Aufgang 6, Untergang 20 Uhr; 1 Spielstunde = 1 Minute; Zeitraffer über `setNight`), Abendrot (`SKY_DUSK`, `golden`), Wetter, Regen, Nässe, Umgebungsbild (PMREM); liefert Nebel, Sonne und Belichtung an `post.params` |
-| `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`) |
+| `js/water.js` | Wasser (seit v2.1.0): `WaterSet` aus Wasserflächen (`water`, `river`) und Mittellinien mit Breite; `carveGrid` gräbt das Bett ins Höhengitter (Straßen ausgenommen), `buildSurface` die Wasseroberfläche (Gelände ohne Bett minus 0,35 m), `edges` Uferkanten der Flächen, `riverPieces` + `pushFromRivers` Kollision mit Flussläufen; gemeinsames Material mit wandernden Wellen (`waterMaterial`, `waterTick`); seit v3.19.0 auf Stufe „voll“ `waterFlowShader`: Vertexfarbe der Oberfläche = Fließrichtung (r, g; OSM-Linienrichtung) und Ufernähe (b), gesetzt mit `waterTriColor`; Wellen strömen, Schaum am Ufer, deckend mit Spiegelstärke im Alphakanal (SSR); `?flow=0` = alte Fassung |
 | `js/landscape.js` | Landschaft im Umland (seit v2.5.0): Bodenbedeckungskarte je Kachel aus den OSM-Flächen (`paintCover`: r Acker, g Wiese, b Wald, Feldraine an Feldgrenzen, weichgezeichnet; zweite Karte mit Reihenrichtung je Feld), Geländematerial (`terrainMaterial`: Gras-, Ackerboden- und Waldbodentextur aus der Leinwand, Farbe aus dem unscharfen Luftbild, Ackerart nach Fotofarbe mit Saatreihen, Furchen, Stoppeln, Fahrgassen; Relief über die Normale), 3D-Bewuchs um die Kamera (`update`/`makeCell`: Gras, Getreide, Blumen, Farn als Instanzen in 8-m-Zellen bis 88 m, sinkt am Rand ein), Kronendach-Hülle über fernen Wäldern (`buildCanopy`), Feld- und Waldwege (`splitRural`, `buildTracks`, `trackMaterial`: Fahrspuren, Grasnarbe, Schotter, Asphalt), Dörfer (`buildVillage`: Gärten mit Staketen- und Lattenzaun, Tor und Einfahrt zur Straße, Hecken, Obstbäume, Rundballen an Scheunen) |
 | `js/region.js` | Umland (seit v2.0.0): Kacheln laden und abbauen (`update`, `ensure`), feines Gelände je Kachel (`makeHeights`, Catmull-Rom wie in der Innenstadt), Luftbild je Kachel (Thüringer Mischkacheln im Canvas zusammengesetzt), Straßen aus dem Netz, OSM-Häuser, Bäume nur in der Nähe; Abfragen `heightAt`, `insideBuilding`, `nearestRoad`, `collide`, `clamp` (Landkreisrand), `anchor` (Säulen und Schilder auf die echte Höhe setzen), Übersichtskarte `paintMap`, Minikarte `drawNear` |
 | `js/signals.js` | Verkehrsregelung (seit v3.14.0, `TrafficControl` als `region.control`): Ampelkreuzungen (Knoten mit ≥ 3 Straßen und OSM-Ampel/Furt bis 32 m) und Fußgängerampeln auf der Strecke, Schaltung je Ort (`state`: Gruppe 0 = Arme parallel zum ersten, Gruppe 1 quer; 13 s grün, 2,5 s gelb, 1,5 s alles rot, 1 s rot-gelb; Fußgängerampel 40-s-Umlauf), Regeln je Arm (`rules`: Halt-/Wartelinie, Haifischzähne, Fahrbahnpfeile, Lage der Linie hinter einer Furt), Haltepunkte je Kante für den Verkehr (`stopsOn`), Masten mit Lichtern als Instanzen je Kachel bzw. Innenstadt (`build`, Lichter alle 0,15 s in der Nähe geschaltet) |
@@ -181,6 +181,7 @@ und müssen dort bleiben.
 | `bench/index.html` | Vorher/Nachher-Vergleich zweier Messläufe mit Schieberegler und Messwerten (http://127.0.0.1:8175/bench/, nur mit `node server.js`) |
 | `js/parking.js` | Geparkte Autos (seit v3.18.0, `ParkKit`): Stellplätze aus den OSM-Parkflächen der Ortskacheln (gleiche Reihen wie die Stellplatz-Linien, Überschneidungen an Ecken aussortiert), 40 % belegt, höchstens 70 je Kachel, Art/Farbe/Richtung fest je Platz; Instanzen je Autoart (Lack, übrige Teile dunkel, ohne Schattenwurf); `collide` (in `Region.collide`), `nearest`, `hide`; mit `E` stellt `game.js` (`lotCar`) ein echtes `Vehicle` auf |
 | `js/carlights.js` | Scheinwerferkegel nachts (seit v3.15.0, `CarLights`): Lichtteppich auf der Fahrbahn und zwei Lichtkegel je fahrendem Auto als Instanzen (bis 64, additiv, Alphakanal unberührt), Kegel bei Regen/Nebel stärker; das eigene Auto hat das echte SpotLight aus `game.js` |
+| `js/lightcarpet.js` | Lichterteppich und Lichtglocke (seit v3.19.0, `LightCarpet`, nur Stufe „voll“, `?carpet=0`): beim Start aus dem Straßennetz ≈ 30.500 Laternen (Wohnstraßen immer, größere Straßen nur im Umkreis der Orte aus `places`) und ≈ 22.700 Fensterlichter neben der Straße, ein `THREE.Points`-Zeichenaufruf (additiv, Alphakanal unberührt, Höhe aus `coarseAt`), unter 620–950 m ausgeblendet, fern abgedunkelt; `update` setzt alle 0,25 s die vier stärksten Städte (`SKYGLOW`: Gewicht, Ausdehnung) als `uGlow` in den Himmelsshader. Debug: `window.CARPET_DEBUG` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
@@ -294,6 +295,30 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.19.0 (10.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3) Teil 2: G8b, G9b.**
+  - ✅ **G8b Lichterteppich und Lichtglocke** (Commit `0f5b8fc`): neue Datei `js/lightcarpet.js` (siehe 5). Nachts leuchten
+    alle Orte bis an den Sichtrand (Kamera bis 6,5 km): Laternen an Ortsstraßen (Natrium-Orange an Haupt- und
+    Kreisstraßen, warmweiß in Wohnstraßen), Fensterlichter (8 % bläulich wie Fernseher), leichtes Flimmern. Ferne Punkte
+    werden dunkler statt kleiner (sonst verschmolzen Orte am Horizont zu grellen Balken). Lichtglocke im Himmelsshader
+    (`uGlow[4]`, `uGlowOn`): orange über den Städten, nach dem Dunst addiert, bei Wolken und Nebel stärker; in Coburg bei
+    bedecktem Himmel leuchtet die Wolkendecke. Aufbau 27 ms beim Start, nachts +0,1–0,2 ms GPU (Veste 5,21 → 5,43,
+    Neustadt 4,64 → 4,78, Seßlach 4,52 → 4,68), tagsüber unsichtbar (`visible = false`)
+  - ✅ **G9b Wolken mit Licht und Wasser** (Commit `02edbf8`): Wolken mit dunkler Unterseite der dicken Mitten,
+    Silberrand an dünnen Rändern zur Sonne, Abendrot von unten bei tiefer Sonne (orange, nach dem Untergang rosa).
+    Wasser (nur „voll“): strömt entlang der OSM-Fließrichtung (Bäche schneller als Flüsse, Seen still), Schaum am Ufer
+    und in schnellem Wasser, deckend statt 93 % durchsichtig und als waagrechte Spiegelfläche in der SSR: Häuser,
+    Bäume und Brücken spiegeln sich (geprüft an der Itz in der Stadt und bei Untersiemau). Flussbänder haben dafür eine Mittellinie (4 statt 2 Dreiecke je
+    Stück, gleiche Form). +0,1–0,2 ms GPU an Wasserpunkten; Bauzeit der Kacheln im Rauschen (Neustadt, 14 Kacheln,
+    größter Schritt 9,5 ms)
+  - **Geprüft:** `?three=160`, `?gfx=webgpu` (Teppich dort ausgeblendet, Probe ohne Fehler), `grafik=mobil` (Teppich
+    und Glocke aus, Wasser wie vorher), keine Konsolenfehler, keine fehlerhaften Shader-Programme,
+    `node tools/mp-test.js` 27/27, Daten-Prüfsummen unverändert (3.630 Dateien). Bilder: `bench/shots/g8b-*`,
+    `g9b-*` und Vorher/Nachher-Paare `bench/shots/cmp-g9b-*.jpg` (nur lokal)
+  - ⚠️ **Messfalle:** der erste Besuch eines Punkts im Lauf (wenige Messbilder, Shader und Texturen laden) zeigt
+    Ausreißer (z. B. Feldflur 23 Uhr 14–19 ms statt ≈ 2,5); erst ab dem zweiten Bild am Punkt vergleichen
+  - ⚠️ Gesehen, nicht behoben: dunkle Striche am Horizont im Blick von der Veste am Abend (in alten und neuen Bildern
+    gleich, vermutlich Rand ferner Kacheln oder Kronendach)
 
 - ✅ v3.18.0 (03.–04.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3) Teil 1: G0, G1, G2, G3a, G4a, G6a, G7a, G8a, G9a.**
   - ✅ **G0 Messstand** (Commit `d90d4b6`): GPU-Zeit je Durchgang (`EXT_disjoint_timer_query_webgl2`, Klasse `GpuTimer` in
@@ -1327,10 +1352,13 @@ in Richtung GTA V (Licht und Glanz wirken auf jedes Bild), G3/G4 die zweitgröß
    `?worker=0`, `file://`.
 6. Ergebnis, Messwerte und Grenzen in Abschnitt 6 eintragen, dann Freigabe der nächsten Phase.
 
-**Stand 04.11.2026:** G0, G1, G2, G3a, G4a, G6a, G7a, G8a, G9a umgesetzt, getestet und committet (Details in 6).
-Offen: G3 Rest (Baumarten, Waldränder), **G4 CC0-Automodelle** und **G6/G7 neue OSM-Daten** (Strommasten,
-Bushaltestellen, Schilder) – beides braucht Downloads, die vorher freigegeben werden; G5 Gebäudedetails aus der Nähe,
-G8 Lichterteppich ferner Orte, G9 Wolken mit Licht und Wasser, G10 WebGPU-Nachzug (inkl. PBR).
+**Stand 10.11.2026:** G0, G1, G2, G3a, G4a, G6a, G7a, G8a, G8b, G9a, G9b umgesetzt, getestet und committet (Details in 6).
+Offen, **ohne Downloads** (als Nächstes): **G5 Gebäudedetails aus der Nähe** (Fensterrahmen, Fallrohre, Schornsteine,
+Vordächer; Solaranlagen nur mit Beleg), **G6 Geländeschatten bei tiefer Sonne** (Horizontkarte je Kachel im Worker),
+**G3 Waldränder** (Sträucher/Jungwuchs, Hecken als Körper) und Impostors mit Normalen, G7 Straßenbelag-Abziehbilder
+(Ölflecken, Risse, Teerfugen), geparkte Autos in der Innenstadt.
+Offen, **braucht freigegebene Downloads:** G4 CC0-Automodelle, G6/G7 neue OSM-Daten (Strommasten, Bushaltestellen,
+Schilder, Baumarten). Zuletzt G10 WebGPU-Nachzug (inkl. PBR, Lichterteppich, Wasser-Strömung).
 
 **Entscheidungen (03.11.2026)**
 - Branch: weiter auf `grafik/regionale-architektur`.
