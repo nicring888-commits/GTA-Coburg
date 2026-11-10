@@ -663,6 +663,7 @@ class World {
   // Shader-Ergänzung für Straßen, Wege und Markierungen: Asphaltkörnung und Flicken in Weltkoordinaten,
   // bei Regen dunkler mit Pfützen, die den Himmel spiegeln
   roadShader(mat) {
+    const ROAD_WEAR = !/[?&]wear=0\b/.test(location.search); // Straßenbelag G7 (Risse, Fugen, Ölflecken)
     if (!this._roadDetail) this._roadDetail = this.makeDetailTexture();
     const detail = this._roadDetail;
     mat.userData.tsl = nm => NodeKit.road(nm, detail); // WebGPU (js/tsl-materials.js)
@@ -678,18 +679,64 @@ class World {
           uniform sampler2D detailMap;
           uniform float uWet, uNight;
           uniform vec3 uSkyTop, uSkyHorizon;
-          float rPuddle = 0.0;`)
+          float rPuddle = 0.0;
+          float rSeal = 0.0, rOil = 0.0;
+          // Straßenbelag (seit v3.19.0, Grafik-Phase G7): Zellgrenzen (F2 − F1) als Netz für Risse und Teerfugen
+          vec2 rHash2(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
+          float rCellEdge(vec2 p) {
+            vec2 i = floor(p), f = fract(p);
+            float d1 = 8.0, d2 = 8.0;
+            for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+              vec2 g = vec2(float(x), float(y)), r = g + rHash2(i + g) * 0.85 - f;
+              float d = dot(r, r);
+              if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+            }
+            return sqrt(d2) - sqrt(d1);
+          }
+          // Linie der Breite w (m) auf dem Netz im Maßstab sc (m), geglättet; verschwindet, wenn sie dünner als ein Pixel wird
+          float rLine(vec2 wp, float sc, float w, vec2 off) {
+            vec2 q = wp / sc + off;
+            float e = rCellEdge(q), fw = length(fwidth(q));
+            float wl = w / sc;
+            return (1.0 - smoothstep(wl * 0.5, wl * 0.5 + fw, e)) * smoothstep(wl * 3.0, wl * 0.8, fw);
+          }`)
         .replace('#include <color_fragment>', `#include <color_fragment>
           {
             vec2 wp = vRPos.xz;
             float g1 = texture2D(detailMap, wp / 0.8).r, g2 = texture2D(detailMap, wp / 6.5).r, g3 = texture2D(detailMap, wp / 29.0).r;
             diffuseColor.rgb *= (0.82 + 0.3 * g1) * (0.9 + 0.2 * g2) * (0.93 + 0.14 * smoothstep(0.42, 0.62, g3));
             rPuddle = smoothstep(0.52, 0.66, g2 * 0.7 + g3 * 0.3) * uWet;
+            #if defined( STANDARD ) && ${ROAD_WEAR ? 1 : 0}
+            {
+              // Abnutzung nur aus der Nähe (bis ≈ 140 m): Risse in Feldern, vergossene Teerfugen (dunkel, glänzend),
+              // Ölflecken und Flickstellen; Lage aus Weltkoordinaten, keine Textur
+              float rd = length(vRPos - cameraPosition);
+              float near = 1.0 - smoothstep(60.0, 140.0, rd);
+              if (near > 0.001) {
+                float g4 = texture2D(detailMap, wp / 23.0 + 0.31).r, g5 = texture2D(detailMap, wp / 47.0 + 0.71).r;
+                vec2 warp = vec2(texture2D(detailMap, wp / 3.7).r, texture2D(detailMap, wp / 3.7 + 0.5).r) - 0.5;
+                float crackArea = smoothstep(0.4, 0.56, g4);
+                float crack = crackArea > 0.01 ? rLine(wp + warp * 0.9, 2.3, 0.045, vec2(0.0)) * crackArea * smoothstep(0.2, 0.45, g1 + 0.2) : 0.0;
+                float sealArea = smoothstep(0.38, 0.5, g5) * (1.0 - crackArea * 0.5);
+                rSeal = sealArea > 0.01 ? rLine(wp + warp * 2.2, 6.5, 0.1, vec2(13.1, 7.7)) * sealArea * near : 0.0;
+                float oilN = texture2D(detailMap, wp / 2.6 + 0.17).r * 0.6 + texture2D(detailMap, wp / 0.9).r * 0.4;
+                rOil = smoothstep(0.66, 0.74, oilN) * smoothstep(0.55, 0.7, g2) * smoothstep(0.4, 0.55, g3) * near;
+                float patchN = texture2D(detailMap, wp / 11.0 + 0.53).r;
+                float patchA = smoothstep(0.7, 0.72, patchN) * smoothstep(0.45, 0.6, g5);
+                diffuseColor.rgb *= mix(1.0, 0.82, patchA * near);                         // neuere, dunklere Flickstelle
+                diffuseColor.rgb *= 1.0 - crack * 0.62 * near;
+                diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.32, 0.32, 0.34), rSeal);
+                diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.55, 0.55, 0.6), rOil * 0.8);
+                rPuddle = max(rPuddle, crack * uWet * 0.6 * near);                           // Wasser steht in den Rissen
+              }
+            }
+            #endif
             diffuseColor.rgb *= 1.0 - 0.38 * uWet - 0.2 * rPuddle;
           }`)
         .split('#include <roughnessmap_fragment>').join(`#include <roughnessmap_fragment>
           #ifdef STANDARD
             roughnessFactor = mix(mix(0.84, 0.3, uWet), 0.05, rPuddle);
+            roughnessFactor = min(roughnessFactor, mix(1.0, 0.42, max(rSeal, rOil * 0.8)));
           #endif`)
         .split('#include <lights_fragment_maps>').join(`#include <lights_fragment_maps>
           #ifdef STANDARD
