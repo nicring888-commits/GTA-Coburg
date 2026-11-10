@@ -12,7 +12,8 @@ const PORT = process.env.PORT || 8175;
 const HOST = process.env.HOST || (process.argv.includes('--lan') || process.argv.includes('--public') ? '0.0.0.0' : '127.0.0.1');
 const ROOT = __dirname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream' };
 
 // Messläufe (js/bench.js, seit v3.18.0): Bilder und Messwerte nach bench/shots/<lauf>/ speichern und auflisten.
 // Nur ohne --public und nur von diesem Rechner aus.
@@ -32,7 +33,7 @@ function handleBench(req, res) {
     return true;
   }
   const label = benchName(url.searchParams.get('label')), file = benchName(url.searchParams.get('file'));
-  if (url.pathname !== '/api/bench-save' || req.method !== 'POST' || !label || !file || !/\.(png|jpg|json)$/.test(file)) {
+  if (url.pathname !== '/api/bench-save' || req.method !== 'POST' || !label || !file || !/\.(png|jpg|json|glb)$/.test(file)) {
     res.writeHead(400); res.end(); return true;
   }
   const parts = []; let size = 0;

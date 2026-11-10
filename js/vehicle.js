@@ -275,6 +275,89 @@ function carMaterials() {
   _carMat.blob.alphaMap = _carMat.blob.map; _carMat.blob.map = null;
   return _carMat;
 }
+// ---------------- Automodelle (seit v3.19.0) ----------------
+// Aufbereitete Modelle aus zwei Paketen von Comrade1280 (CC BY 4.0, assets/cars/LIZENZEN.md, bench/carprep.html):
+// je Typ eine GLB mit „paint“ (Karosserie, Lackmaske im Rotkanal der Rauheits-Textur), „glass“, „head“, „tail“ und
+// einer Radvorlage „wheel“; Maße und Radpositionen in userData. Nur Stufe „voll“ mit three.js als ES-Modul;
+// ?carmodels=0 schaltet ab. Fehlt ein Modell, baut Vehicle die bisherige Form.
+const CarModels = {
+  KINDS: ['car', 'kleinwagen', 'kombi', 'van', 'pickup', 'suv', 'cabrio', 'sport', 'police', 'taxi'],
+  // Ziellänge je Typ (m): die Modelle werden um höchstens ±15 % angepasst, Fahrphysik und Kollision bleiben
+  LENGTH: { car: 4.45, kleinwagen: 3.65, kombi: 4.6, van: 4.7, pickup: 5.0, suv: 4.7, cabrio: 4.45, sport: 4.35, police: 4.75, taxi: 4.75 },
+  data: {}, headMats: [],
+  on() {
+    return !!(window.QUALITY && window.QUALITY.level === 'voll') && /build\/three\.module\.js$/.test(window.THREE_SRC || '') &&
+      !/[?&]carmodels=0\b/.test(location.search) && /^https?:$/.test(location.protocol);
+  },
+  get(kind) { return this.data[kind] || null; },
+  async load() {
+    if (!this.on()) return;
+    const base = window.THREE_SRC.replace(/build\/three\.module\.js$/, '');
+    const mod = await import(base + 'examples/jsm/loaders/GLTFLoader.js');
+    const L = new mod.GLTFLoader();
+    await Promise.all(this.KINDS.map(k => L.loadAsync('assets/cars/' + k + '.glb')
+      .then(g => { try { this.prepare(k, g.scene); } catch (e) { console.warn('Automodell ' + k + ':', e.message); } },
+        e => console.warn('Automodell fehlt:', k, e.message))));
+    console.info('Automodelle:', Object.keys(this.data).length + '/' + this.KINDS.length);
+  },
+  // Lackmaske: Grundfarbe aus der Textur, in Lackflächen (Maske) mal Lackfarbe bzw. Instanzfarbe
+  paintShader(m) {
+    m.onBeforeCompile = sh => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '').replace('#include <color_fragment>', `
+        vec4 cmTex = texture2D(map, vMapUv);
+        float cmMask = texture2D(roughnessMap, vRoughnessMapUv).r;
+        vec3 cmTint = diffuse;
+        #ifdef USE_COLOR
+          cmTint *= vColor.rgb;
+        #endif
+        diffuseColor.rgb = mix(cmTex.rgb, cmTex.rgb * cmTint, cmMask);`);
+    };
+    m.customProgramCacheKey = () => 'carpaint';
+    return m;
+  },
+  prepare(kind, sc) {
+    let root = null;
+    sc.traverse(o => { if (!root && o.userData && o.userData.wheels) root = o; });
+    if (!root) throw new Error('ohne Maße');
+    const u = root.userData, get = n => root.getObjectByName(n), M = carMaterials();
+    const pm = get('paint'), gl = get('glass'), hd = get('head'), tl = get('tail'), wh = get('wheel');
+    if (!pm || !wh) throw new Error('Teile fehlen');
+    for (const m of [pm, gl, hd, tl]) if (m) m.geometry.computeBoundingBox();
+    const D = { u, paint: pm.geometry, paintMap: pm.material.map, mr: pm.material.roughnessMap, normalMap: pm.material.normalMap,
+      glass: gl ? gl.geometry : null, head: hd ? hd.geometry : null, tail: tl ? tl.geometry : null };
+    for (const t of [D.paintMap, D.normalMap]) if (t) Mat.texture(t);
+    D.scale = U.clamp((this.LENGTH[kind] || u.length) / u.length, 0.85, 1.15);
+    // Leuchten mit Textur, nachts leuchtend (Scheinwerfer gemeinsam je Modell, Rückleuchten je Auto geklont)
+    const om = hd ? hd.material.map : tl ? tl.material.map : null;
+    D.headMat = M.head.clone(); D.headMat.color.set('#ffffff'); if (om) { D.headMat.map = om; D.headMat.emissiveMap = om; }
+    this.headMats.push(D.headMat);
+    D.tailMat = M.tail.clone(); D.tailMat.color.set('#ffffff'); if (om) { D.tailMat.map = om; D.tailMat.emissiveMap = om; }
+    // Rad: Teile der Vorlage
+    D.wheel = [];
+    wh.traverse(o => { if (o.isMesh) { if (o.material.map) Mat.texture(o.material.map); D.wheel.push({ geo: o.geometry, mat: Mat.make('kunststoff', { map: o.material.map, roughness: 0.6, metalness: 0.25 }) }); } });
+    // Maße aus der Karosserie: Lichtbalken/Dachschild (höchste Stelle), Türfläche für die Polizei-Schrift
+    const pa = D.paint.attributes.position.array;
+    let tz = 0, tn = 0, sideX = 0;
+    for (let i = 0; i < pa.length; i += 3) {
+      if (pa[i + 1] > u.height - 0.06) { tz += pa[i + 2]; tn++; }
+      if (pa[i + 1] > 0.6 && pa[i + 1] < 0.9 && Math.abs(pa[i + 2]) < 0.6) sideX = Math.max(sideX, Math.abs(pa[i]));
+    }
+    D.topZ = tn ? tz / tn : -0.3; D.sideX = sideX || u.width / 2 - 0.08; D.sideY = 0.74;
+    const hb = D.head ? D.head.boundingBox : null, tb = D.tail ? D.tail.boundingBox : null;
+    const hy = hb ? (hb.min.y + hb.max.y) / 2 : 0.75, ty = tb ? (tb.min.y + tb.max.y) / 2 : 0.85;
+    const hx = hb ? hb.max.x - 0.06 : u.width / 2 - 0.2, tx = tb ? tb.max.x - 0.06 : u.width / 2 - 0.2;
+    const hz = hb ? hb.max.z - 0.03 : u.zMax - 0.1, tzb = tb ? tb.min.z + 0.03 : u.zMin + 0.1;
+    D.lampY = hy;
+    const box = (w, h, d) => new THREE.BoxGeometry(w, h, d), T = (x, y, z, ry = 0) => new THREE.Matrix4().makeTranslation(x, y, z).multiply(new THREE.Matrix4().makeRotationY(ry));
+    D.blinkL = carMerge([[box(0.1, 0.08, 0.1), T(hx, hy, hz)], [box(0.1, 0.08, 0.1), T(tx, ty, tzb)]]);
+    D.blinkR = carMerge([[box(0.1, 0.08, 0.1), T(-hx, hy, hz)], [box(0.1, 0.08, 0.1), T(-tx, ty, tzb)]]);
+    const py = Math.max(0.32, (hb ? hb.min.y : 0.6) - 0.16), ry2 = Math.max(0.4, (tb ? tb.min.y : 0.75) - 0.12);
+    D.plate = carMerge([[box(0.52, 0.12, 0.02), T(0, py, u.zMax + 0.004)], [box(0.52, 0.12, 0.02), T(0, ry2, u.zMin - 0.004, Math.PI)]]);
+    this.data[kind] = D;
+  },
+};
+window.CarModels = CarModels; // für js/boot.js (lädt die Modelle vor game.js)
+
 class Vehicle {
   constructor(scene, color, kind = 'car') {
     this.kind = kind;
@@ -289,6 +372,9 @@ class Vehicle {
     const paint = Mat.make('lack', { color: this.color });
     this.paint = paint;
     this.baseColor = new THREE.Color(this.color);
+    const MD = typeof CarModels !== 'undefined' ? CarModels.get(kind) : null;
+    if (MD) this.buildModel(MD);
+    else {
     const G = carGeometries(kind), M = carMaterials();
     const g = new THREE.Group();
     const add = (geo, mat, x, y, z, shadow = true) => {
@@ -334,7 +420,8 @@ class Vehicle {
       if (z > 0) this.frontPivots.push(pivot);
     }
     this.group = g;
-    scene.add(g);
+    }
+    scene.add(this.group);
 
     this.x = 0; this.z = 0; this.y = 0;
     this.heading = 0;
@@ -350,6 +437,49 @@ class Vehicle {
     this.siren = false;
     this.flashSeed = Math.floor(Math.random() * 4);
     this._col = {};
+  }
+
+  // Aussehen aus einem Automodell (CarModels): gleiche Schnittstelle wie die gebaute Form (paint, tailMat, blinkL/R,
+  // lamps, wheels, frontPivots, glassMesh); alles Sichtbare in „body“ mit dem Maßstab des Modells
+  buildModel(D) {
+    const M = carMaterials(), u = D.u, s = D.scale, G0 = carGeometries('car');
+    this.paint.dispose();
+    this.paint = CarModels.paintShader(Mat.make('lack', { color: this.color, map: D.paintMap, roughnessMap: D.mr, metalnessMap: D.mr, normalMap: D.normalMap, roughness: 1, metalness: 1 }));
+    const g = new THREE.Group(), body = new THREE.Group();
+    body.scale.setScalar(s); g.add(body);
+    const add = (geo, mat, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; body.add(m); return m; };
+    add(D.paint, this.paint);
+    this.glassMesh = D.glass ? add(D.glass, M.glass) : null;
+    if (D.head) add(D.head, D.headMat, false);
+    this.tailMat = D.tailMat.clone();
+    this.tailMesh = D.tail ? add(D.tail, this.tailMat, false) : null;
+    this.blinkL = add(D.blinkL, M.blink, false); this.blinkR = add(D.blinkR, M.blink, false);
+    this.blinkL.visible = this.blinkR.visible = false;
+    this.lightState = { t: 0, sp: 0, h: 0, brake: 0, turn: 0, turnT: 0 };
+    add(D.plate, M.plate, false);
+    const blob = new THREE.Mesh(G0.blob, M.blob);
+    blob.position.y = 0.05; blob.scale.set(u.width * s / 1.9, 1, u.length * s / 4.4);
+    blob.userData.keep = true; blob.renderOrder = 1; g.add(blob);
+    this.lamps = null;
+    if (this.kind === 'police') {
+      // Blaulicht über dem Lichtbalken des Modells, „POLIZEI“ an beiden Türen
+      this.lamps = [0.3, -0.3].map(x => { const m = add(G0.lamp, M.lampOff, false); m.position.set(x, u.height - 0.075, D.topZ); m.scale.set(1.05, 1, 1.05); return m; });
+      for (const sx of [1, -1]) { const sd = add(G0.side, M.policeSide, false); sd.position.set(sx * (D.sideX + 0.012), D.sideY, -0.05); sd.rotation.y = sx * Math.PI / 2; sd.scale.set(0.85, 1, 1); }
+    }
+    if (this.kind === 'taxi') { const sg = add(G0.sign, M.taxiSign, false); sg.position.set(0, u.height - 0.08, D.topZ); sg.scale.set(1.15, 1, 1.15); }
+    this.wheels = []; this.frontPivots = [];
+    for (const [x, y, z] of u.wheels) {
+      const pivot = new THREE.Group(), w = new THREE.Group(), hold = new THREE.Group();
+      pivot.position.set(x, y, z);
+      if (x < 0) hold.rotation.y = Math.PI; // Vorlage ist das linke Rad
+      for (const p of D.wheel) { const m = new THREE.Mesh(p.geo, p.mat); m.castShadow = true; hold.add(m); }
+      w.add(hold); pivot.add(w); body.add(pivot);
+      this.wheels.push(w);
+      if (z > 0) this.frontPivots.push(pivot);
+    }
+    this.wheelR = u.r * s;
+    this._lamp = { y: D.lampY * s, z: u.zMax * s - 0.05 }; // Scheinwerferkegel (js/carlights.js)
+    this.group = g;
   }
 
   get forwardX() { return Math.sin(this.heading); }
@@ -435,7 +565,7 @@ class Vehicle {
     this.slip = slip;
 
     this.integrate(dt, world);
-    this.spin += vf * dt / CAR.wheelR;
+    this.spin += vf * dt / (this.wheelR || CAR.wheelR);
     this.sleeping = Math.abs(vf) < 0.05 && thr === 0;
   }
 

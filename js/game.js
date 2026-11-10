@@ -687,6 +687,7 @@
     props.setNight(night);
     life.setNight(night);
     carMaterials().head.emissiveIntensity = night ? 2.5 : 0.2;
+    if (typeof CarModels !== 'undefined') for (const m of CarModels.headMats) m.emissiveIntensity = night ? 2.5 : 0.2;
     carMaterials().tail.emissiveIntensity = night ? 1.6 : 0.25;
     property.setNight(night);
   }

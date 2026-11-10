@@ -6,7 +6,7 @@
 
 // Belegung und Höchstzahl je Kachel nach Messung (791 Autos in 5 Kacheln kosteten 14 ms GPU): Instanzen werfen keine
 // Schatten, Lack ohne Klarlack
-const PARK = { kinds: ['car', 'kombi', 'kleinwagen', 'suv', 'car', 'kleinwagen'], fill: 0.4, max: 70, core: 600 };
+const PARK = { kinds: ['car', 'kombi', 'kleinwagen', 'suv', 'car', 'kleinwagen'], fill: 0.4, max: 70, core: 450 };
 
 const ParkKit = {
   hash(x, z, k) { const s = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453; return s - Math.floor(s); },
@@ -41,6 +41,17 @@ const ParkKit = {
   shapes(kind) {
     const C = this._shapes || (this._shapes = {});
     if (C[kind]) return C[kind];
+    // Automodell (seit v3.19.0): Lack mit Maske und Instanzfarbe, übrige Teile samt Rädern als ein dunkler Körper
+    const D = typeof CarModels !== 'undefined' ? CarModels.get(kind) : null;
+    if (D) {
+      const s = D.scale, S = new THREE.Matrix4().makeScale(s, s, s), rest = [];
+      for (const g of [D.glass, D.head, D.tail]) if (g) rest.push([g, S]);
+      // stehende Autos: einfache Räder (Reifen aus der gebauten Form, auf den Radius des Modells), spart ≈ 2.200 Dreiecke je Auto
+      const G0 = carGeometries('car'), rs = D.u.r / CAR.wheelR;
+      for (const [x, y, z] of D.u.wheels) rest.push([G0.tire, S.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z)).multiply(new THREE.Matrix4().makeScale(1, rs, rs))]);
+      const paintMat = CarModels.paintShader(Mat.make('lackMatt', { color: '#ffffff', map: D.paintMap, roughnessMap: D.mr, metalnessMap: D.mr, roughness: 1, metalness: 1 }));
+      return (C[kind] = { paint: carMerge([[D.paint, S]]), rest: carMerge(rest), paintMat });
+    }
     const G = carGeometries(kind), M4 = (x, y, z) => new THREE.Matrix4().makeTranslation(x, y, z);
     const rest = [[G.glass], [G.trim], [G.head], [G.tail], [G.plate]];
     for (const [x, z] of [[WHEEL_X, WHEEL_Z], [-WHEEL_X, WHEEL_Z], [WHEEL_X, -WHEEL_Z], [-WHEEL_X, -WHEEL_Z]]) {
@@ -84,7 +95,7 @@ const ParkKit = {
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), col = new THREE.Color();
     for (const kind in byKind) {
       const list = byKind[kind], S = this.shapes(kind);
-      const paint = new THREE.InstancedMesh(S.paint, M.paint, list.length), rest = new THREE.InstancedMesh(S.rest, M.rest, list.length);
+      const paint = new THREE.InstancedMesh(S.paint, S.paintMat || M.paint, list.length), rest = new THREE.InstancedMesh(S.rest, M.rest, list.length);
       list.forEach((c, i) => {
         q.setFromAxisAngle(up, c.h); p.set(c.x, c.y, c.z); m4.compose(p, q, one);
         paint.setMatrixAt(i, m4); rest.setMatrixAt(i, m4); paint.setColorAt(i, col.set(c.color));

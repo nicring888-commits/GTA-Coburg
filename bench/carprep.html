@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autos aufbereiten</title>
+<!-- Entwicklerwerkzeug (seit v3.19.0): bereitet die Sketchfab-Modelle (assets/cars/roh, CC BY 4.0, Comrade1280) für das
+     Spiel auf und speichert je Fahrzeugtyp eine GLB-Datei über /api/bench-save nach bench/shots/cars/ (danach nach
+     assets/cars/ kopieren). Nur lokal mit node server.js.
+     Je Auto: Ausrichtung (vorne +z, links +x, Boden y = 0, Mitte zwischen den Achsen), Teile „paint“ (Karosserie mit
+     Lackmaske im Rotkanal der Rauheits-Textur), „glass“, „head“/„tail“ (Leuchten nach Farbe getrennt), „wheel“ (ein Rad
+     am Ursprung, linke Seite), Maße und Radpositionen in userData. Räder, die fest in der Karosserie sitzen
+     (Dienstfahrzeuge), werden geometrisch herausgetrennt. -->
+<style>
+  :root { --bg: #f2f4f6; --fg: #1d232a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1b1f24; --fg: #e8edf1; } }
+  :root[data-theme="dark"] { --bg: #1b1f24; --fg: #e8edf1; }
+  body { margin: 16px; background: var(--bg); color: var(--fg); font: 13px/1.45 system-ui, sans-serif; }
+  pre { white-space: pre-wrap; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }</script>
+</head>
+<body>
+<pre id="log">Bereit. Start mit CARPREP.run()</pre>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+const logEl = document.getElementById('log');
+const log = s => { logEl.textContent += '\n' + s; console.log(s); };
+
+// Fahrzeugtyp im Spiel → Quelle und Karosserie-Knoten; baked: Räder in der Karosserie (Radius r, m)
+const JOBS = [
+  { kind: 'car', src: 'pkw', body: 'Sedan_Body' },
+  { kind: 'kleinwagen', src: 'pkw', body: 'Compact_Body', flip: true }, // Leuchtenfarben dort nicht eindeutig
+  { kind: 'kombi', src: 'pkw', body: 'Wagon_Body' },
+  { kind: 'van', src: 'pkw', body: 'minivan_body' },
+  { kind: 'pickup', src: 'pkw', body: 'Pickup_Body' },
+  { kind: 'suv', src: 'pkw', body: 'SUV_Body' },
+  { kind: 'cabrio', src: 'pkw', body: 'Coupe_Body' },
+  { kind: 'sport', src: 'pkw', body: 'Sport_body' },
+  { kind: 'police', src: 'dienst', body: 'police_sedan', baked: true, r: 0.36, police: true },
+  { kind: 'taxi', src: 'dienst', body: 'taxi', baked: true, r: 0.36, taxi: true },
+];
+const SRC = { pkw: '../assets/cars/roh/pkw/scene.gltf', dienst: '../assets/cars/roh/dienst/scene.gltf' };
+const TEX = { body: 1024, wheel: 512, optics: 512 };
+
+const loaded = {};
+const loadSrc = k => loaded[k] || (loaded[k] = new GLTFLoader().loadAsync(SRC[k]).then(g => { g.scene.updateMatrixWorld(true); return g.scene; }));
+const norm = s => (s || '').replace(/[\s.]+/g, '_');
+
+// Bild einer Textur auf eine Leinwand der Größe n zeichnen (Pixel lesbar)
+function canvasOf(tex, n) {
+  const img = tex.image, cv = document.createElement('canvas');
+  cv.width = cv.height = n || img.width;
+  const c = cv.getContext('2d', { willReadFrequently: true });
+  c.drawImage(img, 0, 0, cv.width, cv.height);
+  return cv;
+}
+function texFrom(cv, srgb, mime) {
+  const t = new THREE.CanvasTexture(cv);
+  t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.userData.mimeType = mime;
+  return t;
+}
+// Farbe der Textur an einer UV-Stelle (glTF: v nach unten, flipY = false)
+function sampler(tex) {
+  const cv = canvasOf(tex, 256), d = cv.getContext('2d').getImageData(0, 0, 256, 256).data;
+  return (u, v) => { const x = ((Math.floor(u * 256) % 256) + 256) % 256, y = ((Math.floor(v * 256) % 256) + 256) % 256, k = (y * 256 + x) * 4; return [d[k] / 255, d[k + 1] / 255, d[k + 2] / 255]; };
+}
+
+// Meshes unter einem Knoten in Weltkoordinaten (nicht indiziert, mit Material)
+function meshesOf(node) {
+  const out = [];
+  node.traverse(o => {
+    if (!o.isMesh) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    out.push({ g, mat: o.material, name: o.name });
+  });
+  return out;
+}
+
+// Dreiecke einer Geometrie nach einer Bedingung aufteilen (f(i) mit Dreiecksnummer) → [ja, nein]
+function splitTris(g, f) {
+  const a = [[], []], attrs = Object.keys(g.attributes);
+  const n = g.attributes.position.count / 3;
+  for (let t = 0; t < n; t++) a[f(t) ? 0 : 1].push(t);
+  return a.map(list => {
+    if (!list.length) return null;
+    const ng = new THREE.BufferGeometry();
+    for (const k of attrs) {
+      const A = g.attributes[k], s = A.itemSize, arr = new Float32Array(list.length * 3 * s);
+      list.forEach((t, j) => arr.set(A.array.subarray(t * 3 * s, t * 3 * s + 3 * s), j * 3 * s));
+      ng.setAttribute(k, new THREE.BufferAttribute(arr, s));
+    }
+    return ng;
+  });
+}
+const triC = (g, t) => { const p = g.attributes.position.array, i = t * 9; return [(p[i] + p[i + 3] + p[i + 6]) / 3, (p[i + 1] + p[i + 4] + p[i + 7]) / 3, (p[i + 2] + p[i + 5] + p[i + 8]) / 3]; };
+const triUV = (g, t) => { const u = g.attributes.uv; if (!u) return [0, 0]; const a = u.array, i = t * 6; return [(a[i] + a[i + 2] + a[i + 4]) / 3, (a[i + 1] + a[i + 3] + a[i + 5]) / 3]; };
+
+// Lackmaske aus der Rauheits-Textur: größte glänzende, nicht metallische Fläche = Lack. Ergebnis: Leinwand MR mit
+// Maske im Rotkanal; Grundfarbe: in Lackflächen Graustufen (Helligkeit relativ zum Lack), sonst unverändert
+function paintTextures(baseTex, mrTex, n, opt) {
+  const bc = canvasOf(baseTex, n), mc = mrTex ? canvasOf(mrTex, n) : null;
+  const B = bc.getContext('2d').getImageData(0, 0, n, n), bd = B.data;
+  const M = mc ? mc.getContext('2d').getImageData(0, 0, n, n) : null, md = M ? M.data : null;
+  const mask = new Float32Array(n * n);
+  if (md) {
+    // häufigster (Rauheit, Metall)-Wert mit geringer Rauheit und ohne Metall
+    const hist = new Map();
+    for (let i = 0; i < n * n; i++) { const g = md[i * 4 + 1] >> 3, b = md[i * 4 + 2] >> 3; hist.set(g * 64 + b, (hist.get(g * 64 + b) || 0) + 1); }
+    let best = -1, bc2 = 0;
+    // (auch Metallic-Lack: der Sportwagen hat Metall ≈ 0,7)
+    for (const [k, c] of hist) { const g = (k >> 6) << 3; if (g < 160 && c > bc2) { bc2 = c; best = k; } }
+    const bg = (best >> 6) << 3, bb = (best & 63) << 3;
+    for (let i = 0; i < n * n; i++) mask[i] = Math.abs(md[i * 4 + 1] - bg) < 14 && Math.abs(md[i * 4 + 2] - bb) < 20 ? 1 : 0;
+  }
+  // mittlere Lackhelligkeit
+  let sum = 0, cnt = 0;
+  const lum = i => 0.2126 * bd[i * 4] + 0.7152 * bd[i * 4 + 1] + 0.0722 * bd[i * 4 + 2];
+  for (let i = 0; i < n * n; i++) if (mask[i]) { sum += lum(i); cnt++; }
+  const avg = cnt ? sum / cnt : 128;
+  for (let i = 0; i < n * n; i++) {
+    let r = bd[i * 4], g = bd[i * 4 + 1], b = bd[i * 4 + 2];
+    if (opt.police) {
+      // amerikanisches Rot im Lichtbalken → Blau
+      if (r > 120 && g < 90 && b < 90) { const t = r; r = 30; g = 70; b = Math.min(255, t + 40); }
+    }
+    if (mask[i]) { const v = Math.min(255, Math.round(lum(i) / avg * 205)); r = g = b = v; }
+    bd[i * 4] = r; bd[i * 4 + 1] = g; bd[i * 4 + 2] = b;
+  }
+  bc.getContext('2d').putImageData(B, 0, 0);
+  // MR: R = Maske, G = Rauheit, B = Metall
+  const out = document.createElement('canvas'); out.width = out.height = n;
+  const oc = out.getContext('2d'), O = oc.createImageData(n, n), od = O.data;
+  for (let i = 0; i < n * n; i++) {
+    od[i * 4] = mask[i] * 255;
+    od[i * 4 + 1] = md ? md[i * 4 + 1] : 140; od[i * 4 + 2] = md ? md[i * 4 + 2] : 0; od[i * 4 + 3] = 255;
+  }
+  oc.putImageData(O, 0, 0);
+  return { base: texFrom(bc, true, 'image/jpeg'), mr: texFrom(out, false, 'image/png'), share: cnt / (n * n) };
+}
+
+async function prepare(job) {
+  const root = await loadSrc(job.src);
+  let bodyNode = null;
+  root.traverse(o => { if (!bodyNode && norm(o.name) === job.body) bodyNode = o; });
+  if (!bodyNode) throw new Error('Karosserie fehlt: ' + job.body);
+  const parts = meshesOf(bodyNode);
+  const box = new THREE.Box3();
+  for (const p of parts) { p.g.computeBoundingBox(); box.union(p.g.boundingBox); }
+  const ctr = box.getCenter(new THREE.Vector3());
+  // Räder (Pkw-Paket): die vier nächsten Rad-Knoten
+  let wheelParts = [];
+  if (!job.baked) {
+    const cands = [];
+    root.traverse(o => {
+      if (!/^Wheel_/.test(o.name) || o.parent === null || /^Wheel_/.test(o.parent.name)) return;
+      if (!o.children.some(c => c.isMesh)) return;
+      const b = new THREE.Box3().setFromObject(o), c = b.getCenter(new THREE.Vector3());
+      cands.push({ o, c, d: Math.hypot(c.x - ctr.x, c.z - ctr.z) });
+    });
+    cands.sort((a, b) => a.d - b.d);
+    wheelParts = cands.slice(0, 4).map(w => ({ c: w.c, parts: meshesOf(w.o) }));
+    if (wheelParts.length < 4 || cands[3].d > 3.2) throw new Error('Räder nicht gefunden: ' + job.kind);
+  }
+  // Längsachse in der Ebene (Hauptachse der Karosserie-Punkte)
+  let sxx = 0, szz = 0, sxz = 0, np = 0;
+  for (const p of parts) { const a = p.g.attributes.position.array; for (let i = 0; i < a.length; i += 3) { const dx = a[i] - ctr.x, dz = a[i + 2] - ctr.z; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; np++; } }
+  let yaw = 0.5 * Math.atan2(2 * sxz, sxx - szz); // Winkel der Hauptachse zur x-Achse
+  // so drehen, dass die Hauptachse auf z liegt
+  const mk = (rot) => new THREE.Matrix4().makeRotationY(rot).multiply(new THREE.Matrix4().makeTranslation(-ctr.x, -box.min.y, -ctr.z));
+  // Drehung um y mit φ bildet (cos θ, sin θ) auf z ab, wenn φ = θ − 90°
+  let rot = yaw - Math.PI / 2;
+  let M = mk(rot);
+  // vorne/hinten: Leuchten nach Farbe (rot = hinten)
+  const optics = parts.filter(p => /optic/i.test(p.mat.name));
+  const tmp = optics.map(p => ({ g: p.g.clone().applyMatrix4(M), s: p.mat.map ? sampler(p.mat.map) : null }));
+  let zr = 0, nr = 0, zw = 0, nw = 0;
+  for (const { g, s } of tmp) { const n = g.attributes.position.count / 3; for (let t = 0; t < n; t++) { const c = triC(g, t); const col = s ? s(...triUV(g, t)) : [1, 1, 1]; const red = col[0] - (col[1] + col[2]) / 2 > 0.25; if (red) { zr += c[2]; nr++; } else if (col[0] + col[1] + col[2] > 1.6) { zw += c[2]; nw++; } } }
+  if ((nr && nw && zr / nr > zw / nw) !== !!job.flip) { rot += Math.PI; M = mk(rot); }
+  if (!nr || !nw) log('  Hinweis: Leuchten nicht eindeutig (rot ' + nr + ', hell ' + nw + ')');
+  for (const p of parts) p.g.applyMatrix4(M);
+  for (const w of wheelParts) { for (const p of w.parts) p.g.applyMatrix4(M); w.c.applyMatrix4(M); }
+
+  // Räder herauslösen (Dienstfahrzeuge): je Seite und Achse die Bodenkontakt-Punkte suchen
+  let wheelPos = [], wheelR = job.r || 0.34, wheelGeo = [];
+  const bodyMain = parts.filter(p => !/glass|optic|decal/i.test(p.mat.name));
+  if (job.baked) {
+    const pts = [];
+    for (const p of bodyMain) { const a = p.g.attributes.position.array; for (let i = 0; i < a.length; i += 3) if (a[i + 1] < 0.06) pts.push([a[i], a[i + 2]]); }
+    for (const sx of [1, -1]) for (const sz of [1, -1]) {
+      const q = pts.filter(([x, z]) => Math.sign(x) === sx && Math.sign(z) === sz);
+      if (!q.length) throw new Error('kein Bodenkontakt ' + sx + ',' + sz);
+      const zc = q.reduce((s, v) => s + v[1], 0) / q.length, xo = Math.max(...q.map(v => Math.abs(v[0]))), xi = Math.min(...q.map(v => Math.abs(v[0])));
+      wheelPos.push({ x: sx * (xo + xi) / 2, y: wheelR, z: zc, xi: xi - 0.04, xo: xo + 0.04, sx });
+    }
+    const inWheel = (x, y, z) => wheelPos.find(w => Math.sign(x) === w.sx && Math.abs(x) > w.xi && Math.abs(x) < w.xo + 0.02 && Math.hypot(z - w.z, y - w.y) < wheelR + 0.02);
+    for (const p of bodyMain) {
+      const a = p.g.attributes.position.array;
+      const [wg, rest] = splitTris(p.g, t => { const i = t * 9; return inWheel(a[i], a[i + 1], a[i + 2]) && inWheel(a[i + 3], a[i + 4], a[i + 5]) && inWheel(a[i + 6], a[i + 7], a[i + 8]); });
+      if (wg) {
+        // nur das linke Vorderrad als Vorlage (vom Ursprung aus), die übrigen fallen weg
+        const fl = wheelPos[0];
+        const [one] = splitTris(wg, t => { const c = triC(wg, t); return Math.sign(c[0]) === 1 && Math.sign(c[2]) === 1; });
+        if (one) { one.translate(-fl.x, -fl.y, -fl.z); wheelGeo.push({ g: one, mat: p.mat }); }
+      }
+      p.g = rest || new THREE.BufferGeometry();
+    }
+  } else {
+    wheelR = 0;
+    for (const w of wheelParts) { const b = new THREE.Box3(); for (const p of w.parts) { p.g.computeBoundingBox(); b.union(p.g.boundingBox); } const c = b.getCenter(new THREE.Vector3()); wheelPos.push({ x: c.x, y: c.y, z: c.z }); wheelR = Math.max(wheelR, (b.max.y - b.min.y) / 2); }
+    const fl = wheelParts.reduce((best, w) => (w.c.x > 0 && w.c.z > 0 ? w : best), wheelParts[0]);
+    const b = new THREE.Box3(); for (const p of fl.parts) { p.g.computeBoundingBox(); b.union(p.g.boundingBox); }
+    const c = b.getCenter(new THREE.Vector3());
+    for (const p of fl.parts) { const g = p.g.clone(); g.translate(-c.x, -c.y, -c.z); wheelGeo.push({ g, mat: p.mat }); }
+  }
+  // Boden: unterste Radkante auf y = 0, Mitte zwischen den Achsen auf z = 0
+  const zs = wheelPos.map(w => w.z), zMid = (Math.max(...zs) + Math.min(...zs)) / 2;
+  const yMin = Math.min(...wheelPos.map(w => w.y)) - wheelR;
+  for (const p of parts) p.g.translate(0, -yMin, -zMid);
+  for (const w of wheelPos) { w.y -= yMin; w.z -= zMid; }
+
+  // Teile zusammenstellen
+  const out = new THREE.Group(); out.name = job.kind;
+  const bodyMat = bodyMain[0].mat;
+  const pt = paintTextures(bodyMat.map, bodyMat.metalnessMap || bodyMat.roughnessMap, TEX.body, job);
+  const paintMat = new THREE.MeshStandardMaterial({ name: 'paint', map: pt.base, roughnessMap: pt.mr, metalnessMap: pt.mr, roughness: 1, metalness: 1, normalMap: bodyMat.normalMap ? texFrom(canvasOf(bodyMat.normalMap, TEX.body), false, 'image/jpeg') : null });
+  const geo = (list) => { const gs = list.map(p => p.g).filter(g => g.attributes.position && g.attributes.position.count); if (!gs.length) return null; gs.forEach(g => { if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); }); return BufferGeometryUtils.mergeGeometries(gs, false); };
+  const add = (name, g, mat) => { if (!g) return null; const m = new THREE.Mesh(g, mat); m.name = name; out.add(m); return m; };
+  add('paint', geo(bodyMain), paintMat);
+  const glass = parts.filter(p => /glass/i.test(p.mat.name));
+  add('glass', geo(glass), new THREE.MeshStandardMaterial({ name: 'glass', color: '#121a22', roughness: 0.05, transparent: true, opacity: 0.85 }));
+  // Leuchten nach Farbe in Scheinwerfer und Rückleuchten teilen
+  const head = [], tail = [];
+  for (const p of parts.filter(p => /optic/i.test(p.mat.name))) {
+    const s = p.mat.map ? sampler(p.mat.map) : null;
+    const [r, w] = splitTris(p.g, t => { const col = s ? s(...triUV(p.g, t)) : [1, 1, 1]; return col[0] - (col[1] + col[2]) / 2 > 0.2 || (triC(p.g, t)[2] < 0 && col[0] > col[2] + 0.1); });
+    if (r) tail.push({ g: r }); if (w) head.push({ g: w });
+  }
+  const opticsMap = parts.find(p => /optic/i.test(p.mat.name) && p.mat.map);
+  const oTex = opticsMap ? texFrom(canvasOf(opticsMap.mat.map, TEX.optics), true, 'image/jpeg') : null;
+  add('head', geo(head), new THREE.MeshStandardMaterial({ name: 'head', map: oTex, roughness: 0.2 }));
+  add('tail', geo(tail), new THREE.MeshStandardMaterial({ name: 'tail', map: oTex, roughness: 0.25 }));
+  // Rad: eine Vorlage (linke Seite), Materialien je Teil
+  const wheel = new THREE.Group(); wheel.name = 'wheel';
+  wheelGeo.forEach((p, i) => {
+    const m = p.mat;
+    const map = m.map ? texFrom(canvasOf(m.map, job.baked ? TEX.body : TEX.wheel), true, 'image/jpeg') : null;
+    const mesh = new THREE.Mesh(p.g, new THREE.MeshStandardMaterial({ name: 'wheel' + i, map, roughness: 0.6, metalness: 0.2 }));
+    mesh.name = 'wheel' + i; wheel.add(mesh);
+  });
+  out.add(wheel);
+  // Maße
+  const bb = new THREE.Box3().setFromObject(out);
+  let roofY = 0; const pg = out.getObjectByName('paint').geometry, pa = pg.attributes.position.array;
+  for (let i = 0; i < pa.length; i += 3) if (Math.abs(pa[i]) < 0.3 && Math.abs(pa[i + 2]) < 0.6) roofY = Math.max(roofY, pa[i + 1]);
+  out.userData = {
+    kind: job.kind, wheels: wheelPos.map(w => [+w.x.toFixed(3), +w.y.toFixed(3), +w.z.toFixed(3)]), r: +wheelR.toFixed(3),
+    length: +(bb.max.z - bb.min.z).toFixed(3), width: +(bb.max.x - bb.min.x).toFixed(3), height: +bb.max.y.toFixed(3),
+    zMin: +bb.min.z.toFixed(3), zMax: +bb.max.z.toFixed(3), roofY: +roofY.toFixed(3), paintShare: +pt.share.toFixed(3),
+    source: job.src === 'pkw' ? 'Generic passenger car pack' : 'Generic civil service vehicles pack', author: 'Comrade1280', license: 'CC-BY-4.0',
+  };
+  let tris = 0; out.traverse(o => { if (o.isMesh) tris += o.geometry.attributes.position.count / 3; });
+  out.userData.tris = Math.round(tris);
+  return out;
+}
+
+async function save(group) {
+  const ab = await new GLTFExporter().parseAsync(group, { binary: true });
+  const r = await fetch('/api/bench-save?label=cars&file=' + group.name + '.glb', { method: 'POST', body: ab });
+  return { ok: r.ok, kb: Math.round(ab.byteLength / 1024) };
+}
+
+window.CARPREP = {
+  JOBS, prepare,
+  async run(only) {
+    const res = {};
+    for (const job of JOBS) {
+      if (only && !only.includes(job.kind)) continue;
+      try {
+        const g = await prepare(job);
+        const s = await save(g);
+        res[job.kind] = Object.assign({ kb: s.kb, saved: s.ok }, g.userData);
+        log(job.kind + ': ' + s.kb + ' KB, ' + g.userData.tris + ' Dreiecke, L ' + g.userData.length + ' B ' + g.userData.width + ' H ' + g.userData.height + ', Rad ' + g.userData.r + ', Lack ' + g.userData.paintShare);
+      } catch (e) { res[job.kind] = { error: e.message }; log(job.kind + ': FEHLER ' + e.message); }
+    }
+    return res;
+  },
+};
+</script>
+</body>
+</html>

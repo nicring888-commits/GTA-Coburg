@@ -9,3 +9,6 @@ Thumbs.db
 
 # Messläufe (js/bench.js): Bilder bleiben lokal
 bench/shots/
+
+# Rohdaten der Automodelle (Sketchfab, CC BY 4.0), nur lokal
+assets/cars/roh/

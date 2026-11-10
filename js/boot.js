@@ -280,8 +280,16 @@
     await Promise.all(DATA.map(it => loadData(it.src, n => { bytes += n; if (bytes - shown > 2e5) { shown = bytes; show(); } })
       .then(() => true, e => e).then(settle(it))).concat(peer));
     if (failed) return;
-    // dann die Spielskripte (gleichzeitig geladen, in Reihenfolge ausgeführt; game.js beginnt sofort mit dem Aufbau)
-    await Promise.all(CODE.map(src => loadScript(src).then(() => true, e => e).then(settle({ src, need: true, what: 'Spiel' }))));
+    // dann die Spielskripte (gleichzeitig geladen, in Reihenfolge ausgeführt; game.js beginnt sofort mit dem Aufbau).
+    // Vor game.js die Automodelle (js/vehicle.js, seit v3.19.0): höchstens 25 s, sonst gebaute Formen
+    const late = CODE.filter(s => /\/(game|touch)\.js$/.test(s)), early = CODE.filter(s => !late.includes(s));
+    await Promise.all(early.map(src => loadScript(src).then(() => true, e => e).then(settle({ src, need: true, what: 'Spiel' }))));
+    if (failed) return;
+    if (window.CarModels && window.CarModels.on()) {
+      setText('Lade Automodelle …', SCRIPT_SHARE);
+      await Promise.race([window.CarModels.load().catch(e => console.warn('Automodelle nicht geladen:', e.message)), new Promise(r => setTimeout(r, 25000))]);
+    }
+    await Promise.all(late.map(src => loadScript(src).then(() => true, e => e).then(settle({ src, need: true, what: 'Spiel' }))));
   }
   start();
 })();

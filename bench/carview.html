@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoansicht</title>
+<!-- Entwicklerwerkzeug (seit v3.19.0): zeigt die Automodelle aus assets/cars/ (glTF) zum Prüfen von Form, Maßen,
+     Teilen und Logos. Aufruf: http://127.0.0.1:8175/bench/carview.html?src=../assets/cars/roh/pkw/scene.gltf -->
+<style>
+  :root { --bg: #c9d3dc; --fg: #1d232a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #20262c; --fg: #e8edf1; } }
+  :root[data-theme="dark"] { --bg: #20262c; --fg: #e8edf1; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px system-ui, sans-serif; overflow: hidden; }
+  #info { position: absolute; left: 12px; top: 10px; max-width: calc(100% - 24px); white-space: pre-wrap; pointer-events: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="info">Lade …</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const q = new URLSearchParams(location.search);
+const src = q.get('src') || '../assets/cars/roh/pkw/scene.gltf';
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight('#fff4e0', 2.2); sun.position.set(5, 8, 4); scene.add(sun);
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 2000);
+const controls = new OrbitControls(camera, renderer.domElement);
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// mehrere Dateien (src=a,b,c): nebeneinander entlang x, je 3 m Abstand; tint=#rrggbb färbt den Lack (Maske, wie im Spiel)
+const tint = q.get('tint');
+const load = s => new GLTFLoader().loadAsync(s).then(g => g.scene);
+Promise.all(src.split(',').map(load)).then(list => {
+  const root = new THREE.Group();
+  list.forEach((s, i) => { s.position.x = (i - (list.length - 1) / 2) * 3; root.add(s); });
+  if (tint) root.traverse(o => {
+    if (!o.isMesh || o.material.name !== 'paint') return;
+    o.material.color.set(tint);
+    o.material.onBeforeCompile = sh => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
+        vec4 texel = texture2D(map, vMapUv);
+        float pm = texture2D(roughnessMap, vRoughnessMapUv).r;
+        diffuseColor.rgb = mix(texel.rgb, texel.rgb * diffuse, pm);`);
+    };
+  });
+  return { scene: root };
+}).then(g => {
+  const root = g.scene;
+  scene.add(root);
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+  // Übersicht: Körper (Namen mit "body") mit Maßen
+  const bodies = [];
+  root.traverse(o => { if (/body$/i.test(o.name) || / Body$/.test(o.name)) { const b = new THREE.Box3().setFromObject(o), s = b.getSize(new THREE.Vector3()); bodies.push(o.name + ': ' + s.x.toFixed(2) + ' × ' + s.y.toFixed(2) + ' × ' + s.z.toFixed(2)); } });
+  let tris = 0; root.traverse(o => { if (o.isMesh) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+  document.getElementById('info').textContent = src + '\nGesamt: ' + size.x.toFixed(1) + ' × ' + size.y.toFixed(1) + ' × ' + size.z.toFixed(1) + ' (Einheiten), ' + Math.round(tris) + ' Dreiecke\n' + bodies.join('\n');
+  const d = Math.max(size.x, size.y, size.z);
+  camera.position.copy(ctr).add(new THREE.Vector3(d * 0.6, d * 0.45, d * 0.75));
+  controls.target.copy(ctr);
+  window.CARVIEW = { root, camera, controls, THREE, box };
+}).catch(e => { document.getElementById('info').textContent = 'Fehler: ' + e.message; });
+
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
