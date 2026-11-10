@@ -461,7 +461,7 @@ class Region {
     if (!r) r = TileHeights.heights(this, t.ti, t.tj, this.N, this.tileX(t.ti) - this.fx, this.tileZ(t.tj) - this.fz, water);
     t.hg0 = r.hg0; t.hg = r.hg || r.hg0; t.hs = r.S;
     // Horizontkarte für den Geländeschatten bei tiefer Sonne (Grafik-Phase G6); ohne Worker hier gerechnet
-    if (this.horizonOn) t.hor = r.hor || TileHeights.horizon(this, t.x0, t.z0, this.tw, this.th, TileHeights.HOR_N / 2);
+    if (this.horizonOn) t.hor = r.hor || null; // fehlt sie, rechnet tileSteps sie im nächsten Schritt
     if (water) t.waterAll = new WaterSet(water.areas, water.lines);
   }
   // Höhen der Kachel beim Worker bestellen (seit v3.12.0, Grafik-Phase 8)
@@ -695,6 +695,7 @@ class Region {
     t.edges = []; t.edgeGrid = new U.Grid(16); t.polyGrid = new U.Grid(32); t.roadGrid = new U.Grid(25);
     t.buildings = [];
     this.makeHeights(t); yield;
+    if (this.horizonOn && !t.hor) { t.hor = TileHeights.horizon(this, t.x0, t.z0, this.tw, this.th, TileHeights.HOR_N / 3); yield; }
     this.makeMaterials(t); yield;
     this.buildTerrain(t); yield;
     if (t.st === 2) {
