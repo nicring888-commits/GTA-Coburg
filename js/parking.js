@@ -6,7 +6,7 @@
 
 // Belegung und Höchstzahl je Kachel nach Messung (791 Autos in 5 Kacheln kosteten 14 ms GPU): Instanzen werfen keine
 // Schatten, Lack ohne Klarlack
-const PARK = { kinds: ['car', 'kombi', 'kleinwagen', 'suv', 'car', 'kleinwagen'], fill: 0.4, max: 70 };
+const PARK = { kinds: ['car', 'kombi', 'kleinwagen', 'suv', 'car', 'kleinwagen'], fill: 0.4, max: 70, core: 600 };
 
 const ParkKit = {
   hash(x, z, k) { const s = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453; return s - Math.floor(s); },
@@ -95,6 +95,46 @@ const ParkKit = {
     }
   },
 
+  // Innenstadt (seit v3.19.0): Parkflächen aus den Landkreisdaten, deren Mitte im Kerngebiet liegt (die Innenstadtdaten
+  // haben keine). Je Kachel eine Gruppe; sichtbar und Hindernis nur bis PARK.core m (updateCore), Prüfungen über die
+  // Innenstadt-Welt (Häuser, Straßen) statt über die Kacheln. world.coreLots = [{ group, lot, x0, z0, x1, z1 }]
+  buildCore(R) {
+    const W = R.world, C = R.core, lots = [];
+    const A = {
+      insideBuilding: (x, z, m) => W.insideBuilding(x, z, m),
+      nearRoad: (x, z, m) => !!W.nearRoad(x, z, m),
+      walkAt: () => null,
+      heightAt: (x, z) => W.heightAt(x, z),
+    };
+    const [i0, j0] = R.tileOf(C.minX, C.minZ), [i1, j1] = R.tileOf(C.maxX, C.maxZ);
+    for (let tj = j0; tj <= j1; tj++) for (let ti = i0; ti <= i1; ti++) {
+      if (!R.stateOf(ti, tj)) continue;
+      const d = R.decodeTile({ ti, tj });
+      const areas = d.areas.filter(a => {
+        if (a.k !== 'parking') return false;
+        let cx = 0, cz = 0;
+        for (let k = 0; k < a.p.length; k += 2) { cx += a.p[k]; cz += a.p[k + 1]; }
+        return R.inCore(cx / (a.p.length / 2), cz / (a.p.length / 2));
+      });
+      if (!areas.length) continue;
+      const t = { d: { areas }, group: new THREE.Group() }, life = { meshes: [] };
+      this.build(A, t, life);
+      if (!life.lot) continue;
+      t.group.visible = false;
+      W.group.add(t.group);
+      const x0 = R.tileX(ti), z0 = R.tileZ(tj);
+      lots.push({ group: t.group, lot: life.lot, x0, z0, x1: x0 + R.tw, z1: z0 + R.th });
+    }
+    W.coreLots = lots;
+    return lots;
+  },
+  updateCore(W, x, z) {
+    for (const L of W.coreLots || []) {
+      const d = Math.hypot(Math.max(L.x0 - x, 0, x - L.x1), Math.max(L.z0 - z, 0, z - L.z1));
+      L.group.visible = d < PARK.core;
+    }
+  },
+
   // ausblenden (beim Klauen): Instanz auf Größe 0, kein Hindernis mehr
   hide(c) {
     c.alive = false;
@@ -112,6 +152,11 @@ const ParkKit = {
         const dd = (c.x - x) * (c.x - x) + (c.z - z) * (c.z - z);
         if (dd < bd) { bd = dd; best = c; }
       }
+    }
+    for (const L of R.world.coreLots || []) if (L.group.visible) for (const c of L.lot) {
+      if (!c.alive) continue;
+      const dd = (c.x - x) * (c.x - x) + (c.z - z) * (c.z - z);
+      if (dd < bd) { bd = dd; best = c; }
     }
     return best;
   },

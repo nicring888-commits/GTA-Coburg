@@ -188,6 +188,8 @@
     if (world.region) {
       // Laternen, Ladenschilder und Lokale in den Orten nutzen dieselben Bausteine wie die Innenstadt
       world.region.props = props; world.region.property = property;
+      // geparkte Autos in der Innenstadt (js/parking.js, seit v3.19.0; nur Stufe „voll“)
+      if (typeof ParkKit !== 'undefined' && Q.level === 'voll' && !/[?&]corepark=0\b/.test(location.search)) ParkKit.buildCore(world.region);
       if (typeof LightCarpet !== 'undefined') { carpet = new LightCarpet(world.region, scene, atmo.skyMat); window.CARPET_DEBUG = carpet; }
       progress('Landkreis um den Bahnhof aufbauen …', 0.995);
       world.region.ensure(spawn.x, spawn.z, Q.ensure);
@@ -1308,6 +1310,7 @@
     if (carpet) carpet.update(camera.position, night, !!property.inside, renderer);
     peds.draw(camera.position.x, camera.position.z);
     world.updateTreeLod(camera.position.x, camera.position.z);
+    if (world.coreLots) ParkKit.updateCore(world, camera.position.x, camera.position.z);
     if (world.region && world.region.land) world.region.land.update(camera.position.x, camera.position.z, !property.inside);
     waterTick(dt);
     ui.updateLabels(camera);

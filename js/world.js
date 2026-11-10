@@ -2976,6 +2976,12 @@ class World {
         out.x = x; out.z = z;
         if (pushFromRivers(this.riverGrid, out, r, this._tmp, y)) { x = out.x; z = out.z; moved = true; }
       }
+      // geparkte Autos in der Innenstadt (js/parking.js, seit v3.19.0), nur sichtbare Gruppen
+      if (this.coreLots) for (const L of this.coreLots) {
+        if (!L.group.visible || x < L.x0 - 6 || x > L.x1 + 6 || z < L.z0 - 6 || z > L.z1 + 6) continue;
+        out.x = x; out.z = z;
+        if (ParkKit.collide(L.lot, x, z, r, out)) { x = out.x; z = out.z; moved = true; }
+      }
       if (this.region) {
         out.x = x; out.z = z;
         if (this.region.collide(out, r, y)) { x = out.x; z = out.z; moved = true; }
