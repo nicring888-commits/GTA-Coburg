@@ -296,6 +296,38 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- ✅ v3.19.0 (10.11.2026): **Automodelle (G4)** (Commit `075a906`): 10 Fahrzeugtypen aus zwei Sketchfab-Paketen von
+  Comrade1280 (CC BY 4.0, Nennung in `assets/cars/LIZENZEN.md` und in der Quellenzeile). Pkw = Sedan, Kleinwagen =
+  Compact, Kombi = Wagon, Kleinbus = Minivan, Pick-up, Geländewagen = SUV, Cabrio = **Coupé** (Entscheidung: kein
+  offenes Modell im Paket), Sportwagen = Sport aus dem „Generic passenger car pack“; Streifenwagen und Taxi aus dem
+  „Generic civil service vehicles pack“ (US-Aufkleber entfernt, Lichtbalken blau, eigene „POLIZEI“-Schrift und
+  TAXI-Schild, Lack silber bzw. elfenbein).
+  - **Download** am 10.11.2026 im Browser-Bereich mit Anmeldung des Nutzers bei Sketchfab (glTF, 24,6 und 52,4 MB) nach
+    `assets/cars/roh/` (per `.gitignore` nicht im Git).
+  - **Aufbereitung** `bench/carprep.html` (im Browser, Blender ist auf diesem Rechner nicht lauffähig installiert):
+    Ausrichtung (Hauptachse, vorne über die Farbe der Leuchten; Kleinwagen mit `flip`), Boden y = 0, Mitte zwischen den
+    Achsen; Teile `paint`/`glass`/`head`/`tail`/`wheel`; bei den Dienstfahrzeugen sitzen die Räder in der Karosserie und
+    werden über Bodenkontakt und Radkreis herausgelöst. **Lackmaske**: größte glänzende Fläche der Rauheits-Textur
+    (auch Metallic-Lack) im Rotkanal; Lackflächen der Grundfarbe in Graustufen. Speichern über `/api/bench-save`
+    (jetzt auch `.glb`) nach `bench/shots/cars/`, dann nach `assets/cars/` kopiert. Ansicht: `bench/carview.html?src=…&tint=#rrggbb`.
+  - **Spiel** (`js/vehicle.js`): `CarModels` lädt die 10 GLB (8,7 MB) mit dem `GLTFLoader` vom CDN; `js/boot.js`
+    wartet damit vor `game.js` (Ladetext „Lade Automodelle …“, höchstens 25 s). `Vehicle.buildModel` bietet dieselbe
+    Schnittstelle wie die gebaute Form: Lackfarbe über die Maske (`CarModels.paintShader`, auch Instanzfarbe),
+    Schaden/Lackiererei über `paint.color`, Brems- und Blinklicht, Scheinwerfer nachts (`CarModels.headMats`),
+    Blaulicht, drehende und lenkende Räder (`wheelR` je Modell), Kennzeichen, Wrack. Länge je Typ auf
+    `CarModels.LENGTH` angepasst (±15 %); Fahrphysik, Maße der Kollision und Wert beim Händler unverändert.
+    `js/parking.js`: geparkte Autos mit Modell-Karosserie und einfachen Rädern; Innenstadt-Parkplätze bis 450 m.
+    Nur Stufe „voll“ mit three.js als ES-Modul; `?carmodels=0` = gebaute Formen.
+  - **Gemessen** gegen `?carmodels=0` (zweiter Besuch je Punkt): GPU +0,03 … 0,31 ms, Zeichenaufrufe weniger,
+    Dreiecke +3–6 % in Orten, **+19–21 % an den großen Bahnhofsparkplätzen** (über dem Budget von 10 %, GPU bleibt im
+    Budget). Geprüft: `?three=160` (gebaute Formen), `?gfx=webgpu` (Modelle ohne Lackmaske), `mp-test` 27/27,
+    Daten-Prüfsummen unverändert, Fahren/Lenken/Blaulicht/Wrack per Skript.
+  - Grenzen: Streifenwagen mit dunkler Motorhaube aus der US-Vorlage; Scheinwerferglas ohne eigenes Leuchtmuster
+    nur über die Textur; WebGPU ohne Lackmaske (Nachzug G10). Ein 403 in der Konsole beim Laden war vorher schon da
+    (auch mit `?carmodels=0`), Ursache noch nicht gefunden.
+  - **Offen: Stadtbus** aus dem Dienstfahrzeug-Paket. Braucht Fahrzeugmaße je Typ statt der festen `CAR`-Werte
+    (Kollisionskreise, Einsteigen, Fußgänger, Polizei, Treffer in `weapons.js`) und eine Rolle im Verkehr.
+
 - ✅ v3.19.0 (10.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3) Teil 2: G8b, G9b, G6b, G7b, G3b, G5b,
   geparkte Autos in der Innenstadt** – alle Phasen ohne Downloads. Alles Neue nur auf Stufe „voll“; „mobil“/„leicht“
   unverändert (geprüft: alle Schalter aus). **Abschlusslauf `v3.19-final`** (12 Punkte × 13/23 Uhr, klar) gegen
@@ -1392,8 +1424,9 @@ Innenstadt umgesetzt, getestet und committet (Details in 6). Alle Phasen ohne Do
 Kleinere Reste ohne Downloads: Geländeschatten auch für Gras/Bäume/Häuser (in der Nachbearbeitung), Reifenspuren an
 Kreuzungen, Rinnen an Walm-/Pultdächern, Impostors mit Normalen, Solaranlagen nur mit Beleg (Auswertung der
 Dachfarben im Luftbild, `tools/roof-colors.ps1`).
-Offen, **braucht freigegebene Downloads:** G4 CC0-Automodelle, G6/G7 neue OSM-Daten (Strommasten, Bushaltestellen,
-Schilder, Baumarten). Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Geländeschatten, Straßenbelag).
+G4 Automodelle umgesetzt (Sketchfab, CC BY 4.0, siehe 6); offen dort der Stadtbus. Neue OSM-Daten (Strommasten,
+Bushaltestellen, Schilder) braucht der Nutzer laut Entscheidung vom 10.11.2026 nicht; Baumarten stecken schon in den
+Rohdaten. Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Geländeschatten, Straßenbelag).
 
 **Entscheidungen (03.11.2026)**
 - Branch: weiter auf `grafik/regionale-architektur`.
