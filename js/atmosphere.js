@@ -13,6 +13,7 @@ const ATMO = {
     uSkyTop: { value: new THREE.Color('#3a6fb8') },  // für einfache Spiegelungen (Fenster, nasse Straßen)
     uSkyHorizon: { value: new THREE.Color('#c9dcec') },
     uSkyGround: { value: new THREE.Color('#5b5a52') },
+    uHorSun: { value: new THREE.Vector4(0, 1, 0, 0) },  // echte Sonnenrichtung, w: Stärke des Geländeschattens (G6)
   },
 };
 
@@ -394,6 +395,7 @@ class Atmosphere {
 
     const A = ATMO.uniforms;
     A.uWet.value = this.wet; A.uNight.value = n; A.uTime.value = this.time;
+    A.uHorSun.value.set(this.sunTrue.x, this.sunTrue.y, this.sunTrue.z, (1 - n) * w.sun);
     A.uSkyTop.value.copy(C.top); A.uSkyHorizon.value.copy(C.horizon); A.uSkyGround.value.copy(C.ground);
 
     if (camera) {

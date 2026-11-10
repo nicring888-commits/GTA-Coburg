@@ -78,6 +78,31 @@ const TileHeights = {
     }
     return { hg0: g, hg, S };
   },
+  // Horizontkarte einer Kachel (seit v3.19.0, Grafik-Phase G6): für n × n Punkte und 8 Himmelsrichtungen der höchste
+  // Erhebungswinkel des Geländes bis 2,6 km (grobes Raster). Byte 0..255 = 0..0,4 rad. Richtung k: Winkel k · 45° in
+  // der x-z-Ebene (x Osten, z Süden), Reihenfolge je Punkt: k = 0..7. (x0, z0): Nordwestecke, w × h Größe der Kachel
+  horizon(ctx, x0, z0, w, h, n) {
+    const sx = ctx.fx * this.F, sz = ctx.fz * this.F;
+    const at = (x, z) => {
+      const gc = (x - ctx.minX) / sx, gr = (z - ctx.minZ) / sz, c = Math.floor(gc), r = Math.floor(gr), tx = gc - c, tz = gr - r;
+      const a = ctx.coarse(c, r), b = ctx.coarse(c + 1, r), d = ctx.coarse(c, r + 1), e = ctx.coarse(c + 1, r + 1);
+      return (a + (b - a) * tx) * (1 - tz) + (d + (e - d) * tx) * tz;
+    };
+    const out = new Uint8Array(n * n * 8), dist = [];
+    for (let s = 35; s < 2700; s *= 1.22) dist.push(s);
+    const dx = [], dz = [];
+    for (let k = 0; k < 8; k++) { dx.push(Math.cos(k * Math.PI / 4)); dz.push(Math.sin(k * Math.PI / 4)); }
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const px = x0 + (i + 0.5) / n * w, pz = z0 + (j + 0.5) / n * h, h0 = at(px, pz) + 1.5;
+      for (let k = 0; k < 8; k++) {
+        let best = 0;
+        for (const s of dist) { const tn = (at(px + dx[k] * s, pz + dz[k] * s) - h0) / s; if (tn > best) best = tn; }
+        out[(j * n + i) * 8 + k] = Math.min(255, Math.round(Math.atan(best) / 0.4 * 255));
+      }
+    }
+    return out;
+  },
+  HOR_N: 48,
 };
 
 // ---------------- als Worker ----------------
@@ -105,6 +130,9 @@ if (typeof window === 'undefined' && typeof importScripts === 'function') {
     }
     const r = TileHeights.heights(ctx, m.ti, m.tj, m.N, m.x0, m.z0, m.water);
     const same = r.hg === r.hg0;
-    self.postMessage({ key: m.key, hg0: r.hg0, hg: same ? null : r.hg, S: r.S }, same ? [r.hg0.buffer] : [r.hg0.buffer, r.hg.buffer]);
+    const hor = m.hor ? TileHeights.horizon(ctx, m.hor[0], m.hor[1], m.hor[2], m.hor[3], TileHeights.HOR_N) : null;
+    const tr = same ? [r.hg0.buffer] : [r.hg0.buffer, r.hg.buffer];
+    if (hor) tr.push(hor.buffer);
+    self.postMessage({ key: m.key, hg0: r.hg0, hg: same ? null : r.hg, S: r.S, hor }, tr);
   };
 }

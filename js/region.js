@@ -460,6 +460,8 @@ class Region {
     const water = this.waterNear(t);
     if (!r) r = TileHeights.heights(this, t.ti, t.tj, this.N, this.tileX(t.ti) - this.fx, this.tileZ(t.tj) - this.fz, water);
     t.hg0 = r.hg0; t.hg = r.hg || r.hg0; t.hs = r.S;
+    // Horizontkarte für den Geländeschatten bei tiefer Sonne (Grafik-Phase G6); ohne Worker hier gerechnet
+    if (this.horizonOn) t.hor = r.hor || TileHeights.horizon(this, t.x0, t.z0, this.tw, this.th, TileHeights.HOR_N / 2);
     if (water) t.waterAll = new WaterSet(water.areas, water.lines);
   }
   // Höhen der Kachel beim Worker bestellen (seit v3.12.0, Grafik-Phase 8)
@@ -468,18 +470,21 @@ class Region {
     const t = { ti: w.ti, tj: w.tj, st: w.st };
     this.hcache.set(w.key, { pending: performance.now() });
     this.hpending++;
-    this.hw.postMessage({ key: w.key, ti: w.ti, tj: w.tj, N: this.N, x0: this.tileX(w.ti) - this.fx, z0: this.tileZ(w.tj) - this.fz, water: this.waterNear(t) });
+    this.hw.postMessage({ key: w.key, ti: w.ti, tj: w.tj, N: this.N, x0: this.tileX(w.ti) - this.fx, z0: this.tileZ(w.tj) - this.fz, water: this.waterNear(t),
+      hor: this.horizonOn ? [this.tileX(w.ti), this.tileZ(w.tj), this.tw, this.th] : null });
   }
   // Worker starten (nicht bei file://, nicht mit ?worker=0); er bekommt einmal grobes Raster, Innenstadt und Straßennetz
   startWorker() {
     this.hcache = new Map(); this.hpending = 0; this.hw = null;
+    // Geländeschatten bei tiefer Sonne (seit v3.19.0, Grafik-Phase G6): nur Stufe „voll“, ?horizon=0 schaltet ab
+    this.horizonOn = !!(window.QUALITY && window.QUALITY.level === 'voll') && !/[?&]horizon=0\b/.test(location.search);
     if (typeof Worker === 'undefined' || location.protocol === 'file:' || /[?&]worker=0/.test(location.search)) return;
     try {
       const hw = new Worker('js/tile-worker.js');
       hw.onmessage = e => {
         const m = e.data, c = this.hcache.get(m.key);
         this.hpending = Math.max(0, this.hpending - 1);
-        if (c && c.pending) this.hcache.set(m.key, { hg0: m.hg0, hg: m.hg, S: m.S });
+        if (c && c.pending) this.hcache.set(m.key, { hg0: m.hg0, hg: m.hg, S: m.S, hor: m.hor });
       };
       hw.onerror = e => { console.warn('Kachel-Worker aus:', e.message); this.hw = null; this.hcache.clear(); this.hpending = 0; };
       hw.postMessage({ init: { gh: this.gh, gc0: this.gc0, gr0: this.gr0, gcols: this.gcols, grows: this.grows, minX: this.minX, minZ: this.minZ,
@@ -717,6 +722,7 @@ class Region {
     if (t.tex) t.tex.dispose();
     if (t.texHd) t.texHd.dispose();
     if (t.coverTex) { t.coverTex.dispose(); t.fieldTex.dispose(); }
+    if (t.horTex) { t.horTex[0].dispose(); t.horTex[1].dispose(); }
     t.disposed = true;
     this.loaded.delete(t.key);
   }

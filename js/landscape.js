@@ -262,10 +262,21 @@ class Landscape {
     const cover = t.coverTex || Landscape.blackTex(), field = t.fieldTex || Landscape.blackTex();
     mat.userData.tile = t; // WebGPU: Bodenbedeckung je Kachel (js/tsl-materials.js)
     mat.userData.tsl = nm => NodeKit.terrain(nm, this); // WebGPU (js/tsl-materials.js)
+    // Horizontkarte (Grafik-Phase G6): zwei RGBA-Texturen je Kachel (Richtungen 0–3 und 4–7)
+    let horA = Landscape.blackTex(), horB = horA;
+    if (t.hor && !t.horTex) {
+      const n = Math.round(Math.sqrt(t.hor.length / 8)), A = new Uint8Array(n * n * 4), B = new Uint8Array(n * n * 4);
+      for (let i = 0; i < n * n; i++) for (let k = 0; k < 4; k++) { A[i * 4 + k] = t.hor[i * 8 + k]; B[i * 4 + k] = t.hor[i * 8 + 4 + k]; }
+      t.horTex = [A, B].map(d => { const x = new THREE.DataTexture(d, n, n, THREE.RGBAFormat); x.magFilter = x.minFilter = THREE.LinearFilter; x.needsUpdate = true; return x; });
+    }
+    if (t.horTex) { horA = t.horTex[0]; horB = t.horTex[1]; }
+    const horRect = new THREE.Vector4(t.x0, t.z0, 1 / this.region.tw, 1 / this.region.th);
+    const horOn = t.horTex ? 1 : 0;
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, {
         coverMap: { value: cover }, fieldMap: { value: field }, grassTex: { value: T.grass }, soilTex: { value: T.soil },
         litterTex: { value: T.litter }, detailMap: { value: this.detail }, uWet: ATMO.uniforms.uWet,
+        horA: { value: horA }, horB: { value: horB }, uHorRect: { value: horRect }, uHorOn: { value: horOn }, uHorSun: ATMO.uniforms.uHorSun,
       });
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vLW;')
@@ -275,7 +286,27 @@ class Landscape {
           varying vec3 vLW;
           uniform sampler2D coverMap, fieldMap, grassTex, soilTex, litterTex, detailMap;
           uniform float uWet;
+          uniform sampler2D horA, horB;
+          uniform vec4 uHorRect, uHorSun;
+          uniform float uHorOn;
           float landH = 0.0;
+          // Geländeschatten: Sonne unter dem Horizont der Umgebung? (weicher Übergang, 1 = beleuchtet)
+          float horLit(vec3 wpos) {
+            if (uHorOn < 0.5 || uHorSun.w < 0.01) return 1.0;
+            vec2 uv = (wpos.xz - uHorRect.xy) * uHorRect.zw;
+            vec4 a = texture2D(horA, uv), b = texture2D(horB, uv);
+            float az = atan(uHorSun.z, uHorSun.x) / 0.785398;
+            az = mod(az + 8.0, 8.0);
+            float k0 = floor(az), f = az - k0;
+            float h[8];
+            h[0] = a.r; h[1] = a.g; h[2] = a.b; h[3] = a.a; h[4] = b.r; h[5] = b.g; h[6] = b.b; h[7] = b.a;
+            int i0 = int(k0), i1 = int(mod(k0 + 1.0, 8.0));
+            float hz = 0.0, hz1 = 0.0;
+            for (int k = 0; k < 8; k++) { if (k == i0) hz = h[k]; if (k == i1) hz1 = h[k]; }
+            float el = asin(clamp(uHorSun.y, -1.0, 1.0));
+            float ang = mix(hz, hz1, f) * 0.4;
+            return mix(1.0, smoothstep(ang - 0.035, ang + 0.02, el), uHorSun.w);
+          }
           ${LAND_NOISE}
           vec3 sat(vec3 c, float s) { float l = dot(c, vec3(0.299, 0.587, 0.114)); return max(mix(vec3(l), c, s), 0.0); }
           // Textur zweimal in verschiedenem Maßstab und gedreht lesen: keine sichtbare Kachelung
@@ -372,6 +403,8 @@ class Landscape {
             landH *= near;
             diffuseColor.rgb *= 1.0 - 0.3 * uWet;
           }`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+          reflectedLight.directDiffuse *= horLit(vLW);`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           {
             // Relief aus dem Muster (Furchen, Pflanzreihen, Grasbüschel)
