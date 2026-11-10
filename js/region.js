@@ -2532,6 +2532,17 @@ class Region {
           if (!inside((ax + bx) / 2 + nx * 2, (az + bz) / 2 + nz * 2)) { nx = -nx; nz = -nz; }
           // Waldmantel (seit v3.19.0, Grafik-Phase G3): außen ein dichter Strauchsaum (0–3,5 m), dahinter junge Bäume,
           // die nach innen höher werden (3–10 m) – der Wald steigt stufig an statt als Wand
+          if (!this.detailsOn) {
+            // Stufen „mobil“ und „leicht“: Waldrand wie bis v3.18.0 (eine Reihe Büsche und junge Bäume)
+            for (let s0 = rnd() * 3; s0 < len; s0 += 2.6 + rnd() * 2) {
+              const off = 0.5 + rnd() * 4.5, x = ax + (bx - ax) * s0 / len + nx * off, z = az + (bz - az) * s0 / len + nz * off;
+              if (!free(x, z, 1.2)) continue;
+              if (rnd() < 0.72) pts.push([x, z, 2, 0.7 + rnd() * 0.9]);
+              else pts.push([x, z, rnd() < conifer * 0.6 ? 1 : 0, 0.45 + rnd() * 0.45]);
+              made++;
+            }
+            continue;
+          }
           for (let s0 = rnd() * 2; s0 < len; s0 += 1.9 + rnd() * 1.4) {
             const band = rnd(), off = band < 0.55 ? 0.3 + rnd() * 3.2 : 3 + rnd() * 7;
             const x = ax + (bx - ax) * s0 / len + nx * off, z = az + (bz - az) * s0 / len + nz * off;
@@ -2557,7 +2568,7 @@ class Region {
     if (rr) {
       const along = (p, step, f) => { for (let k = 0; k + 3 < p.length; k += 2) { const ax = p[k], az = p[k + 1], bx = p[k + 2], bz = p[k + 3], L = Math.hypot(bx - ax, bz - az); for (let s0 = rT() * step; s0 < L; s0 += step * (0.8 + rT() * 0.4)) f(ax + (bx - ax) * s0 / L, az + (bz - az) * s0 / L, -(bz - az) / L, (bx - ax) / L); } };
       for (const h of rr.hedges) along(h.p, 1.7, (x, z, nx, nz) => { const o = (rT() - 0.5) * 0.9, px = x + nx * o, pz = z + nz * o; if (free(px, pz, 0.5)) pts.push([px, pz, 2, 0.85 + rT() * 0.5]); });
-      if (rr.hedges.length) hedgeBody = this.hedgeBody(t, rr.hedges, free);
+      if (rr.hedges.length && this.detailsOn) hedgeBody = this.hedgeBody(t, rr.hedges, free);
       for (const r of rr.rows) along(r.p, 8, (x, z) => { if (free(x, z, 1)) pts.push([x, z, 0, 0.8 + rT() * 0.45]); });
     }
     // Gärten, Zäune, Einfahrten und Rundballen in den Dörfern
