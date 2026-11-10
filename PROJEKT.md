@@ -296,7 +296,42 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- ✅ v3.19.0 (10.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3) Teil 2: G8b, G9b.**
+- ✅ v3.19.0 (10.11.2026, Branch `grafik/regionale-architektur`): **Grafik-Fahrplan 2 (7.3) Teil 2: G8b, G9b, G6b, G7b, G3b, G5b,
+  geparkte Autos in der Innenstadt** – alle Phasen ohne Downloads. Alles Neue nur auf Stufe „voll“; „mobil“/„leicht“
+  unverändert (geprüft: alle Schalter aus). **Abschlusslauf `v3.19-final`** (12 Punkte × 13/23 Uhr, klar) gegen
+  `v3.18-final`: GPU-Median 4,10 → 4,41 ms, Zeichenaufrufe gleich (904 → 902), Dreiecke 5,3 → 5,5 Mio.
+  - ✅ **G6b Geländeschatten bei tiefer Sonne** (Commits `0e66b4e`, `fc2ebaa`): `TileHeights.horizon` in
+    `js/tile-worker.js` rechnet je Kachel im Worker eine Horizontkarte (48 × 48 Punkte × 8 Richtungen, höchster
+    Erhebungswinkel bis 2,6 km aus dem groben Raster, Bytes 0…0,4 rad). `js/landscape.js` legt sie als zwei
+    RGBA-Texturen an (`t.horTex`) und dämpft im Geländeshader das direkte Sonnenlicht (`horLit`, nach
+    `lights_fragment_end`), wenn die echte Sonne (`ATMO.uniforms.uHorSun`) unter dem Horizont steht. Ohne Worker
+    16 × 16 in eigenem Bauschritt (24 × 24 kostete 8 ms, 48 × 48 25 ms). `?horizon=0`. GPU nicht messbar. Wirkung nur
+    morgens und in der letzten halben Spielstunde vor Sonnenuntergang (mittlerer Horizont ≈ 2°, Hänge bis 19°).
+    **Grenze:** Gras, Büsche, Bäume und Häuser bekommen den Schatten nicht (mit erzwungener Sonne unter dem Horizont
+    sieht man helles Gras auf dunklem Boden); dafür bräuchte es eine Auswertung in der Nachbearbeitung
+  - ✅ **G7b Straßenbelag** (`d3992e1`): im Straßenshader (`World.roadShader`, `#if defined( STANDARD ) &&
+    ROAD_WEAR`) Rissnetz aus Zellgrenzen (`rCellEdge`, F2 − F1, verzerrt) in fleckigen Feldern, vergossene Teerfugen
+    (dunkel, glänzend), Ölflecken, dunklere Flickstellen; Wasser steht bei Regen in den Rissen. Kantengeglättet über
+    `fwidth`, blendet zwischen 60 und 140 m aus, Zellnetz nur, wo Risse/Fugen vorkommen. `?wear=0`. A/B: +0 … 0,3 ms.
+    Reifenspuren an Kreuzungen fehlen (bräuchten die Straßenrichtung im Shader)
+  - ✅ **G3b Waldmantel und Hecken** (`af2bd3e`, `c9274d2`): Waldrand gestuft (außen Strauchsaum 0–3,5 m, dahinter
+    junge Bäume bis 10 m, nach innen höher). OSM-Hecken bekommen einen durchgehenden Heckenkörper (`Region.hedgeBody`:
+    1,4 m breit, 1,5–2,2 m hoch, wellige Krone, Kronendach-Material) und sind Hindernisse (Kreise im Baumraster, mit den
+    Bäumen auf- und abgebaut). Nur „voll“ (`detailsOn`), sonst Waldrand wie bisher
+  - ✅ **G5b Gebäudedetails** (`6919707`): an Satteldächern im Landkreis (`ruralRoof`) Dachrinnen an beiden Traufen
+    und je ein Fallrohr mit Bogen zur Wand; `Region.wallExtras`: Satellitenschüsseln an der Südwand (MFH 45 %,
+    Siedlung 25 %, EFH 15 %), Klima-Außengeräte vor Gewerbe- und Industriehallen. `?details=0`. Dreiecke +0,3–1,1 %,
+    GPU unverändert. Fensterbänke als Geometrie bewusst nicht: die Fenster malt der Fassadenshader, ihre Lage kennt
+    JS nicht. Walm-, Krüppelwalm- und Pultdächer noch ohne Rinnen; Innenstadt (LoD2) unverändert
+  - ✅ **Geparkte Autos in der Innenstadt** (`d5bf2b1`): `ParkKit.buildCore` nimmt die 444 Parkflächen der
+    Landkreisdaten im Kerngebiet (die Innenstadtdaten haben keine), 648 Autos in 11 Gruppen je Kachel, Aufbau ≈ 66 ms;
+    sichtbar und Hindernis nur bis 600 m (`updateCore`), mit E zu klauen (getestet). `?corepark=0`. GPU +0 … 0,4 ms,
+    Dreiecke +0,3–0,5 Mio. Ohne Stellplatz-Linien (die zeichnet nur `SiteKit.parkingLines` im Landkreis)
+  - **Gesamtcheck:** `?three=160` und `?gfx=webgpu` ohne Fehler, `?worker=0` (größter Bauschritt 16 ms gegen 10,6 ohne
+    die neuen Teile, Messung rauscht), `node tools/mp-test.js` 27/27, Daten-Prüfsummen unverändert.
+    ⚠️ Shell-Heredocs machten wieder aus `\b` ein Steuerzeichen (in `world.js` gefunden und behoben): Patch-Skripte
+    als Datei schreiben
+
   - ✅ **G8b Lichterteppich und Lichtglocke** (Commit `0f5b8fc`): neue Datei `js/lightcarpet.js` (siehe 5). Nachts leuchten
     alle Orte bis an den Sichtrand (Kamera bis 6,5 km): Laternen an Ortsstraßen (Natrium-Orange an Haupt- und
     Kreisstraßen, warmweiß in Wohnstraßen), Fensterlichter (8 % bläulich wie Fernseher), leichtes Flimmern. Ferne Punkte
@@ -1352,13 +1387,13 @@ in Richtung GTA V (Licht und Glanz wirken auf jedes Bild), G3/G4 die zweitgröß
    `?worker=0`, `file://`.
 6. Ergebnis, Messwerte und Grenzen in Abschnitt 6 eintragen, dann Freigabe der nächsten Phase.
 
-**Stand 10.11.2026:** G0, G1, G2, G3a, G4a, G6a, G7a, G8a, G8b, G9a, G9b umgesetzt, getestet und committet (Details in 6).
-Offen, **ohne Downloads** (als Nächstes): **G5 Gebäudedetails aus der Nähe** (Fensterrahmen, Fallrohre, Schornsteine,
-Vordächer; Solaranlagen nur mit Beleg), **G6 Geländeschatten bei tiefer Sonne** (Horizontkarte je Kachel im Worker),
-**G3 Waldränder** (Sträucher/Jungwuchs, Hecken als Körper) und Impostors mit Normalen, G7 Straßenbelag-Abziehbilder
-(Ölflecken, Risse, Teerfugen), geparkte Autos in der Innenstadt.
+**Stand 10.11.2026:** G0, G1, G2, G3a, G3b, G4a, G5b, G6a, G6b, G7a, G7b, G8a, G8b, G9a, G9b und geparkte Autos in der
+Innenstadt umgesetzt, getestet und committet (Details in 6). Alle Phasen ohne Downloads sind damit durch.
+Kleinere Reste ohne Downloads: Geländeschatten auch für Gras/Bäume/Häuser (in der Nachbearbeitung), Reifenspuren an
+Kreuzungen, Rinnen an Walm-/Pultdächern, Impostors mit Normalen, Solaranlagen nur mit Beleg (Auswertung der
+Dachfarben im Luftbild, `tools/roof-colors.ps1`).
 Offen, **braucht freigegebene Downloads:** G4 CC0-Automodelle, G6/G7 neue OSM-Daten (Strommasten, Bushaltestellen,
-Schilder, Baumarten). Zuletzt G10 WebGPU-Nachzug (inkl. PBR, Lichterteppich, Wasser-Strömung).
+Schilder, Baumarten). Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Geländeschatten, Straßenbelag).
 
 **Entscheidungen (03.11.2026)**
 - Branch: weiter auf `grafik/regionale-architektur`.
