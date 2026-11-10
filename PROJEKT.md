@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.19.0 „GTA-V-Optik, Teil 2“ (Branch `grafik/regionale-architektur`, noch nicht auf `main`) · **Letzte Aktualisierung:** 10.11.2026
+**Version:** 3.19.0 „GTA-V-Optik, Teil 2“ (seit 10.11.2026 auf `main`, live auf https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 10.11.2026
 
 ---
 
