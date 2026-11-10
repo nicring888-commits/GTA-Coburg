@@ -178,7 +178,7 @@
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
   const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'houses', 'archetypes', 'tile-worker', 'signals', 'region',
-    'vehicle', 'parking', 'carlights', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
+    'vehicle', 'parking', 'carlights', 'lightcarpet', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
     'property', 'venues', 'net-p2p', 'net', 'tsl-materials', 'tsl-facade', 'tsl-post', 'gfx-webgpu'].concat(/[?&]bench\b/.test(location.search) ? ['bench'] : [], ['game', 'touch']).map(n => `js/${n}.js`));
 
   const TIMEOUT = 90000;  // ohne jeden Fortschritt; große Dateien bei langsamer Mobilverbindung

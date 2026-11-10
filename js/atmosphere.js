@@ -142,6 +142,7 @@ class Atmosphere {
       uCloudCol: { value: new THREE.Color() }, uCloudShade: { value: new THREE.Color() },
       uCover: { value: 0.2 }, uDark: { value: 0 }, uNight: { value: 0 }, uTime: { value: 0 },
       uFogCol: { value: new THREE.Color() }, uHaze: { value: 0 },
+      uGlow: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 1, 0, 1)) }, uGlowOn: { value: 0 },
     };
     return new THREE.ShaderMaterial({
       uniforms: u, side: THREE.BackSide, depthWrite: false, fog: false,
@@ -156,6 +157,8 @@ class Atmosphere {
         uniform vec3 uTop, uHorizon, uGround, uSunDir, uSunCol, uCloudCol, uCloudShade;
         uniform float uCover, uDark, uNight, uTime, uHaze;
         uniform vec3 uFogCol;
+        uniform vec4 uGlow[4];   // Lichtglocke (js/lightcarpet.js): Richtung x/z, Stärke, Breite
+        uniform float uGlowOn;
         varying vec3 vDir;
         float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         float noise(vec2 p) {
@@ -196,11 +199,25 @@ class Atmosphere {
             col = mix(col, cc, cover * 0.97);
           }
           col += vec3(0.85, 0.9, 1.0) * star * uNight * (1.0 - cover) * smoothstep(0.02, 0.2, h) * 1.6;
+          // Lichtglocke über den Städten: orange über dem Horizont, Wolken werfen das Licht stärker zurück
+          vec3 glow = vec3(0.0);
+          if (uGlowOn > 0.001) {
+            vec2 dh = normalize(d.xz + vec2(1e-5));
+            float g = 0.0;
+            for (int k = 0; k < 4; k++) {
+              vec4 q = uGlow[k];
+              float ang = acos(clamp(dot(dh, q.xy), -1.0, 1.0));
+              float fall = mix(2.2, 9.0, smoothstep(1.2, 0.3, q.w)); // nahe Stadt: hoch hinauf, ferne: flach am Horizont
+              g += q.z * exp(-ang * ang / (q.w * q.w)) * exp(-max(h, 0.0) * fall);
+            }
+            glow = vec3(1.0, 0.5, 0.2) * g * uGlowOn * (0.055 + cover * 0.11 + uHaze * 0.1) * smoothstep(-0.08, 0.02, h);
+          }
           // Sonne bzw. Mond
           float disk = smoothstep(0.99955, 0.99975, dot(d, uSunDir)) * (1.0 - cover) * clearSky;
           col = mix(col, mix(vec3(14.0, 12.5, 10.5), vec3(1.6, 1.65, 1.8), uNight), disk);
           // Dunst und Nebel verschlucken den Himmel, am Horizont am stärksten
           col = mix(col, uFogCol, uHaze * (1.0 - 0.55 * smoothstep(0.0, 0.8, h)));
+          col += glow; // nach dem Dunst: Nebel und Wolken über den Städten leuchten
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>

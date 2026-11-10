@@ -132,6 +132,7 @@
   // ---------- Welt laden ----------
   const world = new World(window.COBURG, scene, renderer);
   let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property, life, net, lobby, weapons;
+  let carpet = null; // Lichterteppich und Lichtglocke (js/lightcarpet.js, seit v3.19.0)
   let ride = null;         // Mehrspieler: Auto eines anderen Spielers, in dem man mitfährt
   let lastBoom = null;     // letzte Explosion (scheucht Tauben auf)
   const parked = [];       // Autos ohne KI (auch das eigene)
@@ -187,6 +188,7 @@
     if (world.region) {
       // Laternen, Ladenschilder und Lokale in den Orten nutzen dieselben Bausteine wie die Innenstadt
       world.region.props = props; world.region.property = property;
+      if (typeof LightCarpet !== 'undefined') { carpet = new LightCarpet(world.region, scene, atmo.skyMat); window.CARPET_DEBUG = carpet; }
       progress('Landkreis um den Bahnhof aufbauen …', 0.995);
       world.region.ensure(spawn.x, spawn.z, Q.ensure);
       // Übersichtskarte des Landkreises nebenbei malen
@@ -1303,6 +1305,7 @@
       carLights.update(drivenCars, mode === 'drive' ? car : null, atmo.night, U.clamp(w.rain + (1 - w.vis) * 0.8, 0, 1), atmo.wet, camera.position);
     } else carLights.update([], null, 0, 0, 0, camera.position);
     if (!property.inside) { atmo.update(dt, camera); syncNight(); }
+    if (carpet) carpet.update(camera.position, night, !!property.inside, renderer);
     peds.draw(camera.position.x, camera.position.z);
     world.updateTreeLod(camera.position.x, camera.position.z);
     if (world.region && world.region.land) world.region.land.update(camera.position.x, camera.position.z, !property.inside);
