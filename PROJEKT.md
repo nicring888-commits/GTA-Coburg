@@ -296,6 +296,12 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- ✅ v3.19.1 (10.11.2026, `main`): **Touch-Steuerung auch online.** Die Knöpfe (Joystick, E/F, Waffen, Karte …) wurden
+  nur beim Tippen auf „Allein spielen“ eingeblendet; wer über „Online spielen“/Lobby oder einen Einladungslink ins Spiel
+  kam, hatte keine. `js/touch.js` blendet sie jetzt nach dem Spielzustand ein (HUD sichtbar, Startbildschirm und Lobby
+  zu), Vollbild auch beim Tippen auf „Online spielen“. Getestet im Handy-Modus: Startbildschirm ohne, allein mit, online
+  mit Knöpfen samt Chat und Spielerliste, nach „Lobby verlassen“ weiter mit Knöpfen.
+
 - ✅ v3.19.0 (10.11.2026): **Automodelle (G4)** (Commit `075a906`): 10 Fahrzeugtypen aus zwei Sketchfab-Paketen von
   Comrade1280 (CC BY 4.0, Nennung in `assets/cars/LIZENZEN.md` und in der Quellenzeile). Pkw = Sedan, Kleinwagen =
   Compact, Kombi = Wagon, Kleinbus = Minivan, Pick-up, Geländewagen = SUV, Cabrio = **Coupé** (Entscheidung: kein

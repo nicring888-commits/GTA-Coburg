@@ -141,12 +141,16 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
 
   // ---------- Sichtbarkeit / Modus ----------
-  $('start-btn').addEventListener('click', () => {
-    root.classList.remove('hidden');
-    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-  });
+  // Vollbild braucht eine Nutzergeste: beim Tippen auf „Allein spielen“ bzw. „Online spielen“
+  const fullscreen = () => { if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); };
+  $('start-btn').addEventListener('click', fullscreen);
+  if ($('mp-btn')) $('mp-btn').addEventListener('click', fullscreen);
+  const hidden = id => { const el = $(id); return !el || el.classList.contains('hidden'); };
   const tick = () => {
     requestAnimationFrame(tick);
+    // sichtbar, solange gespielt wird – allein wie online (HUD an, Startbildschirm und Lobby zu)
+    const playing = !hidden('hud') && hidden('start') && hidden('lobby');
+    root.classList.toggle('hidden', !playing);
     const g = G(); if (!g) return;
     const drive = g.mode === 'drive';
     root.classList.toggle('driving', drive);
