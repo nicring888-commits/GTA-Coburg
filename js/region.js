@@ -478,6 +478,8 @@ class Region {
     this.hcache = new Map(); this.hpending = 0; this.hw = null;
     // Geländeschatten bei tiefer Sonne (seit v3.19.0, Grafik-Phase G6): nur Stufe „voll“, ?horizon=0 schaltet ab
     this.horizonOn = !!(window.QUALITY && window.QUALITY.level === 'voll') && !/[?&]horizon=0\b/.test(location.search);
+    // Gebäudedetails (seit v3.19.0, Grafik-Phase G5): Dachrinnen, Fallrohre, Satellitenschüsseln, Klimageräte; ?details=0
+    this.detailsOn = !!(window.QUALITY && window.QUALITY.level === 'voll') && !/[?&]details=0\b/.test(location.search);
     if (typeof Worker === 'undefined' || location.protocol === 'file:' || /[?&]worker=0/.test(location.search)) return;
     try {
       const hw = new Worker('js/tile-worker.js');
@@ -2218,6 +2220,7 @@ class Region {
       // Gauben (nur Sattel- und Krüppelwalmdach mit ausgebautem Dachgeschoss), Balkone je Bautyp und Bauzeit
       if (info) HouseKit.dormers(W, rt, pb, info, arch, wallCol, roofCol, streetSide, info.chimU !== undefined ? info.chimU : null, rnd);
       if (!plainType && (rural || arch === ARCH.MFH)) this.balconies(pb, ring, sgn, sideBase, top, arch, era, rural, f4, info, doorWall, rnd);
+      if (this.detailsOn && !isCanopy && !plainType) this.wallExtras(pb, ring, sgn, sideBase, top, arch, hk, doorWall, rnd);
       if (!isCanopy) {
         const rec = { p: ring, bb, top, n: b.n, t: b.t, a: arch, e: era, hk };
         t.buildings.push(rec);
@@ -2294,6 +2297,19 @@ class Region {
     };
     gable(p1, p2, r1, (s + 1) % 4);
     gable(p3, p0, r0, (s + 3) % 4);
+    // Dachrinnen an beiden Traufen, je ein Fallrohr mit Bogen zur Wand (Zink, an alten Häusern auch Kupfer)
+    if (this.detailsOn) {
+      const gc = U.color(rnd() < 0.8 ? '#8e9396' : '#7a5c44', 0.06, rnd), ang = Math.atan2(dz, dx), gy = yE - th - 0.13;
+      for (const [a0, a1, out, w0, w1] of [[A0, A1, outA, p0, p1], [B3, B2, outB, p3, p2]]) {
+        W.boxTris(pb, (a0[0] + a1[0]) / 2 + out[0] * 0.05, gy, (a0[1] + a1[1]) / 2 + out[1] * 0.05, L + 2 * oG, 0.13, 0.14, ang, gc);
+        const end = rnd() < 0.5 ? 1 : -1, e = end > 0 ? w0 : w1;
+        const px = e[0] + dx * 0.32 * end + out[0] * 0.1, pz = e[1] + dz * 0.32 * end + out[1] * 0.1, g = this.heightAt(px, pz);
+        if (gy - 0.35 - g > 1) {
+          W.boxTris(pb, px, g, pz, 0.09, gy - 0.3 - g, 0.09, ang, gc);
+          W.boxTris(pb, px + out[0] * oE * 0.45, gy - 0.32, pz + out[1] * oE * 0.45, 0.09, 0.09, oE * 0.95, ang, gc);
+        }
+      }
+    }
     // Schornstein auf dem First (verputzt oder Ziegel), mit Abdeckplatte
     const info = { f: HouseKit.frame(p), top, yR: ridgeH, slope, d: depth / 2, a: L / 2 };
     if (rnd() > RF.chimney) return info;                 // Neubauten meist ohne Schornstein
@@ -2303,6 +2319,39 @@ class Region {
     W.boxTris(pb, sx, ridgeH + 0.95, sz, 0.72, 0.08, 0.72, ang, U.color('#55524d', 0.05, rnd));
     info.chimU = (sx - info.f.c[0]) * info.f.ux + (sz - info.f.c[1]) * info.f.uz;
     return info;
+  }
+
+  // Wanddetails (seit v3.19.0, Grafik-Phase G5): Satellitenschüsseln an der Südseite von Mehrfamilien-, Siedlungs- und
+  // Einfamilienhäusern (je Bautyp verschieden oft), Klima-Außengeräte am Boden vor Gewerbe- und Industriehallen
+  wallExtras(pb, ring, sgn, sideBase, top, arch, hk, doorWall, rnd) {
+    const W = this.world, n = ring.length / 2, walls = [];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
+      if (len < 2.5) continue;
+      walls.push({ i, ax, az, dx: (bx - ax) / len, dz: (bz - az) / len, len, ox: sgn * (bz - az) / len, oz: -sgn * (bx - ax) / len, g: sideBase[i] });
+    }
+    if (!walls.length) return;
+    if (hk >= 0) {
+      const side = walls.filter(w => w.i !== doorWall && w.len > 5);
+      for (let k = 0, m = side.length ? 1 + Math.floor(rnd() * 3) : 0; k < m; k++) {
+        const w = side[Math.floor(rnd() * side.length)], s0 = 1.2 + rnd() * (w.len - 2.4);
+        const x = w.ax + w.dx * s0 + w.ox * 0.5, z = w.az + w.dz * s0 + w.oz * 0.5, ang = Math.atan2(w.dz, w.dx);
+        const g = this.heightAt(x, z);
+        W.boxTris(pb, x, g, z, 1.0, 0.78, 0.42, ang, U.color('#d6d8d9', 0.04, rnd));
+        W.boxTris(pb, x + w.ox * 0.215, g + 0.12, z + w.oz * 0.215, 0.55, 0.55, 0.02, ang, U.color('#3c3f42', 0.03, rnd));
+      }
+      return;
+    }
+    const odds = arch === ARCH.MFH ? 0.45 : arch === ARCH.SIEDLUNG ? 0.25 : arch === ARCH.EFH ? 0.15 : 0.08;
+    if (rnd() > odds) return;
+    let w = walls[0];
+    for (const q of walls) if (q.oz > w.oz) w = q;
+    if (w.oz < 0.3) return;                                 // keine Wand nach Süden
+    const s0 = w.len * (0.2 + rnd() * 0.6), y = Math.min(top - 1.0, w.g + 5.6), ang = Math.atan2(w.dz, w.dx);
+    if (y - w.g < 2.2) return;
+    const x = w.ax + w.dx * s0, z = w.az + w.dz * s0;
+    W.boxTris(pb, x + w.ox * 0.36, y, z + w.oz * 0.36, 0.72, 0.68, 0.05, ang, U.color('#e4e5e3', 0.04, rnd));
+    W.boxTris(pb, x + w.ox * 0.18, y + 0.3, z + w.oz * 0.18, 0.05, 0.05, 0.34, ang, U.color('#7d8082', 0.04, rnd));
   }
 
   // Pfosten eines Carports an den Ecken (Holz oder Anthrazit)
