@@ -2439,6 +2439,7 @@ class Region {
   // Bäume, Büsche und Hecken einer Kachel in Schritten. Punkte: [x, z, Art (0 Laubbaum, 1 Nadelbaum, 2 Busch), Größe]
   *treeSteps(t) {
     const pts = [];
+    let hedgeBody = null;
     const d = t.d;
     const wet = (x, z) => t.waterAll && !t.waterAll.empty && t.waterAll.carveAt(x, z) > 0; // keine Bäume im Wasser
     const free = (x, z, m) => !this.inCore(x, z) && !this.insideBuilding(x, z, m, t) && !this.nearRoad(x, z, m, t) && !wet(x, z) && this.walkAt(x, z) === null &&
@@ -2479,11 +2480,14 @@ class Region {
           if (len < 1) continue;
           let nx = -(bz - az) / len, nz = (bx - ax) / len;
           if (!inside((ax + bx) / 2 + nx * 2, (az + bz) / 2 + nz * 2)) { nx = -nx; nz = -nz; }
-          for (let s0 = rnd() * 3; s0 < len; s0 += 2.6 + rnd() * 2) {
-            const off = 0.5 + rnd() * 4.5, x = ax + (bx - ax) * s0 / len + nx * off, z = az + (bz - az) * s0 / len + nz * off;
+          // Waldmantel (seit v3.19.0, Grafik-Phase G3): außen ein dichter Strauchsaum (0–3,5 m), dahinter junge Bäume,
+          // die nach innen höher werden (3–10 m) – der Wald steigt stufig an statt als Wand
+          for (let s0 = rnd() * 2; s0 < len; s0 += 1.9 + rnd() * 1.4) {
+            const band = rnd(), off = band < 0.55 ? 0.3 + rnd() * 3.2 : 3 + rnd() * 7;
+            const x = ax + (bx - ax) * s0 / len + nx * off, z = az + (bz - az) * s0 / len + nz * off;
             if (!free(x, z, 1.2)) continue;
-            if (rnd() < 0.72) pts.push([x, z, 2, 0.7 + rnd() * 0.9]);
-            else pts.push([x, z, rnd() < conifer * 0.6 ? 1 : 0, 0.45 + rnd() * 0.45]);
+            if (off < 3.5) pts.push([x, z, 2, 0.6 + rnd() * 0.8 + off * 0.08]);
+            else pts.push([x, z, rnd() < conifer * 0.6 ? 1 : 0, 0.38 + (off - 3) / 7 * 0.45 + rnd() * 0.2]);
             made++;
           }
         }
@@ -2503,6 +2507,7 @@ class Region {
     if (rr) {
       const along = (p, step, f) => { for (let k = 0; k + 3 < p.length; k += 2) { const ax = p[k], az = p[k + 1], bx = p[k + 2], bz = p[k + 3], L = Math.hypot(bx - ax, bz - az); for (let s0 = rT() * step; s0 < L; s0 += step * (0.8 + rT() * 0.4)) f(ax + (bx - ax) * s0 / L, az + (bz - az) * s0 / L, -(bz - az) / L, (bx - ax) / L); } };
       for (const h of rr.hedges) along(h.p, 1.7, (x, z, nx, nz) => { const o = (rT() - 0.5) * 0.9, px = x + nx * o, pz = z + nz * o; if (free(px, pz, 0.5)) pts.push([px, pz, 2, 0.85 + rT() * 0.5]); });
+      if (rr.hedges.length) hedgeBody = this.hedgeBody(t, rr.hedges, free);
       for (const r of rr.rows) along(r.p, 8, (x, z) => { if (free(x, z, 1)) pts.push([x, z, 0, 0.8 + rT() * 0.45]); });
     }
     // Gärten, Zäune, Einfahrten und Rundballen in den Dörfern
@@ -2541,6 +2546,15 @@ class Region {
       treeGrid.insert(trees.length / 3 - 1, p[0] - 1, p[1] - 1, p[0] + 1, p[1] + 1);
     }
     yield;
+    if (hedgeBody) {
+      // Hecken sind Hindernisse (Kreise alle ≈ 1,2 m, wie Baumstämme)
+      for (let i = 0; i < hedgeBody.hits.length; i += 2) {
+        trees.push(hedgeBody.hits[i], hedgeBody.hits[i + 1], 0.75);
+        treeGrid.insert(trees.length / 3 - 1, hedgeBody.hits[i] - 1, hedgeBody.hits[i + 1] - 1, hedgeBody.hits[i] + 1, hedgeBody.hits[i + 1] + 1);
+      }
+      t.group.add(hedgeBody.mesh);
+      t.villageMeshes = (t.villageMeshes || []).concat([hedgeBody.mesh]);
+    }
     t.trees = trees; t.treeGrid = treeGrid; // Kollision erst, wenn die Bäume zu sehen sind
     if (t.canopy) t.canopy.visible = false;
     t.treeMeshes = [];
@@ -2559,6 +2573,44 @@ class Region {
       t.treeMeshes.push(set);
       (this.world.treeLod || (this.world.treeLod = [])).push(set);
     });
+  }
+  // Heckenkörper aus OSM-Hecken (seit v3.19.0, Grafik-Phase G3): Streifen 1,4 m breit, 1,5–2,2 m hoch mit welliger
+  // Krone (Seiten und Deckel), Laub-Hüllmaterial wie das Kronendach; Büsche darauf lockern die Form auf. Stücke an
+  // Straßen, Häusern und Wasser fallen weg. Liefert Mesh und Kollisionspunkte.
+  hedgeBody(t, hedges, free) {
+    if (!this.land) return null;
+    const pos = [], col = [], idx = [], hits = [], rnd = U.rng(t.key * 53 + 3), W = 0.7;
+    const top = (x, z) => 1.5 + 0.7 * U.vnoise(x / 3.1, z / 3.1);
+    for (const hd of hedges) {
+      const p = hd.p;
+      for (let k = 0; k + 3 < p.length; k += 2) {
+        const ax = p[k], az = p[k + 1], bx = p[k + 2], bz = p[k + 3], L = Math.hypot(bx - ax, bz - az);
+        if (L < 0.5) continue;
+        const dx = (bx - ax) / L, dz = (bz - az) / L, nx = -dz, nz = dx, n = Math.max(1, Math.ceil(L / 1.5));
+        let prev = null;
+        for (let i = 0; i <= n; i++) {
+          const x = ax + dx * L * i / n, z = az + dz * L * i / n;
+          if (x < t.x0 || x >= t.x1 || z < t.z0 || z >= t.z1 || !free(x, z, 0.8)) { prev = null; continue; }
+          const g = this.heightAt(x, z) - 0.15, h = g + top(x, z), w = W * (0.85 + rnd() * 0.3);
+          const v = 0.62 + rnd() * 0.3, base = pos.length / 3;
+          // vier Punkte quer: unten links, oben links, oben rechts, unten rechts
+          pos.push(x + nx * w, g, z + nz * w, x + nx * w * 0.75, h, z + nz * w * 0.75, x - nx * w * 0.75, h, z - nz * w * 0.75, x - nx * w, g, z - nz * w);
+          for (let j = 0; j < 4; j++) col.push(v * 0.78, v, v * 0.7);
+          if (prev !== null) for (const [a, b] of [[0, 1], [1, 2], [2, 3]]) idx.push(prev + a, base + a, prev + b, prev + b, base + a, base + b);
+          prev = base;
+          if (i % 1 === 0) hits.push(x, z);
+        }
+      }
+    }
+    if (!idx.length) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, this.land.canopyMaterial());
+    m.castShadow = true; m.receiveShadow = true;
+    return { mesh: m, hits };
   }
   // Gehölze aus dem Luftbild: dunkelgrüne Flecken außerhalb von Wald, Häusern, Straßen und Wasser werden zu Büschen
   // (Hecken, schmale Streifen) und Bäumen (große Flecken)
