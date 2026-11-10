@@ -37,13 +37,60 @@ function waterMaterial() {
     transparent: true, opacity: 0.93, depthWrite: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
   });
   _waterMat.userData.tex = nt;
+  _waterMat.userData.time = { value: 0 };
+  if (window.QUALITY && window.QUALITY.level === 'voll' && !/[?&]flow=0\b/.test(location.search)) waterFlowShader(_waterMat);
   return _waterMat;
+}
+// Strömung, Uferschaum und Spiegelungen (seit v3.19.0, Grafik-Phase G9b; nur Stufe „voll“, ?flow=0 = alte Fassung).
+// Die Vertexfarbe der Wasseroberfläche trägt r, g = Fließrichtung × Tempo (0,5 = still), b = Nähe zum Ufer (1 am Rand).
+// Die Wellenkarte strömt entlang der Richtung (zwei versetzte Phasen, überblendet), am Ufer und in schnellem Wasser
+// bildet sich Schaum. Das Wasser ist deckend und meldet sich im Alphakanal als waagrechte Spiegelfläche (1 … 2) bei
+// der Nachbearbeitung (js/post.js), damit Ufer, Bäume, Häuser und Brücken sich darin spiegeln.
+function waterFlowShader(m) {
+  m.transparent = false; m.opacity = 1;
+  m.color.set('#2e4a47');
+  m.customProgramCacheKey = () => 'water-flow';
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uWTime = m.userData.time;
+    sh.vertexShader = '#ifndef USE_COLOR\nattribute vec3 color;\n#endif\nvarying vec3 vFlowW;\n' + sh.vertexShader
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFlowW = color;');
+    const nline = 'vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;';
+    const nmaps = THREE.ShaderChunk.normal_fragment_maps.replace(nline, `
+      vec2 flw = vFlowW.xy * 2.0 - 1.0;
+      float ph0 = fract(uWTime * 0.25), ph1 = fract(uWTime * 0.25 + 0.5);
+      vec3 nA = texture2D( normalMap, vNormalMapUv - flw * ph0 * 0.45 ).xyz * 2.0 - 1.0;
+      vec3 nB = texture2D( normalMap, vNormalMapUv - flw * ph1 * 0.45 + 0.37 ).xyz * 2.0 - 1.0;
+      vec3 mapN = mix(nA, nB, abs(ph0 * 2.0 - 1.0));
+      mapN.xy *= 1.0 + length(flw) * 1.3;`);
+    sh.fragmentShader = 'uniform float uWTime;\nvarying vec3 vFlowW;\n' + sh.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      vec2 fl0 = vFlowW.xy * 2.0 - 1.0;
+      float spd = clamp(length(fl0), 0.0, 1.0);
+      float fn = texture2D(normalMap, vNormalMapUv * 2.3 - fl0 * uWTime * 0.12).r;
+      float fn2 = texture2D(normalMap, vNormalMapUv * 0.9 + vec2(0.31, 0.17) - fl0 * uWTime * 0.05).g;
+      float foam = smoothstep(0.6, 0.97, vFlowW.z + (fn - 0.5) * 0.55 + (fn2 - 0.5) * 0.3) * mix(0.4, 0.95, spd);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74, 0.77, 0.76), foam);`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(roughnessFactor, 0.8, foam);')
+      .replace('#include <normal_fragment_maps>', nmaps)
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor.a = 1.0 + 0.85 * (1.0 - foam);');
+  };
 }
 // Wellen wandern lassen (einmal pro Bild)
 function waterTick(dt) {
   if (!_waterMat) return;
   const t = _waterMat.userData.tex;
   t.offset.x = (t.offset.x + dt * 0.012) % 1; t.offset.y = (t.offset.y + dt * 0.02) % 1;
+  _waterMat.userData.time.value = (_waterMat.userData.time.value + dt) % 4000;
+}
+// Vertexfarbe des zuletzt angelegten Dreiecks aus der Lage setzen (Bucket.tri kennt nur eine Farbe je Dreieck und
+// vertauscht je nach Lage zwei Ecken): f(x, z) -> [Richtung x, Richtung z, Ufernähe]
+function waterTriColor(b, n0, f) {
+  const n = b.pos.length;
+  if (n === n0 || b.col.length !== n) return;
+  for (let i = n - 9; i < n; i += 3) {
+    const c = f(b.pos[i], b.pos[i + 2]);
+    b.col[i] = 0.5 + 0.5 * c[0]; b.col[i + 1] = 0.5 + 0.5 * c[1]; b.col[i + 2] = c[2];
+  }
 }
 
 // Gewässer aufbereiten: areas [{k, p, ho}] (k: water, river), lines [{w, p}] (Mittellinien mit Breite)
@@ -139,6 +186,29 @@ class WaterSet {
       }
       return Math.min(v, Math.max(hc(bx, bz) - 0.08, hc(x, z) + 0.2));
     };
+    // Abstand zum Rand der Fläche (Suchraster wie oben)
+    const rimDist = (P, x, z) => {
+      if (!P.rim) polyLevel(P, x, z);
+      if (!P.rim) return 99;
+      let bd = Infinity;
+      for (let r = 4; r < 64 && !(bd <= r); r *= 4) for (const s of P.rim.query(x, z, r, this._rimQ || (this._rimQ = []))) {
+        const c = U.closestOnSeg(x, z, s[0], s[1], s[2], s[3]), d = Math.hypot(c[0] - x, c[1] - z);
+        if (d < bd) bd = d;
+      }
+      return bd;
+    };
+    // Richtung der nächsten Mittellinie (OSM zeichnet Fließgewässer in Fließrichtung)
+    const flowAt = (x, z) => {
+      let bd = 40, fx = 0, fz = 0;
+      for (const o of this.grid.query(x, z, 30, this._flowQ || (this._flowQ = []))) {
+        if (!o.line) continue;
+        const p = o.line.p, k = o.k, c = U.closestOnSeg(x, z, p[k], p[k + 1], p[k + 2], p[k + 3]), d = Math.hypot(c[0] - x, c[1] - z);
+        if (d >= bd) continue;
+        const l = Math.hypot(p[k + 2] - p[k], p[k + 3] - p[k + 1]) || 1;
+        bd = d; fx = (p[k + 2] - p[k]) / l; fz = (p[k + 3] - p[k + 1]) / l;
+      }
+      return [fx * 0.5, fz * 0.5];
+    };
     const emit = (a, b, c, depth, poly) => {
       const ab = Math.hypot(a[0] - b[0], a[1] - b[1]), bc = Math.hypot(b[0] - c[0], b[1] - c[1]), ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
       if (Math.max(ab, bc, ca) > 7 && depth < 12) {
@@ -150,7 +220,14 @@ class WaterSet {
       const cx = (a[0] + b[0] + c[0]) / 3, cz = (a[1] + b[1] + c[1]) / 3;
       if (inside && !inside(cx, cz)) return;
       const P = q => [q[0], polyLevel(poly, q[0], q[1]), q[1]];
-      bucket.get(cx, cz).tri(P(a), P(b), P(c), col, [a[0] / 9, a[1] / 9], [b[0] / 9, b[1] / 9], [c[0] / 9, c[1] / 9], 0, 1, 0);
+      const bk = bucket.get(cx, cz), n0 = bk.pos.length;
+      bk.tri(P(a), P(b), P(c), col, [a[0] / 9, a[1] / 9], [b[0] / 9, b[1] / 9], [c[0] / 9, c[1] / 9], 0, 1, 0);
+      waterTriColor(bk, n0, (x, z) => {
+        const sh = 1 - U.smoothstep(0, 3.2, rimDist(poly, x, z));
+        if (!poly.river) return [0, 0, sh * 0.85];
+        const f = flowAt(x, z);
+        return [f[0], f[1], sh];
+      });
     };
     const toV = p => { const o = []; for (let i = 0; i < p.length; i += 2) o.push(new THREE.Vector2(p[i], p[i + 1])); return o; };
     let ty = performance.now();
@@ -191,10 +268,17 @@ class WaterSet {
           // etwas über die Enden hinaus, damit Knicke keine Lücken haben
           const ex = (bx - ax) / len * 0.6, ez = (bz - az) / len * 0.6;
           const A = [x0 + nx - ex, y0, z0 + nz - ez], B = [x0 - nx - ex, y0, z0 - nz - ez], C = [x1 - nx + ex, y1, z1 - nz + ez], D = [x1 + nx + ex, y1, z1 + nz + ez];
+          const M0 = [x0 - ex, y0, z0 - ez], M1 = [x1 + ex, y1, z1 + ez];
           const uv = q => [q[0] / 9, q[2] / 9];
           const b = bucket.get(x0, z0);
-          b.tri(A, B, C, col, uv(A), uv(B), uv(C), 0, 1, 0);
-          b.tri(A, C, D, col, uv(A), uv(C), uv(D), 0, 1, 0);
+          // Tempo: Bäche schneller als Flüsse; Ufernähe aus dem Abstand zur Mittellinie (nx, nz: Querrichtung × halbe Breite)
+          const sp = L.w < WATER.blockWidth ? 0.95 : 0.6, fx = (bx - ax) / len * sp, fz = (bz - az) / len * sp, inv = 1 / Math.max(L.hw * L.hw, 0.01);
+          const f = (x, z) => [fx, fz, Math.min(1, Math.abs((x - ax) * nx + (z - az) * nz) * inv)];
+          for (const [p0, p1, p2] of [[A, M0, M1], [A, M1, D], [M0, B, C], [M0, C, M1]]) {
+            const n0 = b.pos.length;
+            b.tri(p0, p1, p2, col, uv(p0), uv(p1), uv(p2), 0, 1, 0);
+            waterTriColor(b, n0, f);
+          }
         }
       }
     }

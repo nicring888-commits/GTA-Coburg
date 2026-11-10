@@ -194,8 +194,20 @@ class Atmosphere {
             cover = smoothstep(e0, e0 + 0.2, n) * smoothstep(0.0, 0.1, h);
             float n2 = fbm(uv + uSunDir.xz * 0.06);
             float lit = clamp(0.62 + (n - n2) * 3.0, 0.15, 1.0);
+            // Wolken mit Licht (seit v3.19.0, Grafik-Phase G9b): dicke Mitte mit dunkler Unterseite, dünne Ränder mit
+            // Silberrand zur Sonne, bei tiefer Sonne Abendrot von unten (erst orange, nach dem Untergang rosa)
+            float dens = smoothstep(e0 + 0.06, e0 + 0.45, n);
+            float thin = 1.0 - smoothstep(e0, e0 + 0.2, n);
+            float day = clearSky * (1.0 - uNight);
             vec3 cc = mix(uCloudShade, uCloudCol, lit);
-            cc += uSunCol * pow(mu, 7.0) * 0.35 * clearSky * (1.0 - uNight);
+            cc *= mix(1.0, 0.66, dens * (1.0 - uNight * 0.7));
+            cc += uSunCol * pow(mu, 7.0) * 0.35 * day;
+            cc += uSunCol * thin * pow(mu, 9.0) * 1.3 * day;
+            float sy = uSunDir.y;
+            float low = smoothstep(0.34, 0.05, sy) * smoothstep(-0.17, -0.03, sy) * (1.0 - smoothstep(0.35, 0.55, uNight));
+            float toward = 0.4 + 0.6 * max(dot(normalize(d.xz + vec2(1e-5)), normalize(uSunDir.xz + vec2(1e-5))), 0.0);
+            vec3 dusk = mix(vec3(1.0, 0.45, 0.2), vec3(0.95, 0.38, 0.5), smoothstep(0.04, -0.1, sy));
+            cc += dusk * low * toward * (0.3 + 0.7 * dens) * (1.0 - smoothstep(0.05, 0.75, h)) * (1.0 - uDark * 0.6) * 0.32;
             col = mix(col, cc, cover * 0.97);
           }
           col += vec3(0.85, 0.9, 1.0) * star * uNight * (1.0 - cover) * smoothstep(0.02, 0.2, h) * 1.6;
