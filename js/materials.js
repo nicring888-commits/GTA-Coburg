@@ -38,7 +38,7 @@ const Mat = {
     const o = Object.assign({}, opts);
     // Werte, die das abgestufte Material nicht kennt, weglassen (sonst warnt three.js)
     if (kind !== 'physical') { delete o.clearcoat; delete o.clearcoatRoughness; }
-    if (kind === 'lambert') { delete o.roughness; delete o.metalness; delete o.envMapIntensity; }
+    if (kind === 'lambert') { delete o.roughness; delete o.metalness; delete o.roughnessMap; delete o.metalnessMap; delete o.envMapIntensity; }
     let m;
     if (kind === 'physical') m = new THREE.MeshPhysicalMaterial(Object.assign({ metalness: P.metalness, roughness: P.roughness, clearcoat: P.clearcoat || 0, clearcoatRoughness: P.clearcoatRoughness || 0 }, o));
     else if (kind === 'standard') m = new THREE.MeshStandardMaterial(Object.assign({ metalness: P.metalness || 0, roughness: P.roughness ?? 0.8 }, o));

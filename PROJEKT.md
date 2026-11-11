@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.19.0 „GTA-V-Optik, Teil 2“ (seit 10.11.2026 auf `main`, live auf https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 10.11.2026
+**Version:** 3.19.2 „GTA-V-Optik, Teil 2“ (v3.19.0 seit 10.11.2026 auf `main`, live auf https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 11.11.2026
 
 ---
 
@@ -295,6 +295,22 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.19.2 (11.11.2026): **Automodelle auch in den Grafikstufen „mobil“ und „leicht“.** Bisher gab es die
+  Modelle aus v3.19.0 nur in „voll“; auf Smartphones fuhren weiter die gebauten Kästen. Jetzt (`js/vehicle.js`,
+  `CarModels`): alle Stufen mit three.js als ES-Modul laden die Modelle (`?carmodels=0` und `?three=160` weiter ohne).
+  - Lackmaske als eigene Textur (`paintShader(m, mask)`, Uniform `cmMaskMap`, UV wie `map`) statt über die
+    `roughnessMap`: funktioniert damit auch mit dem Lambert-Material der Stufe „leicht“ (gilt auch für die geparkten
+    Autos in `js/parking.js`). `Mat.make` lässt bei Lambert auch `roughnessMap`/`metalnessMap` weg.
+  - `CarModels.budgetTextures`: unter „voll“ alle Texturen der Modelle halb so groß (1024 → 512, 512 → 256;
+    Grafikspeicher der Texturen ≈ 160 → 40 MB für alle zehn Modelle) und nach dem Hochladen aus dem Arbeitsspeicher
+    (wie Luftbilder und Geometrie in diesen Stufen); „leicht“ zusätzlich ohne Normalenkarte.
+  - Download beim Start weiter 8,7 MB (Ladetext „Lade Automodelle …“, höchstens 25 s, sonst gebaute Formen).
+  - Getestet (Chromium, `?grafik=leicht`/`mobil`/`voll`): 10/10 Modelle, Verkehr und Startauto mit Modell (Lambert
+    bzw. Standard bzw. Physical), Lackfarbe über die Maske richtig, keine Shader-Fehler. Die Konsolenwarnung
+    „'roughness' is not a property of THREE.MeshLambertMaterial“ kommt auch mit `?carmodels=0`, also von woanders.
+  - ⚠️ Nicht auf einem echten iPhone getestet. Wird es dort zu viel, schaltet der Absturzschutz wie bisher eine Stufe
+    herunter; mit `?carmodels=0` geht es ganz ohne Modelle.
 
 - ✅ v3.19.1 (10.11.2026, `main`): **Touch-Steuerung auch online.** Die Knöpfe (Joystick, E/F, Waffen, Karte …) wurden
   nur beim Tippen auf „Allein spielen“ eingeblendet; wer über „Online spielen“/Lobby oder einen Einladungslink ins Spiel
