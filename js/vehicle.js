@@ -278,15 +278,15 @@ function carMaterials() {
 // ---------------- Automodelle (seit v3.19.0) ----------------
 // Aufbereitete Modelle aus zwei Paketen von Comrade1280 (CC BY 4.0, assets/cars/LIZENZEN.md, bench/carprep.html):
 // je Typ eine GLB mit „paint“ (Karosserie, Lackmaske im Rotkanal der Rauheits-Textur), „glass“, „head“, „tail“ und
-// einer Radvorlage „wheel“; Maße und Radpositionen in userData. Nur Stufe „voll“ mit three.js als ES-Modul;
-// ?carmodels=0 schaltet ab. Fehlt ein Modell, baut Vehicle die bisherige Form.
+// einer Radvorlage „wheel“; Maße und Radpositionen in userData. Alle Grafikstufen mit three.js als ES-Modul (seit
+// v3.20.0 auch „mobil“ und „leicht“: Texturen halb so groß, „leicht“ ohne Normalenkarte); ?carmodels=0 schaltet ab. Fehlt ein Modell, baut Vehicle die bisherige Form.
 const CarModels = {
   KINDS: ['car', 'kleinwagen', 'kombi', 'van', 'pickup', 'suv', 'cabrio', 'sport', 'police', 'taxi'],
   // Ziellänge je Typ (m): die Modelle werden um höchstens ±15 % angepasst, Fahrphysik und Kollision bleiben
   LENGTH: { car: 4.45, kleinwagen: 3.65, kombi: 4.6, van: 4.7, pickup: 5.0, suv: 4.7, cabrio: 4.45, sport: 4.35, police: 4.75, taxi: 4.75 },
   data: {}, headMats: [],
   on() {
-    return !!(window.QUALITY && window.QUALITY.level === 'voll') && /build\/three\.module\.js$/.test(window.THREE_SRC || '') &&
+    return !!window.QUALITY && /build\/three\.module\.js$/.test(window.THREE_SRC || '') &&
       !/[?&]carmodels=0\b/.test(location.search) && /^https?:$/.test(location.protocol);
   },
   get(kind) { return this.data[kind] || null; },
@@ -301,11 +301,13 @@ const CarModels = {
     console.info('Automodelle:', Object.keys(this.data).length + '/' + this.KINDS.length);
   },
   // Lackmaske: Grundfarbe aus der Textur, in Lackflächen (Maske) mal Lackfarbe bzw. Instanzfarbe
-  paintShader(m) {
+  // (Maske als eigene Textur, damit es auch mit dem Lambert-Material der Stufe „leicht“ geht; gleiche UV wie map)
+  paintShader(m, mask) {
     m.onBeforeCompile = sh => {
-      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '').replace('#include <color_fragment>', `
+      sh.uniforms.cmMaskMap = { value: mask };
+      sh.fragmentShader = 'uniform sampler2D cmMaskMap;\n' + sh.fragmentShader.replace('#include <map_fragment>', '').replace('#include <color_fragment>', `
         vec4 cmTex = texture2D(map, vMapUv);
-        float cmMask = texture2D(roughnessMap, vRoughnessMapUv).r;
+        float cmMask = texture2D(cmMaskMap, vMapUv).r;
         vec3 cmTint = diffuse;
         #ifdef USE_COLOR
           cmTint *= vColor.rgb;
@@ -314,6 +316,26 @@ const CarModels = {
     };
     m.customProgramCacheKey = () => 'carpaint';
     return m;
+  },
+  // Grafikstufen unter „voll“: Texturen halb so groß (Grafikspeicher der Texturen ≈ 160 → 40 MB für alle zehn Modelle), nach dem
+  // Hochladen aus dem Arbeitsspeicher; „leicht“ zusätzlich ohne Normalenkarte (Lambert-Material)
+  budgetTextures(sc, D) {
+    const B = Mat.budget, Q = window.QUALITY || {};
+    if (B.pbr === 'lambert') D.normalMap = null;
+    const f = B.texScale || 1;
+    if (f >= 1) return;
+    const seen = this._shrunk || (this._shrunk = new Set());
+    const shrink = t => {
+      if (!t || seen.has(t) || !t.image || !t.image.width) return;
+      seen.add(t);
+      const im = t.image, c = document.createElement('canvas');
+      c.width = Math.max(64, Math.round(im.width * f)); c.height = Math.max(64, Math.round(im.height * f));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      if (im.close) im.close();
+      t.image = c; t.needsUpdate = true;
+      if (Q.freeGeometry) t.onUpdate = () => { t.onUpdate = null; c.width = c.height = 0; t.image = null; };
+    };
+    sc.traverse(o => { if (o.isMesh) for (const k of ['map', 'roughnessMap', 'metalnessMap', 'normalMap', 'emissiveMap']) shrink(o.material[k]); });
   },
   prepare(kind, sc) {
     let root = null;
@@ -325,6 +347,7 @@ const CarModels = {
     for (const m of [pm, gl, hd, tl]) if (m) m.geometry.computeBoundingBox();
     const D = { u, paint: pm.geometry, paintMap: pm.material.map, mr: pm.material.roughnessMap, normalMap: pm.material.normalMap,
       glass: gl ? gl.geometry : null, head: hd ? hd.geometry : null, tail: tl ? tl.geometry : null };
+    this.budgetTextures(sc, D);
     for (const t of [D.paintMap, D.normalMap]) if (t) Mat.texture(t);
     D.scale = U.clamp((this.LENGTH[kind] || u.length) / u.length, 0.85, 1.15);
     // Leuchten mit Textur, nachts leuchtend (Scheinwerfer gemeinsam je Modell, Rückleuchten je Auto geklont)
@@ -444,7 +467,7 @@ class Vehicle {
   buildModel(D) {
     const M = carMaterials(), u = D.u, s = D.scale, G0 = carGeometries('car');
     this.paint.dispose();
-    this.paint = CarModels.paintShader(Mat.make('lack', { color: this.color, map: D.paintMap, roughnessMap: D.mr, metalnessMap: D.mr, normalMap: D.normalMap, roughness: 1, metalness: 1 }));
+    this.paint = CarModels.paintShader(Mat.make('lack', { color: this.color, map: D.paintMap, roughnessMap: D.mr, metalnessMap: D.mr, normalMap: D.normalMap, roughness: 1, metalness: 1 }), D.mr);
     const g = new THREE.Group(), body = new THREE.Group();
     body.scale.setScalar(s); g.add(body);
     const add = (geo, mat, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.castShadow = shadow; body.add(m); return m; };

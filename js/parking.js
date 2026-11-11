@@ -49,7 +49,7 @@ const ParkKit = {
       // stehende Autos: einfache Räder (Reifen aus der gebauten Form, auf den Radius des Modells), spart ≈ 2.200 Dreiecke je Auto
       const G0 = carGeometries('car'), rs = D.u.r / CAR.wheelR;
       for (const [x, y, z] of D.u.wheels) rest.push([G0.tire, S.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z)).multiply(new THREE.Matrix4().makeScale(1, rs, rs))]);
-      const paintMat = CarModels.paintShader(Mat.make('lackMatt', { color: '#ffffff', map: D.paintMap, roughnessMap: D.mr, metalnessMap: D.mr, roughness: 1, metalness: 1 }));
+      const paintMat = CarModels.paintShader(Mat.make('lackMatt', { color: '#ffffff', map: D.paintMap, roughnessMap: D.mr, metalnessMap: D.mr, roughness: 1, metalness: 1 }), D.mr);
       return (C[kind] = { paint: carMerge([[D.paint, S]]), rest: carMerge(rest), paintMat });
     }
     const G = carGeometries(kind), M4 = (x, y, z) => new THREE.Matrix4().makeTranslation(x, y, z);
