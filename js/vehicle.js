@@ -24,6 +24,7 @@ const VEHICLE_KINDS = {
   pickup: { name: 'Pick-up', maxSpeed: 45, accel: 8.5, grip: 9.5, armor: 1.3, value: 750 },
   suv: { name: 'Geländewagen', maxSpeed: 47, accel: 9.5, grip: 10.5, armor: 1.45, value: 950 },
   cabrio: { name: 'Cabrio', maxSpeed: 54, accel: 11, grip: 11, armor: 0.9, value: 1100 },
+  bus: { name: 'Stadtbus', maxSpeed: 22, accel: 3, grip: 8, armor: 3, value: 0 },   // nur im Linienverkehr (js/bus.js)
 };
 // Lackfarben je Typ (Händler, Lackiererei, Verkehr)
 function kindPalette(kind) { return kind === 'sport' || kind === 'cabrio' ? SPORT_COLORS : CAR_COLORS; }
@@ -281,9 +282,9 @@ function carMaterials() {
 // einer Radvorlage „wheel“; Maße und Radpositionen in userData. Alle Grafikstufen mit three.js als ES-Modul (seit
 // v3.20.0 auch „mobil“ und „leicht“: Texturen halb so groß, „leicht“ ohne Normalenkarte); ?carmodels=0 schaltet ab. Fehlt ein Modell, baut Vehicle die bisherige Form.
 const CarModels = {
-  KINDS: ['car', 'kleinwagen', 'kombi', 'van', 'pickup', 'suv', 'cabrio', 'sport', 'police', 'taxi'],
+  KINDS: ['car', 'kleinwagen', 'kombi', 'van', 'pickup', 'suv', 'cabrio', 'sport', 'police', 'taxi', 'bus'],
   // Ziellänge je Typ (m): die Modelle werden um höchstens ±15 % angepasst, Fahrphysik und Kollision bleiben
-  LENGTH: { car: 4.45, kleinwagen: 3.65, kombi: 4.6, van: 4.7, pickup: 5.0, suv: 4.7, cabrio: 4.45, sport: 4.35, police: 4.75, taxi: 4.75 },
+  LENGTH: { car: 4.45, kleinwagen: 3.65, kombi: 4.6, van: 4.7, pickup: 5.0, suv: 4.7, cabrio: 4.45, sport: 4.35, police: 4.75, taxi: 4.75, bus: 11.4 },
   data: {}, headMats: [],
   on() {
     return !!window.QUALITY && /build\/three\.module\.js$/.test(window.THREE_SRC || '') &&

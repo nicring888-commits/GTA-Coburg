@@ -43,6 +43,7 @@ const JOBS = [
   { kind: 'sport', src: 'pkw', body: 'Sport_body' },
   { kind: 'police', src: 'dienst', body: 'police_sedan', baked: true, r: 0.36, police: true },
   { kind: 'taxi', src: 'dienst', body: 'taxi', baked: true, r: 0.36, taxi: true },
+  { kind: 'bus', src: 'dienst', body: 'citybus', baked: true, r: 0.5, flip: true },   // Stadtbus (seit v3.20.0; Leuchtenfarben dort verkehrt)
 ];
 const SRC = { pkw: '../assets/cars/roh/pkw/scene.gltf', dienst: '../assets/cars/roh/dienst/scene.gltf' };
 const TEX = { body: 1024, wheel: 512, optics: 512 };

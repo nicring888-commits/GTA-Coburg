@@ -172,6 +172,22 @@ class Pedestrians {
     this.sitters.push(p);
   }
 
+  // Figur (z. B. ausgestiegener Fahrgast, js/bus.js) wird zu einem gehenden Fußgänger auf dem nächsten Weg bis 15 m;
+  // ohne Weg in der Nähe verschwindet sie (wie überzählige Fußgänger außer Sicht)
+  adopt(o) {
+    let best = null, bd = 15;
+    for (const e of this.segGrid.query(o.x, o.z, 15, this._q)) {
+      const s = e.s, c = U.closestOnSeg(o.x, o.z, s.ax, s.az, s.bx, s.bz), d = Math.hypot(c[0] - o.x, c[1] - o.z);
+      if (d < bd) { bd = d; best = { e, t: c[2] * e.len }; }
+    }
+    if (!best) return null;
+    const p = this.spawnAt(best.e, best.t, this.rnd() < 0.5 ? 1 : -1);
+    for (const k of ['shirt', 'pants', 'skin', 'hair', 'scale']) p[k] = o[k];
+    // sanft von der Tür zum Gehsteig: Lage zuerst an der Figur, dann über reattach-ähnliches Nachführen in update
+    p.x = o.x; p.z = o.z; p.heading = o.heading;
+    return p;
+  }
+
   // am Ende eines Wegstücks weiter
   nextSeg(p) {
     const node = p.dir > 0 ? p.e.kb : p.e.ka;

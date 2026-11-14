@@ -132,6 +132,8 @@
   // ---------- Welt laden ----------
   const world = new World(window.COBURG, scene, renderer);
   let ui, traffic, player, nav, fx, police, races, places, spawn, peds, props, property, life, net, lobby, weapons;
+  let buses = null;   // Stadtbusse und Haltestellen (js/bus.js, seit v3.20.0)
+  let heli = null, heliPads = null;   // Helikopter (js/heli.js, seit v3.20.0): geflogener Hubschrauber, Landeplätze
   let carpet = null; // Lichterteppich und Lichtglocke (js/lightcarpet.js, seit v3.19.0)
   let ride = null;         // Mehrspieler: Auto eines anderen Spielers, in dem man mitfährt
   let lastBoom = null;     // letzte Explosion (scheucht Tauben auf)
@@ -184,7 +186,9 @@
     props = new CityProps(world, scene, peds, fx, ui);
     props.build();
     life = new TownLife(world, scene, peds, props, ui);
+    if (typeof BusSystem !== 'undefined' && !/[?&]bus=0/.test(location.search)) buses = new BusSystem({ world, scene, traffic, peds });
     spawn = bahnhofSpawn();
+    if (typeof HeliPads !== 'undefined' && !/[?&]heli=0/.test(location.search)) heliPads = new HeliPads({ world, scene, spawn });
     if (world.region) {
       // Laternen, Ladenschilder und Lokale in den Orten nutzen dieselben Bausteine wie die Innenstadt
       world.region.props = props; world.region.property = property;
@@ -523,6 +527,32 @@
     net.entered(c);
   }
 
+  // ---------- Helikopter (js/heli.js) ----------
+  function enterHeli(h) {
+    heli = h; h.engine = true;
+    if (heliPads) heliPads.take(h);
+    mode = 'fly';
+    player.visible = false;
+    cam.yaw = h.yaw; cam.pitch = 0.32; cam.init = false;
+    ui.toast('Helikopter: Leertaste steigen · Shift sinken · W/S vor/zurück · A/D drehen · E aussteigen (gelandet)', 4);
+  }
+  // Aussteigen links neben der Kabine; force: ohne Prüfung (Absturz, Erledigt)
+  function exitHeli(force) {
+    const h = heli;
+    if (!h) { mode = 'walk'; return; }
+    h.engine = false;
+    const lx = Math.cos(h.yaw), lz = -Math.sin(h.yaw);
+    let x = h.x + lx * 2.6, z = h.z + lz * 2.6;
+    if (world.insideBuilding(x, z, 0.4)) { x = h.x - lx * 2.6; z = h.z - lz * 2.6; }
+    player.place(x, z, world);
+    // auf einem Dach oder einer Plattform: Figur auf deren Höhe
+    if (h.y > world.heightAt(x, z) + 0.5 && !force) player.y = h.y;
+    player.heading = h.yaw; player.visible = true;
+    heli = null; mode = 'walk';
+    if (!force && heliPads) heliPads.park(h);
+    audio.engine(false, 0, 0);
+  }
+
   // ---------- Mehrspieler ----------
   // Mitfahren im Auto eines anderen Spielers (der Server hat den Platz bestätigt)
   function startRide(c, driver) {
@@ -851,6 +881,7 @@
     addMoney(-fee);
     save.armor = 0;
     if (car) { car.isPlayer = false; car = null; mode = 'walk'; player.visible = true; net.exited(); }
+    if (mode === 'fly') exitHeli(true);
     if (ride) { ride = null; player.visible = true; net.endedRide(); }
     over = { t: 0 };
     ui.bigMessage('ERLEDIGT', 4, '#e2463f', `${reason} · Krankenhaus: € ${fee}`);
@@ -924,14 +955,15 @@
     }
     if (property.inside) { indoorCamera(dt); return; }
     let tx, ty, tz, follow = false, heading = 0;
-    const vc = mode === 'drive' ? car : ride; // eigenes Auto oder (Mehrspieler) das Auto, in dem man mitfährt
+    // eigenes Auto, (Mehrspieler) das Auto, in dem man mitfährt, oder der Helikopter (weiter weg, etwas höher)
+    const vc = mode === 'drive' ? car : mode === 'fly' && heli ? { x: heli.x, y: heli.y + 0.9, z: heli.z, heading: heli.yaw, speed: heli.speed } : ride;
     if (vc) {
       tx = vc.x; ty = vc.y + 1.3; tz = vc.z; follow = true; heading = vc.heading;
       // Blickrichtung folgt dem Auto, wenn die Maus ruht
       const idle = performance.now() / 1000 - cam.lastMouse > 1.2;
       if (idle) {
         cam.yaw += U.wrapAngle(heading - cam.yaw) * (1 - Math.exp(-3.2 * dt));
-        cam.pitch = U.damp(cam.pitch, 0.22, 2, dt);
+        cam.pitch = U.damp(cam.pitch, mode === 'fly' ? 0.3 : 0.22, 2, dt);
       }
     } else if (weapons && weapons.aiming) {
       aimCamera(dt);
@@ -940,7 +972,7 @@
       tx = player.x; ty = player.y + 1.6; tz = player.z;
       cam.pitch = Math.max(cam.pitch, -0.35); // nach dem Zielen wieder normale Neigung
     }
-    if (vc && camMode === 1) {
+    if (vc && camMode === 1 && mode !== 'fly') {
       // Motorhaubenkamera
       const fx = Math.sin(vc.heading), fz = Math.cos(vc.heading);
       camera.position.set(vc.x + fx * 0.6, vc.y + 1.55, vc.z + fz * 0.6);
@@ -950,7 +982,7 @@
       cam.init = false;
       return;
     }
-    const dist = vc ? Math.max(cam.dist, 6.5) + Math.min(Math.abs(vc.speed), 40) * 0.06 : cam.dist;
+    const dist = mode === 'fly' && vc ? 14 + Math.min(vc.speed, 50) * 0.12 : vc ? Math.max(cam.dist, 6.5) + Math.min(Math.abs(vc.speed), 40) * 0.06 : cam.dist;
     const cp = Math.cos(cam.pitch), spch = Math.sin(cam.pitch);
     let wx = tx - Math.sin(cam.yaw) * dist * cp, wy = ty + dist * spch + 0.4, wz = tz - Math.cos(cam.yaw) * dist * cp;
     // Kamera nicht in Gebäuden verschwinden lassen
@@ -1042,7 +1074,7 @@
     const locked = police.stars > 0 ? 'Schnellreise gesperrt: Die Polizei sucht dich!' : races.active ? 'Schnellreise gesperrt: Rennen läuft'
       : ride ? 'Schnellreise gesperrt: Du fährst mit' : null;
     const players = net.blips().map(b => ({ name: 'Spieler: ' + b.name, x: b.x, z: b.z, type: 'player', color: b.color }));
-    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), players) };
+    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), heliPads ? heliPads.mapPlaces() : [], players) };
   }
 
   function step(dt) {
@@ -1066,12 +1098,18 @@
     const freeze = !!(races.active && races.active.t < 0);
     if (pressed.KeyE && !freeze) {
       if (ride) endRide(true);
-      else if (mode === 'drive') {
+      else if (mode === 'fly') {
+        if (heli.landed || (heli.y - heli.ground < 1.2 && heli.speed < 3)) exitHeli();
+        else ui.toast('Erst landen (Shift sinken)', 1.4);
+      } else if (mode === 'drive') {
         if (Math.abs(car.speed) < 6 || car.burning) { exitCar(); if (races.active) races.stop('Rennen abgebrochen'); }
         else ui.toast('Erst langsamer fahren', 1.2);
       } else {
-        const c = nearestCar(player.x, player.z, 4.2) || lotCar(player.x, player.z, true);
-        if (c && c.remote) net.requestEnter(c); else if (c) enterCar(c);
+        const h = heliPads && police.stars === 0 ? heliPads.nearest(player.x, player.z, 6) : null;
+        const c = h ? null : nearestCar(player.x, player.z, 4.2) || lotCar(player.x, player.z, true);
+        if (h) enterHeli(h);
+        else if (heliPads && police.stars > 0 && heliPads.nearest(player.x, player.z, 6)) ui.toast('Mit Fahndung startet hier kein Hubschrauber', 1.8);
+        else if (c && c.remote) net.requestEnter(c); else if (c) enterCar(c);
       }
     }
     if (pressed.KeyR && mode === 'drive' && !freeze) resetCar();
@@ -1128,6 +1166,20 @@
       if (pressed.KeyH) peds.panic(car.x + Math.sin(car.heading) * 7, car.z + Math.cos(car.heading) * 7, 8, 0.5); // Hupe: aus dem Weg!
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
       if (car.siren) car.flash(performance.now() / 1000);
+    } else if (mode === 'fly') {
+      // Helikopter: W/S neigen, A/D drehen, Leertaste steigen, Shift sinken
+      const input = freeze ? { fwd: 0, yaw: 0, lift: 0 } : {
+        fwd: (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0),
+        yaw: (keys.KeyA || keys.ArrowLeft ? 1 : 0) - (keys.KeyD || keys.ArrowRight ? 1 : 0),
+        lift: (keys.Space ? 1 : 0) - (keys.ShiftLeft || keys.ShiftRight ? 1 : 0),
+      };
+      const imp = heli.update(dt, input, heliPads.worldWithPads());
+      heli.sync(dt);
+      if (imp > 7) audio.thump(Math.min(14, imp));
+      player.x = heli.x; player.y = heli.y + 1.2; player.z = heli.z; player.heading = heli.yaw; player.moveSpeed = 0;
+      audio.engine(heli.rpm > 0.02, 8 + heli.rpm * 26 + Math.abs(input.lift) * 4, 0.3 + heli.rpm * 0.5);
+      audio.horn(false);
+      if (heli.wrecked) { const h = heli; exitHeli(true); blast(h.x, h.y + 1, h.z); heliPads.remove(h); h.dispose(); if (!over) wasted('Hubschrauber abgestürzt'); return; }
     } else if (ride) {
       // Mitfahrer: Figur sitzt unsichtbar im Auto des anderen Spielers
       player.x = ride.x; player.y = ride.y; player.z = ride.z; player.heading = ride.heading; player.moveSpeed = 0;
@@ -1138,7 +1190,7 @@
       player.update(dt, mv, world, allCars());
       audio.horn(false);
     }
-    weapons.update(dt, freeze);
+    weapons.update(dt, freeze || mode === 'fly');
     if (over) return;
     // abgestellte Autos und Wracks rollen aus, wenn sie angestoßen wurden
     for (const c of parked.concat(wrecks)) {
@@ -1149,10 +1201,11 @@
     }
     const px = mode === 'drive' ? car.x : player.x, pz = mode === 'drive' ? car.z : player.z;
     const T = {
-      x: px, z: pz, inCar: mode === 'drive', car: mode === 'drive' ? car : null,
+      x: px, z: pz, inCar: mode === 'drive' || mode === 'fly', car: mode === 'drive' ? car : null,
       vx: mode === 'drive' ? car.vx : (px - prevPX) / dt, vz: mode === 'drive' ? car.vz : (pz - prevPZ) / dt,
     };
     T.speed = Math.hypot(T.vx, T.vz);
+    if (mode === 'fly' && !heli.landed) T.speed = Math.max(T.speed, 30);   // in der Luft: keine Festnahme von unten
     prevPX = px; prevPZ = pz;
 
     if (world.region) {
@@ -1167,12 +1220,28 @@
       }
     }
     const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars(), net.remoteCars, net.walkers);
-    traffic.update(dt, px, pz, obstacles);
+    traffic.update(dt, px, pz, buses ? obstacles.concat(buses.obstacles()) : obstacles);
+    if (buses) {
+      buses.update(dt, px, pz, obstacles);
+      // Busse sind feste Hindernisse für Spieler und eigenes Auto (Quader 11,5 × 2,6 m)
+      if (mode === 'drive' && car) {
+        const o = { x: car.x, z: car.z, y: car.y };
+        if (buses.push(o, 1.3)) {
+          const sp = Math.hypot(car.vx, car.vz);
+          car.x = o.x; car.z = o.z; car.vx *= 0.35; car.vz *= 0.35;
+          const tb = performance.now() / 1000; if (sp > 7 && tb - (car.lastBus || 0) > 0.6) { car.lastBus = tb; audio.thump(Math.min(14, sp)); car.damage(sp); }
+        }
+      } else if (mode === 'walk' && !ride) {
+        const o = { x: player.x, z: player.z, y: player.y };
+        if (buses.push(o, 0.45)) { player.x = o.x; player.z = o.z; }
+      }
+    }
     police.update(dt, T, cam.yaw);
     if (over) return;
     races.update(dt, T, nonPlayerCars().concat(police.cars()));
     places.update(dt);
     property.update(dt);
+    if (heliPads) heliPads.update(dt, px, pz, mode === 'fly' ? heli : null);
 
     // Fußgänger: laufen, ausweichen, angefahren werden
     const physCars = (mode === 'drive' ? [car] : []).concat(police.cars(), races.cars(), net.remoteCars);
@@ -1211,7 +1280,7 @@
       $('clock').textContent = atmo.timeText + ' · ' + atmo.weatherName;
       const r = world.nearestRoad(px, pz, 35, s => !!s.n);
       const b = world.insideBuilding(px, pz, 0);
-      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : ride ? 'Mitfahrer bei ' + net.nameOf(ride.net.driver) : 'zu Fuß';
+      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : mode === 'fly' ? 'im Helikopter · ' + Math.round(heli.y - heli.ground) + ' m' : ride ? 'Mitfahrer bei ' + net.nameOf(ride.net.driver) : 'zu Fuß';
       // im Landkreis: Ort zur Straße, beim Ankommen ein Ortsschild
       const place = world.region && !world.inCoreRect(px, pz) ? world.region.placeAt(px, pz) : null;
       const town = place ? place.n : 'Coburg';
@@ -1220,7 +1289,7 @@
     }
     ui.setMoney(save.money);
     ui.setWanted(police.stars, police.stars > 0 && !police.seen);
-    ui.setBars(player.health, mode === 'drive' ? car.health : null);
+    ui.setBars(player.health, mode === 'drive' ? car.health : mode === 'fly' ? heli.health : null);
     ui.setBust(police.bust);
     let prompt = null;
     if (mode === 'drive') {
@@ -1250,7 +1319,7 @@
     const vc = mode === 'drive' ? car : ride;
     ui.drawMinimap(px, pz, vc ? vc.heading : player.heading, cam.yaw, traffic.cars, vc ? vc.speed : 0, {
       police: police.cars(), officers: police.officers.filter(o => o.state === 'run').map(o => o.fig),
-      race: ri, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces()), raceStarts: races.list, wanted: police.stars > 0,
+      race: ri, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), heliPads ? heliPads.mapPlaces() : []), raceStarts: races.list, wanted: police.stars > 0,
       players: net.blips(),
     });
   }
@@ -1352,7 +1421,7 @@
     for (let i = 0; i < Math.min(max, cand.length); i++) out.push(cand[i]);
   };
   window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
-    get police() { return police; }, get peds() { return peds; }, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
+    get police() { return police; }, get peds() { return peds; }, get buses() { return buses; }, set buses(v) { buses = v; }, get heli() { return heli; }, get heliPads() { return heliPads; }, enterHeli, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, bench: typeof Bench !== 'undefined' ? Bench : null, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
     keys, pressed,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden

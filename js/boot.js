@@ -175,10 +175,11 @@
     { src: 'data/region/ortho-ktx2.js', what: 'Luftbilder (KTX2)' },
     { src: 'data/region-rural.js', what: 'Feldwege und Hecken' },
     { src: 'data/roadnodes.js', what: 'Zebrastreifen und Ampeln' },
+    { src: 'data/busstops.js', what: 'Bushaltestellen' },
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
   const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'urbanground', 'houses', 'archetypes', 'tile-worker', 'signals', 'region',
-    'vehicle', 'parking', 'carlights', 'lightcarpet', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
+    'vehicle', 'parking', 'carlights', 'lightcarpet', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'bus', 'heli', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
     'property', 'venues', 'net-p2p', 'net', 'tsl-materials', 'tsl-facade', 'tsl-post', 'gfx-webgpu'].concat(/[?&]bench\b/.test(location.search) ? ['bench'] : [], ['game', 'touch']).map(n => `js/${n}.js`));
 
   const TIMEOUT = 90000;  // ohne jeden Fortschritt; große Dateien bei langsamer Mobilverbindung

@@ -20,6 +20,7 @@ auch in der Quellenzeile unten rechts im Spiel.
 | `sport.glb` | Sportwagen | Sport | Generic passenger car pack |
 | `police.glb` | Streifenwagen | Police sedan | Generic civil service vehicles pack |
 | `taxi.glb` | Taxi | Taxi | Generic civil service vehicles pack |
+| `bus.glb` | Stadtbus (nur Linienverkehr, seit v3.20.0) | City bus | Generic civil service vehicles pack |
 
 Nennungstexte (wie vom Urheber vorgegeben):
 
