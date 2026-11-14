@@ -545,8 +545,6 @@
     let x = h.x + lx * 2.6, z = h.z + lz * 2.6;
     if (world.insideBuilding(x, z, 0.4)) { x = h.x - lx * 2.6; z = h.z - lz * 2.6; }
     player.place(x, z, world);
-    // auf einem Dach oder einer Plattform: Figur auf deren Höhe
-    if (h.y > world.heightAt(x, z) + 0.5 && !force) player.y = h.y;
     player.heading = h.yaw; player.visible = true;
     heli = null; mode = 'walk';
     if (!force && heliPads) heliPads.park(h);
@@ -1099,7 +1097,9 @@
     if (pressed.KeyE && !freeze) {
       if (ride) endRide(true);
       else if (mode === 'fly') {
-        if (heli.landed || (heli.y - heli.ground < 1.2 && heli.speed < 3)) exitHeli();
+        const onRoof = heli.y - world.heightAt(heli.x, heli.z) > 1.5 && heliPads.padAt(heli.x, heli.z) === null;
+        if (onRoof && (heli.landed || heli.y - heli.ground < 1.2)) ui.toast('Auf Dächern kann man nicht aussteigen – auf dem Boden oder einem Landeplatz landen', 2.2);
+        else if (heli.landed || (heli.y - heli.ground < 1.2 && heli.speed < 3)) exitHeli();
         else ui.toast('Erst landen (Shift sinken)', 1.4);
       } else if (mode === 'drive') {
         if (Math.abs(car.speed) < 6 || car.burning) { exitCar(); if (races.active) races.stop('Rennen abgebrochen'); }
@@ -1303,11 +1303,15 @@
     } else if (ride) {
       ui.setSpeed(Math.abs(ride.speed) * 3.6, 'D', true);
       prompt = '<kbd>E</kbd> Aussteigen';
+    } else if (mode === 'fly' && heli) {
+      ui.setSpeed(heli.speed * 3.6, heli.landed ? 'L' : 'F', true);
+      if (heli.landed) prompt = '<kbd>E</kbd> Aussteigen · <kbd>Leertaste</kbd> starten';
     } else {
       ui.setSpeed(0, '', false);
       const c = nearestCar(player.x, player.z, 4.2);
       const lc = !c && lotCar(player.x, player.z, false);
       if (lc) prompt = `<kbd>E</kbd> ${VEHICLE_KINDS[lc.kind].name} klauen`;
+      if (!c && heliPads && heliPads.nearest(player.x, player.z, 6)) prompt = '<kbd>E</kbd> Helikopter fliegen';
       if (c && c.remote) prompt = net.prompt(c);
       else if (c) prompt = c.kind === 'police' && (c.ai || police.units.some(u => u.car === c)) ? '<kbd>E</kbd> Streifenwagen klauen'
         : c.ai ? `<kbd>E</kbd> ${c.spec.name} klauen` : c.ownedId ? `<kbd>E</kbd> Einsteigen: dein ${c.spec.name}` : '<kbd>E</kbd> Einsteigen';

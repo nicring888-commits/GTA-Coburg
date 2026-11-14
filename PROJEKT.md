@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.19.2 „GTA-V-Optik, Teil 2“ (v3.19.0 seit 10.11.2026 auf `main`, live auf https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 11.11.2026
+**Version:** 3.20.0 „Lebendige Stadt“ (auf dem Branch `urban/lebendige-stadt`, noch nicht auf `main`; live auf https://gta-coburg.vercel.app ist v3.19.2) · **Letzte Aktualisierung:** 14.11.2026
 
 ---
 
@@ -76,7 +76,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Extra | `Shift` rennen · `Leertaste` springen | `Leertaste` Handbremse (Driften) · `H` Hupe · `R` aufrichten · `C` Kamera |
 | Waffen | `Linke Maustaste` schießen, schlagen, Granate werfen · `Rechte Maustaste` zielen (Schulterkamera, Fadenkreuz, Zoom) · `V` beim Zielen: über das Visier (Kimme und Korn, Perlkorn, Leuchtpunkt) · `1`–`7` oder `Q` Waffe wechseln · `R` nachladen | `Linke Maustaste` Drive-by (Pistole, Maschinenpistole) |
 | Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
-| Allgemein | `E` einsteigen, Auto klauen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `B` Bewegungsunschärfe an/aus (wird gespeichert, auch auf dem Startbildschirm) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
+| Helikopter (seit v3.20.0) | `Leertaste` steigen · `Shift` sinken · `W`/`S` vor/zurück (Nase neigen) · `A`/`D` drehen · `E` aussteigen (nur gelandet, nicht auf Dächern) | |
+| Allgemein | `E` einsteigen, Auto klauen, Helikopter fliegen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `B` Bewegungsunschärfe an/aus (wird gespeichert, auch auf dem Startbildschirm) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
 
@@ -111,6 +112,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Autohaus (türkis, seit v1.2.0) | Zwei Autohäuser (am Bahnhof, Coburg Süd). `F` zu Fuß oder langsam im Auto: Neuwagen Kleinwagen € 1.100, Pkw € 1.800, Taxi € 2.400, Kombi € 2.900, Kleinbus € 3.400, Pick-up € 4.200, Geländewagen € 5.600, Cabrio € 6.900, Sportwagen € 9.500 (gleiche Modelle und Fahrphysik wie im Verkehr), Farbe wählbar, Werte als Balken. Das neue Auto steht vor dem Autohaus |
 | Garage (`G`) | Eigene Autos (bis 8): Zustand, Farbe und Ort werden gespeichert. **Rausfahren/Herholen** stellt das Auto an den nächsten Straßenrand (immer nur eins draußen, das andere fährt zurück), **Einparken**, zerstörte Autos **reparieren** (20 % des Kaufpreises). Lackiererei ändert die gespeicherte Farbe, Verkauf beim Händler entfernt das Auto aus der Garage. Eigenes Auto: gelber Punkt auf Minikarte und Stadtplan, Einsteigen ohne Fahndung |
 | Online (seit v3.0.0) | Bis 16 Spieler je Lobby in derselben Welt. Man sieht die anderen als Figuren mit Namensschild (Farbe, Sterne), ihre Autos mit Lenkung, Neigung, Schaden, Feuer, Blaulicht und Hupe, auf Minikarte und Stadtplan als farbige Punkte (Stadtplan: „Spieler: Name“ = Schnellreise hin). Wer in ein Auto steigt, macht es für alle sichtbar; nach dem Aussteigen bleibt es stehen und andere können es nehmen (Garagenautos sind abgeschlossen, dort nur mitfahren). Bis zu 3 Mitfahrer. Autos anderer sind Hindernisse, fahren einen um und explodieren für alle. Uhrzeit und Wetter gelten für die Lobby. Geld, Wohnungen, Garage, Bestzeiten bleiben im eigenen Spielstand; Verkehr, Fußgänger, Polizei und Rennen rechnet jedes Spiel für sich |
+| Bushaltestellen und Stadtbusse (seit v3.20.0) | Echte Haltestellen aus OpenStreetMap (1.651 Halte im Gebiet, 1.006 am Straßennetz). In Spielernähe: H-Schild mit Haltestellenname, Wartefläche mit Bordstein (wo kein Gehsteig ist), Wartehäuschen mit Bank und Glas (OSM `shelter=yes` oder Busbahnhof), 0–4 wartende Fahrgäste (am Busbahnhof mehr). 30 Linien aus den OSM-Linien-Relationen, zuerst die Coburger Stadtbuslinien 1402 (Oberlauter ⇄ Wüstenahorn) und 1403 (Sändleinweg → Dörfles), dazu Linien in Neustadt (A1) und im Umland; je Linie 1–3 weiße Stadtbusse. Ablauf am Halt: Bus fährt an, hält am Schild, Türen auf, Fahrgäste steigen an der Mitteltür aus und gehen als Fußgänger weiter, Wartende gehen zur vorderen Tür und steigen ein, Türen zu, Weiterfahrt (Mindesthalt 7 s). Busse beachten Ampeln, Vorfahrt, Zebrastreifen und halten vor Hindernissen (auch vor dem Spieler); Verkehr hält hinter ihnen. Busse sind feste Hindernisse; klauen kann man sie nicht |
+| Helikopter (seit v3.20.0) | Drei Landeplätze (hellblau auf Minikarte und Stadtplan): **am Bahnhof** (freie Fläche nahe dem Start), **Klinikum Coburg**, **Verkehrslandeplatz Brandensteinsebene**. Dort steht ein Hubschrauber (D-HCOB, blau-weiß): `E` einsteigen, der Rotor läuft in ≈ 3 s hoch. Höchsttempo ≈ 180 km/h, Steigen 9 m/s. Landen auf dem Boden, Landeplätzen und Dächern (auf Dächern kein Aussteigen). Gebäude sind Hindernisse; harte Aufpralle kosten Leben (Balken wie beim Auto), bei 0 Absturz → ERLEDIGT. Mit Fahndung startet kein Hubschrauber. Abgestellte Hubschrauber bleiben stehen, am Landeplatz steht später ein neuer |
 | Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
 
 ## 4. Inhalt der Welt
@@ -183,9 +186,13 @@ und müssen dort bleiben.
 | `js/carlights.js` | Scheinwerferkegel nachts (seit v3.15.0, `CarLights`): Lichtteppich auf der Fahrbahn und zwei Lichtkegel je fahrendem Auto als Instanzen (bis 64, additiv, Alphakanal unberührt), Kegel bei Regen/Nebel stärker; das eigene Auto hat das echte SpotLight aus `game.js` |
 | `js/lightcarpet.js` | Lichterteppich und Lichtglocke (seit v3.19.0, `LightCarpet`, nur Stufe „voll“, `?carpet=0`): beim Start aus dem Straßennetz ≈ 30.500 Laternen (Wohnstraßen immer, größere Straßen nur im Umkreis der Orte aus `places`) und ≈ 22.700 Fensterlichter neben der Straße, ein `THREE.Points`-Zeichenaufruf (additiv, Alphakanal unberührt, Höhe aus `coarseAt`), unter 620–950 m ausgeblendet, fern abgedunkelt; `update` setzt alle 0,25 s die vier stärksten Städte (`SKYGLOW`: Gewicht, Ausdehnung) als `uGlow` in den Himmelsshader. Debug: `window.CARPET_DEBUG` |
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
+| `js/urbanground.js` | Stadtboden (seit v3.20.0, `UrbanKit`): Streifen an Gebäuden nach Gebiet und Typ (`district`: alt, urb, res, com, pub, school, church, gar, none; Tabelle `URBAN.style`), an Straßenkanten bis zur Fahrbahn (`rayToRoad`, Raster an der Straße ausgerichtet), sonst schmal (Traufkies, Platten, Hofpflaster) mit Randstein; Rasen hinter dem Traufstreifen nur wo das Luftbild grün ist (Farbe aus dem Foto, `lawn`); Eingang (`entrance`: Podest, Weg geradeaus zur Straße, nur wenn frei); Parkplätze (`lot`: Asphalt, `stallLines` wie die geparkten Autos, `access` Zufahrt); befestigte Flächen merken (`mark`, `paved` für den Bewuchs). Ein Material mit Textur-Atlas (4 × 2 Felder: Kies, Platten, Verbundpflaster, Kleinpflaster, Asphalt, Rasen, Markierung), Belag je Ecke im Attribut `aSurf`, Höhenstaffel der Beläge; Töpfe à 500 m, gezeichnet nur bis `URBAN.far` (380 m über den Topfrand, `cull` aus `hideFar`). Nur Stufe „voll“, nicht auf `?gfx=webgpu`; `?urban=0` / `?urban=1` |
+| `js/bus.js` | Bushaltestellen und Stadtbusse (seit v3.20.0, `BusSystem`): Halte an Verkehrskanten heften (`snapStops`, Fahrtrichtung nach Straßenseite), Linien aus der OSM-Haltfolge (`buildLine`, Dijkstra `path` über `Traffic.out`, Einbahnstraßen beachtet, in Zeitscheiben von 3 ms), Busse fern rechnerisch, unter 650 m als `Vehicle('bus')` auf der Verkehrsschiene (`Traffic.placeCar`, `Traffic.ruleLimit`), Zustände drive → arrive → doors → close (→ end: Neubeginn außer Sicht); Haltestellen-Bauten und Wartende bis 320 m (`buildStop`, `addWaiting` als Figuren in `peds.sitters`), Ein-/Aussteigen (`passengers`, `Pedestrians.adopt`), Kollision (`push`), Hindernis-Punkte für den Verkehr (`obstacles`); `?bus=0` |
+| `js/heli.js` | Helikopter (seit v3.20.0): `Helicopter` (prozedurales Modell, Flugmodell `update`, Boden/Dach `floorAt`, Gebäude `blocked`, Rotor mit unscharfer Scheibe in `sync`), `HeliPads` (Landeplätze `HELIPADS`, Platz suchen und bauen ab 900 m, bereitstehende Hubschrauber, `take`/`park`/`remove`, `mapPlaces`, `worldWithPads`); in `game.js` Modus `fly` (`enterHeli`, `exitHeli`, Kamera, Hinweise); `?heli=0` |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
 | `data/facades.js` | **Erzeugt** von `tools/convert-facades.js` (seit v3.8.0): je LoD2-Haus Denkmal, Baustoff und Geschosse aus OSM als `window.COBURG_FACADES` (23 KB; fehlt sie, gibt es keine Denkmal-Fassaden) |
+| `data/busstops.js` | **Erzeugt** von `tools/convert-bus-stops.js` (seit v3.20.0): `window.COBURG_BUSSTOPS` = { names, stops: [x·10, z·10, Name, Merkmale (1 Häuschen, 2 Bank, 4 Busbahnhof)], lines: [{ r, n, s: Halt-Indizes }] }; 87 KB, optional |
 | `data/roadnodes.js` | **Erzeugt** von `tools/convert-road-nodes.js` (seit v3.13.0): Straßenknoten aus OSM als `window.COBURG_ROADNODES` ([x·10, z·10, Art]: 0 Zebrastreifen, 1 Fußgängerfurt, 2 Ampel, 3 Stopp, 4 Vorfahrt achten, 5 Mini-Kreisel; 35 KB, optional) |
 | `data/shops.js` | **Erzeugt** von `tools/convert-shops.js` aus `recherche/pois-coburg.json`: Läden und Lokale als `window.COBURG_SHOPS` ([Name, Art, x, z, geprüft]) |
 | `data/raw/` | Rohdaten: `coburg.osm.json`, `relations.osm.json`, `elevation.json` |
@@ -201,6 +208,7 @@ und müssen dort bleiben.
 | `tools/convert-facades.js` | Fassaden-Merkmale der Innenstadt (seit v3.8.0): LoD2-Haus → OSM-Gebäude unter seinem Mittelpunkt (`heritage`/`historic`, `building:material`, `building:levels`) → `data/facades.js`; nach `convert-lod2.js` ausführen |
 | `tools/arch-stats.js` | Verteilung der Bautypen je Gemeinde und Prüfungen (Denkmäler, Fachwerk nur historisch) aus `arch-report.json`; `--md datei` schreibt sie als Tabelle (`recherche/bautypen-statistik.md`) |
 | `tools/ortho-ktx2.mjs` | Luftbilder des Umlands (Einzelbilder und HD-Kacheln) zusätzlich als KTX2 (Basis Universal ETC1S, Mipmaps, Y gespiegelt) neben die JPGs, Liste in `data/region/ortho-ktx2.js`; braucht ffmpeg und `npm i --no-save ktx2-encoder@0.6.0`; nur fehlende bzw. ältere Dateien (`--alle` für alle). Mischkacheln Bayern/Thüringen bleiben JPG |
+| `tools/fetch-bus-stops.js`, `tools/convert-bus-stops.js` | Haltestellen (bus_stop, Bussteige, Haltepositionen, Busbahnhöfe) und Linien-Relationen `route=bus` per Overpass nach `data/raw/region/bus-stops.json`; Umwandlung fasst Punkte einer Haltestelle zusammen (gleicher Name, < 18 m) → `data/busstops.js` (seit v3.20.0) |
 | `tools/fetch-road-nodes.js`, `tools/convert-road-nodes.js` | Straßenknoten fürs ganze Gebiet per Overpass nach `data/raw/region/road-nodes.json`, umgewandelt nach `data/roadnodes.js` (seit v3.13.0) |
 | `tools/data-hash.js` | Schutz der Karte (seit v3.18.0): SHA-256 aller Dateien in `data/` (ohne `raw/`) gegen `bench/data-hash.json`; `--save` legt den Vergleich an. Neue Dateien erlaubt, geänderte oder fehlende melden Fehler |
 | `tools/utm.js` | Umrechnung UTM 32N (EPSG:25832) ↔ Länge/Breite (Krüger-Reihen, millimetergenau) |
@@ -245,6 +253,8 @@ node tools/ortho-ktx2.mjs             # Luftbilder zusätzlich als KTX2 (≈ 10 
 node tools/fetch-region-shops.js      # Läden und Lokale, vor convert-region.js
 node tools/fetch-road-nodes.js        # Zebrastreifen, Ampeln, Stopp-/Vorfahrtschilder (Overpass)
 node tools/convert-road-nodes.js      # → data/roadnodes.js
+node tools/fetch-bus-stops.js         # Bushaltestellen und Buslinien (Overpass, oft überlastet: wiederholt bis zu 20-mal)
+node tools/convert-bus-stops.js       # → data/busstops.js
 node tools/convert-region.js
 powershell -ExecutionPolicy Bypass -File tools/roof-colors.ps1   # Dachfarben (3 s), danach convert-region.js noch einmal
 node tools/convert-region.js
@@ -295,6 +305,51 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.20.0 (14.11.2026, Branch `urban/lebendige-stadt`, Commits `c83fd4d`..): **Update „Lebendige Stadt“.** Ziel: der harte
+  Übergang zwischen scharfen 3D-Häusern/Straßen und dem unscharfen Luftbild am Boden, ohne das Luftbild zu schärfen.
+  - **U1 Stadtboden** (`js/urbanground.js`): jede Gebäudekante bekommt einen Streifen; zeigt sie zur Straße, reicht er
+    bis an die Fahrbahn (Gehweg, Vorplatz), sonst ist er schmal. Gebiete nach Regeln: Altstadt (`ALTSTADT_BOX`):
+    Platten zur Straße, Kleinpflaster in Höfen, Pflaster neben der Fußgängerzone; städtische Mehrfamilien- und
+    Gründerzeithäuser (über 11 m): Platten; Wohnhäuser: Traufkies, Platten nur bei schmalem Vorgarten, Rasen hinter dem
+    Kies; Gewerbe/Industrie (OSM-Typ, über 1.600 m²): Verbundpflaster bis 14 m zur Straße, Asphalt-Vorfeld ringsum;
+    Schulen in Schulflächen: Pausenhof; Kirchen: Pflaster; Garagen: Zufahrt; Schuppen, Scheunen: nichts. Im Umland nur
+    in Städten (OSM `town`/`city`, Coburg 3,6 km, Sonneberg 2,2 km, sonst 1,3 km, und geschlossene Bebauung); Dörfer und
+    freie Landschaft bleiben unverändert (geprüft: Fischbach, Feldflur Meeder bitgleich in Aufrufen und Dreiecken). Gras
+    wächst nicht auf befestigten Flächen. Innenstadt: 11.444 Häuser in ≈ 1 s beim Laden; Umland in Zeitscheiben (20 Häuser
+    je Schritt, höchstens ≈ 2 ms).
+  - **U2 Eingangswege**: je Gebäude Tür an der längsten Straßenkante (sonst an der zur nächsten Straße gewandten Kante),
+    Podest vor der Tür immer; Weg geradeaus bis zur Fahrbahn nur, wenn er frei ist (kein Haus, keine Fahrbahn quer).
+    Innenstadt: 6.815 Eingänge, 2.787 mit Weg. Umland-Wohnhäuser behalten Gartentor und Zufahrt aus `villageSteps`.
+  - **U3 Besondere Orte**: Parkplätze (OSM) in Städten und in der Innenstadt mit Asphaltfläche, Stellplatz-Linien
+    (gleiche Felder wie die geparkten Autos, an Ecken ohne Kreuzungen, Abschlusslinie zur Fahrgasse) und Zufahrt zur
+    nächsten Straße (0,8–18 m, 5 m breit); geparkte Autos verteilen sich gleichmäßig auf alle Flächen einer Kachel
+    (vorher füllten die ersten Flächen die Höchstzahl), Innenstadt bis 110 je Kachel. Tankstellen: Asphalt-Vorfeld 8 m.
+    Supermärkte und Gewerbe über die Gewerbe-Regel (Vorplatz zur Straße). Plätze und Fußgängerzone: bisheriges Pflaster.
+  - **U4 Bushaltestellen und Busse** (`js/bus.js`, siehe 3a): neue OSM-Daten `data/busstops.js` (Overpass am 14.11.2026,
+    Freigabe durch den Auftrag), Stadtbus-Modell aus dem vorhandenen CC-BY-Paket (`bench/carprep.html`, Auftrag `bus`
+    mit `flip`, 7.459 Dreiecke, 1,1 MB, im Spiel 11,4 m).
+  - **U5 Helikopter** (`js/heli.js`, siehe 3a).
+  - **Getestet** (Skripte `bench/urban-shots.js`, `bench/bus-test.js`, `bench/heli-test.js`, Prüfbilder in
+    `bench/shots/urban/`): Altstadtgasse, Gründerzeit-Ecke, Wohnhaus mit Weg, Schule mit Parkplatz, Bahnhofsparkplätze,
+    Neustadt (Supermarkt, Mehrfamilienhaus, Tankstelle), Dorf ohne Änderung; Bus: Linie 1402 an vier echten Halten
+    hintereinander alle Wartenden eingestiegen (3, 2, 4, 4), Aussteigende werden Fußgänger, Bus wartet vor dem Spieler
+    auf der Fahrbahn, Verkehr staut sich dahinter; Helikopter: Start am Bahnhof, Flug, Dachlandung auf 46 m, Rückflug,
+    Landung auf dem Platz, ohne Schaden. Daten-Prüfsummen unverändert (nur `data/busstops.js` neu), Welt-Probe gleich.
+  - **Gemessen** (Stufe voll, 1280 × 720, 8 Messpunkte, Vergleich `?urban=0&bus=0&heli=0`): Zeichenaufrufe −6,7 … +1,8 %,
+    Dreiecke −1,0 … +0,7 % (Budget +5 % / +10 %); GPU-Zeit im Rauschen (Wiederholung: Neubaugebiet 5,2/7,2 ms, Feldflur
+    2,7/2,5, Ketschengasse 5,2/5,4, Bahnhof 4,3/4,9 ms mit/ohne). `BusSystem.update` ≈ 0,03 ms je Bild.
+- ⚠️ Grenzen v3.20.0:
+  - Stadtboden nur auf Stufe „voll“ und nicht auf `?gfx=webgpu` (kein TSL-Zwilling). Im Umland kein Rasen (Luftbilder
+    als KTX2, Pixel nicht lesbar). Streifen folgen Grundrisskanten, nicht echten Grundstücksgrenzen; an sehr verwinkelten
+    Häusern überlappen Streifen (gleiche Beläge flimmern nicht, verschiedene haben eine feste Reihenfolge).
+  - Eingänge sitzen in der Mitte der Straßenkante, nicht an der echten Haustür; Wege nur geradeaus.
+  - Parkplätze: Linien nur entlang der Ränder (keine Reihen in der Mitte großer Flächen).
+  - In Coburg sind in OSM nur die Stadtbuslinien 1402 und 1403 als Relation erfasst; andere Halte haben Wartende, aber
+    keinen Bus. Busse sind nicht klaubar, werden von Schüssen nicht getroffen und schieben keine Fußgänger. An der
+    Endhaltestelle beginnt der Bus außer Sicht neu (kein Wenden). Türen öffnen nicht sichtbar.
+  - Helikopter: Arcade-Flugmodell (kein Drehmoment, keine Autorotation); auf Dächern kein Aussteigen; Bäume sind keine
+    Hindernisse; online sehen andere Spieler nur die Figur in der Luft; keine Polizei-Hubschrauber.
 
 - ✅ v3.19.2 (11.11.2026): **Automodelle auch in den Grafikstufen „mobil“ und „leicht“.** Bisher gab es die
   Modelle aus v3.19.0 nur in „voll“; auf Smartphones fuhren weiter die gebauten Kästen. Jetzt (`js/vehicle.js`,
@@ -1458,6 +1513,18 @@ Rohdaten. Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Gel
 - Bewegungsunschärfe (G9): dezent, in den Einstellungen abschaltbar.
 - Ziel: am Ende ein deutlich sichtbarer Fortschritt; Vorher/Nachher-Bilder aus G0 belegen ihn.
 
+### 7.4 Nächste Schritte nach „Lebendige Stadt“ (v3.20.0)
+
+- [ ] Branch `urban/lebendige-stadt` durchsehen und auf `main` übernehmen (löst das Vercel-Deployment aus) – nur nach
+  ausdrücklicher Freigabe.
+- [ ] Stadtboden für WebGPU (TSL-Zwilling des Atlas-Materials) und eine billige Fassung für „mobil“.
+- [ ] Eingänge an echte Haustüren (OSM `entrance=*`, Hausnummern `addr:*`), Wege mit Knick um Hindernisse.
+- [ ] Parkplätze: Stellplatzreihen in der Mitte großer Flächen, Behindertenparkplätze, Ein-/Ausfahrtpfeile.
+- [ ] Busse: sichtbare Türen, Wenden an der Endhaltestelle, Fahrgäste im Bus, Fahrplananzeige am Halt, Bus als
+  Hindernis für Schüsse und Fußgänger; fehlende Coburger Linien als eigene Routen nach dem SÜC-Netzplan.
+- [ ] Helikopter: Polizeihubschrauber ab 4 Sternen (siehe 7.2), Suchscheinwerfer nachts, Mehrspieler-Anzeige,
+  Aussteigen auf Flachdächern (dann begehbare Dächer).
+
 ### 7.2 Weitere Vorhaben
 
 - [ ] **Mehrspieler-Ausbau:** Render-Dienst anlegen und Adresse ggf. in `js/mp-config.js` eintragen; gemeinsame Rennen
@@ -1505,5 +1572,5 @@ Rohdaten. Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Gel
 - [ ] Weihnachtsmarkt im Winter; Ladenschilder genauer an die echte Ladentür setzen (Hausnummern-Positionen aus OSM `addr:*`)
 - [ ] Missionen (Taxi-Fahrten, Kurierfahrten, „Auto liefern“ auf Bestellung), Stunt-Sprünge
 - [ ] Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
-- [ ] Mehr Fahrzeugtypen (Bus, Lieferwagen, Motorrad)
+- [ ] Mehr Fahrzeugtypen (Lieferwagen, Motorrad; Stadtbus im Linienverkehr seit v3.20.0)
 - [ ] Verkehr mit echter Fahrphysik, der auf Unfälle reagiert (heute fährt er auf Schienen)
