@@ -1721,13 +1721,24 @@ class Region {
   // Stadtboden (seit v3.20.0, js/urbanground.js) nur in Städten: Häuser im Umkreis einer Stadt (OSM place=town/city)
   // und in geschlossener Bebauung (builtUp). Dörfer und freies Land bleiben unverändert. Wohnhäuser bekommen nur den
   // Streifen; ihre Zufahrt und den Gartenweg baut schon Landscape.villageSteps.
-  *urbanSteps(t) {
-    if (!t.buildings.length) return;
+  urbanTown(x, z, pad = 0) {
     const towns = this._urbanTowns || (this._urbanTowns = this.places.filter(p => p.k === 'town' || p.k === 'city')
       .map(p => ({ x: p.x, z: p.z, r: p.n === 'Coburg' ? 3600 : p.n === 'Sonneberg' ? 2200 : 1300 })));
-    const inTown = (x, z) => towns.some(p => Math.hypot(p.x - x, p.z - z) < p.r);
+    return towns.some(p => Math.hypot(p.x - x, p.z - z) < p.r + pad);
+  }
+  // Parkfläche, die der Stadtboden übernimmt (in einer Stadt, Stadtboden an)
+  urbanLot(a) {
+    if (typeof UrbanKit === 'undefined' || !UrbanKit.enabled()) return false;
+    let cx = 0, cz = 0;
+    for (let k = 0; k < a.p.length; k += 2) { cx += a.p[k]; cz += a.p[k + 1]; }
+    cx /= a.p.length / 2; cz /= a.p.length / 2;
+    if (this.inCore(cx, cz)) return 'core';   // baut world.buildUrbanGround
+    return this.urbanTown(cx, cz);
+  }
+  *urbanSteps(t) {
+    const inTown = (x, z) => this.urbanTown(x, z);
     const cx = t.x0 + this.tw / 2, cz = t.z0 + this.th / 2;
-    if (!towns.some(p => Math.hypot(p.x - cx, p.z - cz) < p.r + 800)) return;
+    if (!this.urbanTown(cx, cz, 800)) return;
     const E = this.graph.edges, nq = [];
     const pots = UrbanKit.pots(this.tw / 2 + 1, t.x0, t.z0);
     const ctx = {
@@ -1744,6 +1755,9 @@ class Region {
         return out;
       },
       blocked: (x, z) => !!this.insideBuilding(x, z, 0),
+      blockedM: (x, z, m) => !!this.insideBuilding(x, z, m, t),
+      onRoadM: (x, z, m) => !!this.nearRoad(x, z, m),
+      walk: (x, z) => this.walkAt(x, z),
       plaza: null,
       nearest: (x, z, r) => this.nearestRoad(x, z, r),
       onRoad: (x, z) => !!this.nearRoad(x, z, 0.5),
@@ -1755,12 +1769,17 @@ class Region {
       const bb = b.bb, bx = (bb.minX + bb.maxX) / 2, bz = (bb.minZ + bb.maxZ) / 2;
       if (!inTown(bx, bz) || !this.builtUp(bx, bz, 'residential')) continue;
       ctx.dist = UrbanKit.district({ t: b.t, area: Math.abs(U.polyArea(b.p)), arch: b.a });
+      if (ctx.dist === 'pub' && /school|kindergarten|college/.test(b.t || '') && t.d.areas.some(a => a.k === 'yard' && U.pointInPoly(bx, bz, a.p))) ctx.dist = 'school';
       const edges = UrbanKit.apron(b, ctx);
       if (ctx.dist !== 'res') { const door = UrbanKit.entrance(b, edges, ctx); if (door) b.door = door; }
       if (++n % 20 === 0) yield;
     }
-    t.urbanCount = n;
-    if (n) { yield; UrbanKit.finish(pots, t.group, this.world); }
+    // Parkplätze (Fläche, Linien, Zufahrt) und Tankstellen-Vorfeld
+    let lots = 0;
+    for (const a of t.d.areas) if (a.k === 'parking' && this.urbanLot(a) === true) { UrbanKit.lot(a, ctx); lots++; if (lots % 4 === 0) yield; }
+    for (const fs of t.fuelSites || []) if (fs.ring && inTown(fs.x, fs.z)) { ctx.dist = 'fuel'; UrbanKit.apron({ p: fs.ring }, ctx); n++; }
+    t.urbanCount = n + lots;
+    if (n + lots) { yield; UrbanKit.finish(pots, t.group, this.world); }
   }
   // Höhe der Gehsteig-Oberfläche an einer Stelle (oder null): für Spielfigur, Fußgänger, Bäume und Zäune
   walkAt(x, z) {
@@ -2277,7 +2296,11 @@ class Region {
     // Fahrsilos an modernen Höfen, Stellplatz-Linien auf Parkplätzen (js/archetypes.js)
     t.silos = [];
     for (const f of agrar) if (rnd() < 0.55) { const p = SiteKit.bunkerSilo(this, t, plain.get(f.c[0], f.c[1]), f, rnd); if (p) t.silos.push(p); }
-    for (const a of t.d.areas) if (a.k === 'parking') { const bb = U.polyBBox(a.p); SiteKit.parkingLines(this, t, plain.get((bb.minX + bb.maxX) / 2, (bb.minZ + bb.maxZ) / 2), a); }
+    for (const a of t.d.areas) if (a.k === 'parking') {
+      const bb = U.polyBBox(a.p);
+      if (this.urbanLot(a)) continue;   // in Städten baut der Stadtboden Fläche, Linien und Zufahrt (urbanSteps)
+      SiteKit.parkingLines(this, t, plain.get((bb.minX + bb.maxX) / 2, (bb.minZ + bb.maxZ) / 2), a);
+    }
     const mats = W.buildingMaterials();
     walls.meshes(mats.wall, { cast: true, receive: true }).forEach(m => t.group.add(m));
     plain.meshes(mats.plain, { cast: true, receive: true }).forEach(m => t.group.add(m));

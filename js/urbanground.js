@@ -31,6 +31,8 @@ const URBAN = {
     sett: { i: 3, tile: 1.0, col: '#8f8d89', y: 0.068 },
     asphalt: { i: 4, tile: 2.0, col: '#5a5d61', y: 0.074 },
     lawn: { i: 5, tile: 1.6, col: '#5f7d3c', y: 0.044 },   // Farbe kommt aus dem Luftbild (beruhigt)
+    lot: { i: 4, tile: 2.0, col: '#4d5054', y: 0.040 },    // Parkplatzfläche (Asphalt, unter den Linien)
+    paint: { i: 6, tile: 1.0, col: '#d8d8d0', y: 0.090 },  // Markierungen (Stellplätze)
   },
   // Gebiet → [Belag zur Straße, größter Abstand zur Fahrbahn, der noch aufgefüllt wird (m), Belag sonst, Breite sonst]
   style: {
@@ -41,6 +43,8 @@ const URBAN = {
     pub: ['paver', 10, 'paver', 2.5],
     church: ['sett', 8, 'sett', 2.0],
     gar: ['asphalt', 9, null, 0],
+    fuel: [null, 0, 'asphalt', 8],          // Tankstellen-Vorfeld um das Tankdach (fest, Fahrbahnen liegen darüber)
+    school: ['paver', 14, 'paver', 7],      // Schule in einer Schul-/Bildungsfläche: Pausenhof ringsum
   },
   lawnW: 5,
   lawnK: 1.15,      // Helligkeitsabgleich Rasen (Standard-Material) ↔ Luftbild (Lambert mit ORTHO_TINT)         // Rasenstreifen hinter dem Traufstreifen (Wohngebiete, nur wo das Luftbild grün ist)
@@ -135,11 +139,16 @@ const UrbanKit = {
           tiled(c, () => { c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); });
         }
       }, 16),
+      // Markierungsfarbe: fast weiß, leicht abgefahren
+      paint: mk((c, r) => {
+        gv(c, 235); c.fillRect(0, 0, S, S);
+        for (let i = 0; i < 3000; i++) { gv(c, 190 + Math.floor(r() * 60)); c.fillRect(r() * S, r() * S, 2, 2); }
+      }, 17),
     };
     const at = document.createElement('canvas'); at.width = S * 4; at.height = S * 2;
     const ac = at.getContext('2d');
     ac.fillStyle = '#c8c8c8'; ac.fillRect(0, 0, at.width, at.height);   // leere Felder deckend (kein Alpha 0)
-    ['gravel', 'slab', 'paver', 'sett', 'asphalt', 'lawn'].forEach((k, i) => ac.drawImage(this._tex[k], (i % 4) * S, Math.floor(i / 4) * S));
+    ['gravel', 'slab', 'paver', 'sett', 'asphalt', 'lawn', 'paint'].forEach((k, i) => ac.drawImage(this._tex[k], (i % 4) * S, Math.floor(i / 4) * S));
     const t = new THREE.CanvasTexture(at);
     t.flipY = false;   // Feld 0 oben links = UV (0, 0)
     t.colorSpace = THREE.SRGBColorSpace;
@@ -455,6 +464,103 @@ const UrbanKit = {
     }
   },
 
+  // ---------- Parkplätze (Phase U3) ----------
+  // OSM-Parkfläche: Asphalt über die ganze Fläche (gelände-folgend), Stellplatz-Linien nach derselben Regel wie
+  // SiteKit.parkingLines/ParkKit.stalls (die geparkten Autos stehen also genau in den Feldern), Zufahrt zur nächsten
+  // Straße, falls die Fläche sie nicht schon berührt. ctx wie bei apron, dazu walk(x, z) → Gehsteighöhe oder null.
+  lot(area, ctx) {
+    const toV = p => { const a = []; for (let i = 0; i < p.length; i += 2) a.push(new THREE.Vector2(p[i], p[i + 1])); return a; };
+    const contour = toV(area.p), holes = (area.ho || []).map(toV);
+    let faces;
+    try { faces = THREE.ShapeUtils.triangulateShape(contour, holes); } catch (e) { return 0; }
+    if (!faces.length) return 0;
+    const all = contour.concat(...holes);
+    this.mark(ctx, area.p);
+    const emit = (a, b, c, depth) => {
+      const ab = Math.hypot(a[0] - b[0], a[1] - b[1]), bc = Math.hypot(b[0] - c[0], b[1] - c[1]), ca = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      if (Math.max(ab, bc, ca) > 2 * URBAN.step && depth < 10) {
+        if (ab >= bc && ab >= ca) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; emit(a, m, c, depth + 1); emit(m, b, c, depth + 1); }
+        else if (bc >= ca) { const m = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2]; emit(a, b, m, depth + 1); emit(a, m, c, depth + 1); }
+        else { const m = [(c[0] + a[0]) / 2, (c[1] + a[1]) / 2]; emit(a, b, m, depth + 1); emit(m, b, c, depth + 1); }
+        return;
+      }
+      this.tri(ctx, 'lot', a, b, c, 1, false, 0);
+    };
+    for (const fc of faces) emit([all[fc[0]].x, all[fc[0]].y], [all[fc[1]].x, all[fc[1]].y], [all[fc[2]].x, all[fc[2]].y], 0);
+    const lines = this.stallLines(area, ctx);
+    this.access(area, ctx);
+    return lines;
+  },
+  // Stellplatz-Linien (gleiche Felder wie SiteKit.parkingLines: 2,5 m breit, 4,7 m tief, 0,3 m vom Rand)
+  stallLines(area, ctx) {
+    const ring = area.p, n = ring.length / 2;
+    const inside = (x, z) => U.pointInPoly(x, z, ring) && !(area.ho && area.ho.some(h => U.pointInPoly(x, z, h)));
+    const ok = (x, z) => inside(x, z) && !ctx.blockedM(x, z, 0.3) && !ctx.onRoadM(x, z, 0.3) && (!ctx.walk || ctx.walk(x, z) === null);
+    let made = 0;
+    const placed = [];   // Mitten der Linien (mit Kante): an Ecken überschneiden sich Reihen zweier Kanten
+    for (let i = 0; i < n && made < 400; i++) {
+      const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
+      if (len < 7.5) continue;
+      const dx = (bx - ax) / len, dz = (bz - az) / len;
+      let nx = -dz, nz = dx;
+      if (!inside((ax + bx) / 2 + nx * 1.5, (az + bz) / 2 + nz * 1.5)) { nx = -nx; nz = -nz; }
+      let first = null, last = null;
+      for (let s0 = 1.2; s0 < len - 1.1; s0 += 2.5) {
+        const x0 = ax + dx * s0 + nx * 0.3, z0 = az + dz * s0 + nz * 0.3, x1 = x0 + nx * 4.7, z1 = z0 + nz * 4.7;
+        if (!ok(x0, z0) || !ok(x1, z1) || !ok((x0 + x1) / 2, (z0 + z1) / 2)) continue;
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+        if (placed.some(p => p.i !== i && (p.x - mx) * (p.x - mx) + (p.z - mz) * (p.z - mz) < 5.5 * 5.5)) continue;
+        placed.push({ x: mx, z: mz, i });
+        const w = 0.06;
+        this.tri(ctx, 'paint', [x0 - dx * w, z0 - dz * w], [x0 + dx * w, z0 + dz * w], [x1 + dx * w, z1 + dz * w], 1, false, 0);
+        this.tri(ctx, 'paint', [x0 - dx * w, z0 - dz * w], [x1 + dx * w, z1 + dz * w], [x1 - dx * w, z1 - dz * w], 1, false, 0);
+        if (first === null) first = s0;
+        last = s0;
+        made++;
+      }
+      // Abschlusslinie vorn (Fahrgasse) über die ganze Reihe
+      if (first !== null && last > first) {
+        const ex = nx * 5.0, ez = nz * 5.0, w = 0.06;
+        const p0 = [ax + dx * first + ex, az + dz * first + ez], p1 = [ax + dx * last + ex, az + dz * last + ez];
+        this.tri(ctx, 'paint', [p0[0] - nx * w, p0[1] - nz * w], [p1[0] - nx * w, p1[1] - nz * w], [p1[0] + nx * w, p1[1] + nz * w], 0.92, false, 0);
+        this.tri(ctx, 'paint', [p0[0] - nx * w, p0[1] - nz * w], [p1[0] + nx * w, p1[1] + nz * w], [p0[0] + nx * w, p0[1] + nz * w], 0.92, false, 0);
+      }
+    }
+    return made;
+  },
+  // Zufahrt: kürzeste Verbindung vom Rand der Fläche zur Fahrbahn (0,8–18 m), 5 m breit, nur wenn frei
+  access(area, ctx) {
+    const ring = area.p, n = ring.length / 2;
+    let best = null;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, ax = ring[i * 2], az = ring[i * 2 + 1], bx = ring[j * 2], bz = ring[j * 2 + 1], len = Math.hypot(bx - ax, bz - az);
+      for (let s = 0; s <= len; s += 4) {
+        const x = ax + (bx - ax) * s / (len || 1), z = az + (bz - az) * s / (len || 1);
+        const r = ctx.nearest(x, z, 25);
+        if (!r) continue;
+        const gap = r.d - r.seg.w / 2;
+        if (!best || gap < best.gap) best = { x, z, rx: r.x, rz: r.z, gap, d: r.d, w: r.seg.w };
+      }
+    }
+    if (!best || best.gap < 0.8 || best.gap > 18) return false;
+    const ux = (best.rx - best.x) / best.d, uz = (best.rz - best.z) / best.d, L = best.gap + 1.5, hw = 2.5;
+    for (let s = 1; s < best.gap; s += 1) {
+      const x = best.x + ux * s, z = best.z + uz * s;
+      if (ctx.blocked(x, z) || ctx.blocked(x - uz * hw, z + ux * hw) || ctx.blocked(x + uz * hw, z - ux * hw)) return false;
+    }
+    // Rechteck vom Flächenrand (1 m hinein) bis unter die Fahrbahnkante
+    const nx = -uz, nz = ux, x0 = best.x - ux, z0 = best.z - uz;
+    const P = (a, b) => [x0 + ux * a + nx * b, z0 + uz * a + nz * b];
+    const k = Math.max(1, Math.ceil((L + 1) / URBAN.step));
+    for (let i = 0; i < k; i++) {
+      const a0 = (L + 1) * i / k, a1 = (L + 1) * (i + 1) / k;
+      this.tri(ctx, 'lot', P(a0, -hw), P(a1, -hw), P(a1, hw), 1, false, 0);
+      this.tri(ctx, 'lot', P(a0, -hw), P(a1, hw), P(a0, hw), 1, false, 0);
+    }
+    this.mark(ctx, [...P(0, -hw), ...P(L + 1, -hw), ...P(L + 1, hw), ...P(0, hw)]);
+    return true;
+  },
+
   // ---------- Eingangswege (Phase U2) ----------
   // Wählt die Kante zur Straße (längste mit Straßenbezug, sonst die der nächsten Straße zugewandte) und legt einen
   // Weg von der Türmitte bis an den Streifen bzw. die Fahrbahn. Gibt { x, z, ox, oz } der Tür zurück oder null.
@@ -486,8 +592,8 @@ const UrbanKit = {
     // Tür: Kantenmitte (fest, keine Zufallsverschiebung)
     const dx = (best.ax + best.bx) / 2, dz = (best.az + best.bz) / 2;
     const door = { x: dx, z: dz, ox: best.nx, oz: best.nz, e: best };
-    const surf = ctx.dist === 'com' ? 'paver' : ctx.dist === 'alt' || ctx.dist === 'church' ? 'sett' : 'slab';
-    const hw = ctx.dist === 'com' || ctx.dist === 'pub' ? 1.3 : ctx.dist === 'urb' ? 0.9 : 0.6;
+    const surf = ctx.dist === 'com' || ctx.dist === 'school' ? 'paver' : ctx.dist === 'alt' || ctx.dist === 'church' ? 'sett' : 'slab';
+    const hw = ctx.dist === 'com' || ctx.dist === 'pub' || ctx.dist === 'school' ? 1.3 : ctx.dist === 'urb' ? 0.9 : 0.6;
     // Podest vor der Tür (immer, neutrale Standardlösung)
     const depth = ctx.dist === 'res' ? 1.4 : 1.8, pw = hw + 0.5;
     this.quad(ctx, surf, dx, dz, best.ux, best.uz, best.nx, best.nz, -pw, pw, 0, depth, 1.04);

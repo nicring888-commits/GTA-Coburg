@@ -1348,8 +1348,15 @@ class World {
       plaza: (x, z) => plazas.query(x, z, 0, ptmp).some(r => U.pointInPoly(x, z, r.p) && !(r.ho && r.ho.some(h => U.pointInPoly(x, z, h)))),
       nearest: (x, z, r) => this.nearestRoad(x, z, r, s => s.k === 'road' || s.k === 'plaza'),
       onRoad: (x, z) => !!this.nearRoad(x, z, 0.5),
+      blockedM: (x, z, m) => !!this.insideBuilding(x, z, m),
+      onRoadM: (x, z, m) => !!this.nearRoad(x, z, m),
+      walk: null,
       photo: this.photoSampler(),
     };
+    // Schul- und Bildungsflächen (OSM schoolyard/education → yard): Schulen darin bekommen einen Pausenhof
+    const yards = new U.Grid(60);
+    for (const a of this.data.areas) if (a.k === 'yard' && a.p) { const bb = U.polyBBox(a.p); yards.insert(a, bb.minX, bb.minZ, bb.maxX, bb.maxZ); }
+    const inYard = (x, z) => yards.query(x, z, 0, ptmp).some(a => U.pointInPoly(x, z, a.p));
     const A = ALTSTADT_BOX, stats = {};
     let doors = 0, paths = 0;
     for (const b of this.buildingList) {
@@ -1357,13 +1364,30 @@ class World {
       if (this.region && !this.inCoreRect(cx, cz)) continue;
       const area = Math.abs(U.polyArea(b.p));
       ctx.dist = UrbanKit.district({ t: b.t, area, top: b.top - this.heightAt(cx, cz), alt: cx > A.minX && cx < A.maxX && cz > A.minZ && cz < A.maxZ });
+      if (ctx.dist === 'pub' && /school|kindergarten|college/.test(b.t || '') && inYard(cx, cz)) ctx.dist = 'school';
       stats[ctx.dist] = (stats[ctx.dist] || 0) + 1;
       const edges = UrbanKit.apron(b, ctx);
       const door = UrbanKit.entrance(b, edges, ctx);
       if (door) { b.door = door; doors++; if (door.path) paths++; }
     }
+    // Parkplätze der Innenstadt: Flächen aus den Landkreisdaten mit Mitte im Kerngebiet (wie ParkKit.buildCore)
+    let lots = 0;
+    const R = this.region;
+    if (R && R.core) {
+      const C = R.core, [i0, j0] = R.tileOf(C.minX, C.minZ), [i1, j1] = R.tileOf(C.maxX, C.maxZ);
+      for (let tj = j0; tj <= j1; tj++) for (let ti = i0; ti <= i1; ti++) {
+        if (!R.stateOf(ti, tj)) continue;
+        for (const a of R.decodeTile({ ti, tj }).areas) {
+          if (a.k !== 'parking') continue;
+          let cx = 0, cz = 0;
+          for (let k = 0; k < a.p.length; k += 2) { cx += a.p[k]; cz += a.p[k + 1]; }
+          if (!R.inCore(cx / (a.p.length / 2), cz / (a.p.length / 2))) continue;
+          UrbanKit.lot(a, ctx); lots++;
+        }
+      }
+    }
     const meshes = UrbanKit.finish(pots, this.group, this);
-    this.urbanStats = { ms: Math.round(performance.now() - t0), meshes, doors, paths, dist: stats };
+    this.urbanStats = { ms: Math.round(performance.now() - t0), meshes, doors, paths, lots, dist: stats };
     console.log('Stadtboden Innenstadt:', JSON.stringify(this.urbanStats));
   }
 

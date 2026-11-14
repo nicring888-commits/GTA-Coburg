@@ -6,7 +6,7 @@
 
 // Belegung und Höchstzahl je Kachel nach Messung (791 Autos in 5 Kacheln kosteten 14 ms GPU): Instanzen werfen keine
 // Schatten, Lack ohne Klarlack
-const PARK = { kinds: ['car', 'kombi', 'kleinwagen', 'suv', 'car', 'kleinwagen'], fill: 0.4, max: 70, core: 450 };
+const PARK = { kinds: ['car', 'kombi', 'kleinwagen', 'suv', 'car', 'kleinwagen'], fill: 0.4, max: 70, coreMax: 110, core: 450 };
 
 const ParkKit = {
   hash(x, z, k) { const s = Math.sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453; return s - Math.floor(s); },
@@ -79,9 +79,10 @@ const ParkKit = {
       })) continue;
       kept.push(s);
     }
-    const cars = [];
+    // seit v3.20.0: Belegung gleichmäßig über alle Flächen der Kachel (vorher füllten die ersten Flächen die Höchstzahl)
+    const cars = [], max = t.parkMax || PARK.max, fill = Math.min(PARK.fill, 1.15 * max / Math.max(1, kept.length));
     for (const s of kept) {
-      if (cars.length >= PARK.max || this.hash(s.x, s.z, 1) > PARK.fill) continue;
+      if (cars.length >= max || this.hash(s.x, s.z, 1) > fill) continue;
       const kind = PARK.kinds[Math.floor(this.hash(s.x, s.z, 2) * PARK.kinds.length)];
       const pal = kindPalette(kind), color = pal[Math.floor(this.hash(s.x, s.z, 3) * pal.length)];
       // vorwärts oder rückwärts eingeparkt
@@ -128,7 +129,7 @@ const ParkKit = {
         return R.inCore(cx / (a.p.length / 2), cz / (a.p.length / 2));
       });
       if (!areas.length) continue;
-      const t = { d: { areas }, group: new THREE.Group() }, life = { meshes: [] };
+      const t = { d: { areas }, group: new THREE.Group(), parkMax: PARK.coreMax }, life = { meshes: [] };
       this.build(A, t, life);
       if (!life.lot) continue;
       t.group.visible = false;

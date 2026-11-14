@@ -246,7 +246,7 @@ const SiteKit = {
       // Leuchtfeld unter dem Dach über der Insel
       HouseKit.quad(pb, [P(-2, -0.5)[0], y - 0.02, P(-2, -0.5)[1]], [P(2, -0.5)[0], y - 0.02, P(2, -0.5)[1]], [P(2, 0.5)[0], y - 0.02, P(2, 0.5)[1]], [P(-2, 0.5)[0], y - 0.02, P(-2, 0.5)[1]], lamp, [0, -1, 0]);
     }
-    return { x: cx, z: cz, name, brand: br };
+    return { x: cx, z: cz, name, brand: br, ring };
   },
 
   // Parkplätze: weiße Stellplatz-Linien quer zu den Rändern der OSM-Fläche (2,5 m breit, 5 m tief), dem Gelände folgend
