@@ -401,6 +401,7 @@ class World {
     await step('Straßen bauen …', 0.4, () => this.buildRoads());
     await step('Flüsse füllen …', 0.5, () => this.buildWater());
     await step('Gebäude errichten …', 0.55, () => this.buildBuildings());
+    await step('Stadtboden legen …', 0.75, () => this.buildUrbanGround());
     await step('Bäume pflanzen …', 0.8, () => this.buildTrees());
     await step('Stadtplan zeichnen …', 0.92, () => this.paintMap());
   }
@@ -1318,6 +1319,81 @@ class World {
     });
     this.pave.meshes(paveMat, {}).forEach(m => this.group.add(m));
     this.pave = null;
+  }
+
+  // Stadtboden der Innenstadt (seit v3.20.0, js/urbanground.js): Streifen an allen Gebäuden nach Gebiet und Typ,
+  // Eingangswege zur Straße. ?urban=0 schaltet zum Vergleich ab.
+  buildUrbanGround() {
+    if (typeof UrbanKit === 'undefined' || !UrbanKit.enabled() || !this.buildingList) return;
+    const t0 = performance.now();
+    const plazas = new U.Grid(40);
+    for (const r of this.data.roads) if (r.k === 'plazaArea' && r.p) {
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (let i = 0; i < r.p.length; i += 2) { x0 = Math.min(x0, r.p[i]); x1 = Math.max(x1, r.p[i]); z0 = Math.min(z0, r.p[i + 1]); z1 = Math.max(z1, r.p[i + 1]); }
+      plazas.insert(r, x0, z0, x1, z1);
+    }
+    const tmp = [], ptmp = [];
+    const pots = UrbanKit.pots();
+    const ctx = {
+      pots,
+      h: (x, z) => this.heightAt(x, z),
+      roads: (x, z, r) => this.roadGrid.query(x, z, r, []).filter(s => s.k === 'road' || s.k === 'plaza'),
+      blocked: (x, z) => {
+        for (const b of this.polyGrid.query(x, z, 0, tmp)) {
+          if (x < b.bb.minX || x > b.bb.maxX || z < b.bb.minZ || z > b.bb.maxZ) continue;
+          if (U.pointInPoly(x, z, b.p)) return true;
+        }
+        return !!(this.riverGrid && this.nearWater && this.nearWater(x, z));
+      },
+      plaza: (x, z) => plazas.query(x, z, 0, ptmp).some(r => U.pointInPoly(x, z, r.p) && !(r.ho && r.ho.some(h => U.pointInPoly(x, z, h)))),
+      nearest: (x, z, r) => this.nearestRoad(x, z, r, s => s.k === 'road' || s.k === 'plaza'),
+      onRoad: (x, z) => !!this.nearRoad(x, z, 0.5),
+      photo: this.photoSampler(),
+    };
+    const A = ALTSTADT_BOX, stats = {};
+    let doors = 0, paths = 0;
+    for (const b of this.buildingList) {
+      const bb = b.bb, cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
+      if (this.region && !this.inCoreRect(cx, cz)) continue;
+      const area = Math.abs(U.polyArea(b.p));
+      ctx.dist = UrbanKit.district({ t: b.t, area, top: b.top - this.heightAt(cx, cz), alt: cx > A.minX && cx < A.maxX && cz > A.minZ && cz < A.maxZ });
+      stats[ctx.dist] = (stats[ctx.dist] || 0) + 1;
+      const edges = UrbanKit.apron(b, ctx);
+      const door = UrbanKit.entrance(b, edges, ctx);
+      if (door) { b.door = door; doors++; if (door.path) paths++; }
+    }
+    const meshes = UrbanKit.finish(pots, this.group, this);
+    this.urbanStats = { ms: Math.round(performance.now() - t0), meshes, doors, paths, dist: stats };
+    console.log('Stadtboden Innenstadt:', JSON.stringify(this.urbanStats));
+  }
+
+  // Luftbildfarbe an einer Stelle (sRGB 0…255), aus verkleinerten Kopien der Kacheln (≈ 2,4 m je Pixel, also schon
+  // weichgezeichnet); null ohne Luftbilder. Nur beim Aufbau gebraucht, die Kopien werden danach freigegeben.
+  photoSampler() {
+    if (!this.ortho) return null;
+    const cache = new Map();
+    const get = ti => {
+      if (cache.has(ti)) return cache.get(ti);
+      const t = this.ortho[ti], im = t.tex && t.tex.image;
+      let d = null;
+      if (im && im.width) {
+        const W = Math.max(8, Math.round(im.width / 4)), H = Math.max(8, Math.round(im.height / 4));
+        const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        const c = cv.getContext('2d', { willReadFrequently: true });
+        c.drawImage(im, 0, 0, W, H);
+        d = { W, H, px: c.getImageData(0, 0, W, H).data };
+      }
+      cache.set(ti, d);
+      return d;
+    };
+    return (x, z) => {
+      const ti = this.tileAt(x, z), t = this.ortho[ti], d = get(ti);
+      if (!d) return [128, 128, 128];
+      const c = U.clamp(Math.floor((x - t.minX) / (t.maxX - t.minX) * d.W), 0, d.W - 1);
+      const r = U.clamp(Math.floor((z - t.minZ) / (t.maxZ - t.minZ) * d.H), 0, d.H - 1);
+      const i = (r * d.W + c) * 4;
+      return [d.px[i], d.px[i + 1], d.px[i + 2]];
+    };
   }
 
   // Platzfläche (OSM highway=pedestrian, area=yes) in kleine Dreiecke zerlegen, die dem Gelände folgen

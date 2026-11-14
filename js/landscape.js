@@ -602,6 +602,7 @@ class Landscape {
       else if (r2 < 0.12 && !c.t.town) kind = 'grass';
       if (!kind) continue;
       if (R.nearRoad(x, z, 0.6, c.t) || R.walkAt(x, z) !== null || R.insideBuilding(x, z, 0.3, c.t) || this.onTrack(x, z, c.t, kind === 'grass' ? -0.9 : 0.2)) continue;
+      if (c.t.paveGrid && UrbanKit.paved(c.t.paveGrid, x, z)) continue;   // Stadtboden (js/urbanground.js)
       if (c.t.waterAll && !c.t.waterAll.empty && c.t.waterAll.carveAt(x, z) > 0) continue;
       const y = R.heightAt(x, z);
       photo = photo || this.photoAt(x, z, c.t) || [0.4, 0.45, 0.3];
@@ -953,6 +954,7 @@ Landscape.prototype.villageSteps = function* (t, pts, free) {
         if (Math.abs(d + 1 - gate) < 2.2) continue;
         const x = a[0] + dx * (d + 1), z = a[1] + dz * (d + 1);
         if (!mine(x, z) || R.insideBuilding(x, z, 0.8, t) || R.nearRoad(x, z, 0.9, t) || this.onTrack(x, z, t, 0.4) || (R.walkAt && R.walkAt(x, z) !== null)) continue;
+        if (t.paveGrid && UrbanKit.paved(t.paveGrid, x, z)) continue;
         const kind0 = isFront ? frontKind : style, kind = kind0 === 'privacy' && front >= 0 && s !== (front + 2) % 4 ? 'mesh' : kind0;
         if (kind === 'open') continue;
         if (kind === 'privacy' && isFront) continue;

@@ -704,6 +704,7 @@ class Region {
       yield* this.waterSteps(t); yield;
       yield* this.buildingSteps(t);
       yield* this.sidewalkSteps(t); yield;
+      if (typeof UrbanKit !== 'undefined' && UrbanKit.enabled()) { yield* this.urbanSteps(t); yield; }
       this.buildRails(t);
       t.town = t.buildings.length >= REGION.townBuildings;
       const rr = this.rural.get(t.key);
@@ -1716,6 +1717,50 @@ class Region {
     const g = walkB.geometry();
     if (g) { const m = new THREE.Mesh(g, W.buildingMaterials().plain); m.receiveShadow = true; t.group.add(m); }
     t.walkPieces = built;
+  }
+  // Stadtboden (seit v3.20.0, js/urbanground.js) nur in Städten: Häuser im Umkreis einer Stadt (OSM place=town/city)
+  // und in geschlossener Bebauung (builtUp). Dörfer und freies Land bleiben unverändert. Wohnhäuser bekommen nur den
+  // Streifen; ihre Zufahrt und den Gartenweg baut schon Landscape.villageSteps.
+  *urbanSteps(t) {
+    if (!t.buildings.length) return;
+    const towns = this._urbanTowns || (this._urbanTowns = this.places.filter(p => p.k === 'town' || p.k === 'city')
+      .map(p => ({ x: p.x, z: p.z, r: p.n === 'Coburg' ? 3600 : p.n === 'Sonneberg' ? 2200 : 1300 })));
+    const inTown = (x, z) => towns.some(p => Math.hypot(p.x - x, p.z - z) < p.r);
+    const cx = t.x0 + this.tw / 2, cz = t.z0 + this.th / 2;
+    if (!towns.some(p => Math.hypot(p.x - cx, p.z - cz) < p.r + 800)) return;
+    const E = this.graph.edges, nq = [];
+    const pots = UrbanKit.pots(this.tw / 2 + 1, t.x0, t.z0);
+    const ctx = {
+      pots,
+      h: (x, z) => this.heightAt(x, z),
+      roads: (x, z, r) => {
+        const out = [], seen = new Set();
+        for (const code of this.netGrid.query(x, z, r, nq)) {
+          if (seen.has(code)) continue;
+          seen.add(code);
+          const e = E[Math.floor(code / 4096)], k = (code % 4096) * 2, p = e.p;
+          out.push({ ax: p[k], az: p[k + 1], bx: p[k + 2], bz: p[k + 3], w: e.w, k: 'road' });
+        }
+        return out;
+      },
+      blocked: (x, z) => !!this.insideBuilding(x, z, 0),
+      plaza: null,
+      nearest: (x, z, r) => this.nearestRoad(x, z, r),
+      onRoad: (x, z) => !!this.nearRoad(x, z, 0.5),
+      photo: null,     // Luftbilder des Umlands liegen als KTX2 vor (keine Pixel lesbar); Grün zeigt dort die Bodenkarte
+      pave: t.paveGrid = new U.Grid(16),   // befestigte Flächen (kein Gras darauf, siehe landscape.js)
+    };
+    let n = 0;
+    for (const b of t.buildings) {
+      const bb = b.bb, bx = (bb.minX + bb.maxX) / 2, bz = (bb.minZ + bb.maxZ) / 2;
+      if (!inTown(bx, bz) || !this.builtUp(bx, bz, 'residential')) continue;
+      ctx.dist = UrbanKit.district({ t: b.t, area: Math.abs(U.polyArea(b.p)), arch: b.a });
+      const edges = UrbanKit.apron(b, ctx);
+      if (ctx.dist !== 'res') { const door = UrbanKit.entrance(b, edges, ctx); if (door) b.door = door; }
+      if (++n % 20 === 0) yield;
+    }
+    t.urbanCount = n;
+    if (n) { yield; UrbanKit.finish(pots, t.group, this.world); }
   }
   // Höhe der Gehsteig-Oberfläche an einer Stelle (oder null): für Spielfigur, Fußgänger, Bäume und Zäune
   walkAt(x, z) {

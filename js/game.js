@@ -1259,6 +1259,7 @@
   // (Innenstadt, Autos, Requisiten) wird wie bisher hinter 4 km nicht gezeichnet – nur für dieses Bild ausgeblendet.
   const FAR_OBJ = 4000, farHidden = [], _fs = new THREE.Sphere();
   function hideFar() {
+    if (typeof UrbanKit !== 'undefined') UrbanKit.cull(camera, farHidden);   // Stadtboden nur im Nahbereich
     if (camera.far <= FAR_OBJ) return;
     const cp = camera.position, regionGroups = world.group.children;
     const test = o => {
