@@ -5,98 +5,105 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#07080b">
 <title>GTA Coburg</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Cinzel:wght@500;700&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/menu.css">
 </head>
 <body>
 <div id="app"></div>
 <div id="vignette"></div>
 
-<!-- Ladebildschirm -->
+<!-- Ladebildschirm (js/loadscreen.js): Szenen aus Coburg, Logo, Fortschritt, Tipps -->
 <div id="loading">
-  <div class="load-box">
-    <h1 class="logo">GTA <span>Coburg</span></h1>
-    <p id="load-text">Lade Kartendaten …</p>
-    <div class="bar"><div id="load-bar"></div></div>
-    <p id="load-detail"></p>
-    <div id="load-actions" class="hidden">
-      <button id="load-retry">Neu laden</button>
-      <button id="load-light">Leichte Grafik laden</button>
+  <div class="ls-stage"></div>
+  <div class="ls-grade"></div>
+  <div class="cine-grain"></div>
+  <div class="ls-top">
+    <div class="gc-logo gc-logo--sm" aria-label="GTA Coburg"><span class="gc-gta">GTA</span><span class="gc-city">Coburg</span></div>
+    <div id="ls-title" class="ls-title"></div>
+  </div>
+  <div id="ls-place" class="ls-place"><b id="ls-place-name"></b><span id="ls-place-sub"></span></div>
+  <div class="ls-bottom">
+    <div class="ls-tipbox"><span class="ls-tiplabel">Tipp</span><p id="ls-tip"></p></div>
+    <div class="ls-progress">
+      <div class="ls-row"><p id="load-text">Lade …</p><span id="ls-pct"></span></div>
+      <div class="ls-track indet"><div id="load-bar"></div><i class="ls-sweep"></i></div>
+      <p id="load-detail"></p>
+      <div id="load-actions" class="hidden">
+        <button id="load-retry" class="mm-btn primary">Neu laden</button>
+        <button id="load-light" class="mm-btn">Leichte Grafik laden</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Startbildschirm -->
-<div id="start" class="hidden">
-  <div class="start-box">
-    <h1 class="logo">GTA <span>Coburg</span></h1>
-    <p class="sub">Die echte Coburger Innenstadt und der ganze Landkreis drumherum. Du kommst am Bahnhof an: Schnapp dir
-      ein Auto, fahr Straßenrennen bis nach Rödental, Neustadt oder Bad Rodach und häng die Polizei ab.</p>
-    <div class="features">
-      <div><b>🚗 Autos</b><span>Jedes Auto lässt sich klauen. Sportwagen sind schnell, Streifenwagen sind heiße Ware. Geklaute Autos bringen beim Autohändler Geld.</span></div>
-      <div><b>🏁 Rennen</b><span>Fahr in eine blaue Säule und starte mit <kbd>F</kbd> ein Rennen gegen drei Gegner. 14 Strecken von der Altstadt bis Neustadt, Bad Rodach und Seßlach, Preisgeld und Bestzeiten.</span></div>
-      <div><b>🚓 Polizei</b><span>Autodiebstahl, Rammen und Rasen bringen Sterne. Bleib außer Sicht, bis die Sterne verschwinden, oder fahr in eine grüne Lackiererei.</span></div>
-      <div><b>🏠 Besitz</b><span>Kauf dir Wohnungen (violette Türen) und Neuwagen im türkisen Autohaus. Deine Autos holst du mit <kbd>G</kbd> aus der Garage.</span></div>
-      <div><b>🎯 Waffen</b><span>Pistole, MP, Schrotflinte, Sturmgewehr und Granaten aus dem roten Waffenladen. Rechte Maustaste zielen, linke schießen, auch aus dem Auto. Ab drei Sternen schießt die Polizei zurück.</span></div>
-    </div>
-    <div class="controls">
-      <div><h3>Zu Fuß</h3>
-        <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> laufen</p>
-        <p><kbd>Shift</kbd> rennen · <kbd>Leertaste</kbd> springen</p>
-        <p><kbd>Maus</kbd> umsehen · <kbd>Mausrad</kbd> Zoom</p>
-        <p><kbd>Linke Maustaste</kbd> schießen/schlagen · <kbd>Rechte</kbd> zielen</p>
-        <p><kbd>1</kbd>–<kbd>7</kbd>/<kbd>Q</kbd> Waffe wechseln · <kbd>R</kbd> nachladen · <kbd>V</kbd> Visier</p>
-      </div>
-      <div><h3>Im Auto</h3>
-        <p><kbd>W</kbd>/<kbd>S</kbd> Gas, Bremse, rückwärts</p>
-        <p><kbd>A</kbd>/<kbd>D</kbd> lenken · <kbd>Leertaste</kbd> Handbremse</p>
-        <p><kbd>H</kbd> Hupe · <kbd>R</kbd> aufrichten · <kbd>C</kbd> Kamera</p>
-      </div>
-      <div><h3>Allgemein</h3>
-        <p><kbd>E</kbd> einsteigen, Auto klauen, aussteigen</p>
-        <p><kbd>F</kbd> Rennen · Wohnung · Autohaus · verkaufen</p>
-        <p><kbd>G</kbd> Garage · <kbd>M</kbd> Stadtplan · <kbd>F1</kbd> Hilfe</p>
-        <p><kbd>N</kbd> Zeitraffer Tag/Nacht · <kbd>K</kbd> Wetter · <kbd>O</kbd> Grafikqualität · <kbd>B</kbd> Bewegungsunschärfe</p>
-        <p>Online: <kbd>T</kbd> Chat · <kbd>Tab</kbd> Spielerliste · <kbd>E</kbd> mitfahren</p>
-      </div>
-    </div>
-    <div class="start-btns">
-      <button id="start-btn">Allein spielen</button>
-      <button id="mp-btn">🌐 Online spielen</button>
-    </div>
-    <p class="hint">Klick ins Bild fängt die Maus ein, <kbd>Esc</kbd> gibt sie wieder frei.</p>
-    <p class="hint hidden" id="grafik-line"></p>
+<!-- Hauptmenü und Pausenmenü (js/mainmenu.js); dahinter fährt die Kamera durch die echte Spielwelt -->
+<div id="start" class="mm hidden">
+  <div class="mm-shade"></div>
+  <div class="mm-bars"><i></i><i></i></div>
+  <div class="cine-grain"></div>
+  <div class="mm-main">
+    <div class="gc-logo" aria-label="GTA Coburg"><span class="gc-gta">GTA</span><span class="gc-city">Coburg</span><span class="gc-tag">Stadt · Landkreis · Oberfranken</span></div>
+    <nav id="mm-nav" class="mm-nav" aria-label="Hauptmenü"></nav>
+    <div id="mm-info" class="mm-info"></div>
   </div>
+  <section id="mm-panel" class="mm-panel" aria-live="polite">
+    <header class="mm-panel-head"><button class="mm-back" id="mm-back" aria-label="Zurück">‹</button><h2 id="mm-panel-title"></h2></header>
+    <div id="mm-panel-body" class="mm-panel-body"></div>
+  </section>
+  <footer class="mm-foot">
+    <div id="mm-shot" class="mm-shot"><b></b><span></span></div>
+    <div class="mm-keys" id="mm-keys"><span><kbd>↑</kbd><kbd>↓</kbd> Auswahl</span><span><kbd>Enter</kbd> Bestätigen</span><span><kbd>Esc</kbd> Zurück</span></div>
+    <div class="mm-ver" id="mm-ver"></div>
+  </footer>
 </div>
 
-<!-- Lobby (Mehrspieler) -->
-<div id="lobby" class="hidden">
-  <div class="start-box lobby-box">
-    <h1 class="logo">GTA <span>Coburg</span> <small>Online</small></h1>
-    <p class="sub">Bis zu 16 Spieler in derselben Stadt: zusammen fahren, mitfahren, Rennen um die Wette, Polizei abhängen.
-      Geld, Wohnungen und Garage bleiben dein eigener Spielstand.</p>
-    <label class="lb-name">Dein Name <input id="lobby-name" maxlength="16" placeholder="z. B. Coburger Jung" autocomplete="nickname"></label>
-    <div class="lobby-cols">
-      <div>
-        <h3>Lobbys <button id="lobby-refresh" class="mini" title="Neu laden">⟳</button></h3>
-        <ul id="lobby-rooms"></ul>
-        <button id="lobby-quick" class="wide">Schnell beitreten</button>
+<!-- Online-Modus (Inhalt des Menüfensters „Online-Modus“; Logik in js/net.js, NetLobby) -->
+<template id="tpl-online">
+  <div class="ol">
+    <div class="ol-conn">
+      <div class="ol-led" id="ol-led"></div>
+      <div class="ol-conn-txt"><b id="ol-state">Nicht verbunden</b><span id="ol-detail">Verbindung zum Mehrspieler-Dienst herstellen, um Lobbys zu sehen.</span></div>
+      <button id="ol-connect" class="mm-btn primary">Verbinden</button>
+    </div>
+    <label class="ol-name">Spielername <input id="lobby-name" maxlength="16" placeholder="z. B. Coburger Jung" autocomplete="nickname"></label>
+    <div class="ol-cols">
+      <div class="ol-sessions">
+        <h3>Sitzungen <span id="ol-count"></span><button id="lobby-refresh" class="mm-icon" title="Liste aktualisieren" aria-label="Liste aktualisieren">⟳</button></h3>
+        <ul id="lobby-rooms" class="ol-rooms"><li class="muted">Noch nicht verbunden</li></ul>
+        <button id="lobby-quick" class="mm-btn primary wide">Online-Spiel betreten · Schnell beitreten</button>
       </div>
-      <div>
+      <div class="ol-side">
         <h3>Mit Code beitreten</h3>
-        <div class="lb-row"><input id="lobby-code" maxlength="8" placeholder="Code"><button id="lobby-code-join">Beitreten</button></div>
-        <h3>Neue Lobby</h3>
-        <div class="lb-row"><input id="lobby-new-name" maxlength="28" placeholder="Name der Lobby"><button id="lobby-create">Erstellen</button></div>
-        <label class="lb-check"><input type="checkbox" id="lobby-new-priv"> privat (nur mit Code oder Einladungslink)</label>
-        <details><summary>Server</summary>
-          <div class="lb-row"><input id="lobby-server" placeholder="automatisch"><button id="lobby-server-save">Übernehmen</button></div>
-          <p class="hint">Leer = automatisch: eigener Server dieser Seite, sonst Peer-to-Peer. Oder <code>wss://…</code> bzw. <code>p2p</code>.</p>
+        <div class="ol-row"><input id="lobby-code" maxlength="8" placeholder="Lobby-Code"><button id="lobby-code-join" class="mm-btn">Beitreten</button></div>
+        <h3>Eigene Lobby</h3>
+        <div class="ol-row"><input id="lobby-new-name" maxlength="28" placeholder="Name der Lobby"><button id="lobby-create" class="mm-btn">Erstellen</button></div>
+        <label class="ol-check"><input type="checkbox" id="lobby-new-priv"> privat (nur mit Code oder Einladungslink)</label>
+        <details class="ol-adv"><summary>Server-Einstellungen</summary>
+          <div class="ol-row"><input id="lobby-server" placeholder="automatisch"><button id="lobby-server-save" class="mm-btn">Übernehmen</button></div>
+          <p class="mm-hint">Leer = automatisch: eigener Server dieser Seite (<code>node server.js</code>), sonst Peer-to-Peer über WebRTC. Oder <code>wss://…</code> bzw. <code>p2p</code>.</p>
         </details>
       </div>
     </div>
-    <p id="lobby-status"></p>
-    <button id="lobby-back" class="ghost">Zurück</button>
+    <p id="lobby-status" class="ol-status"></p>
   </div>
+</template>
+
+<!-- Bestätigungsdialog des Menüs -->
+<div id="mm-dialog" class="mm-dialog hidden" role="dialog" aria-modal="true">
+  <div class="mm-dialog-box"><h3 id="mm-dialog-title"></h3><p id="mm-dialog-text"></p><div id="mm-dialog-btns" class="mm-dialog-btns"></div></div>
+</div>
+
+<!-- Beendet -->
+<div id="mm-quit" class="mm-quit hidden">
+  <div class="gc-logo"><span class="gc-gta">GTA</span><span class="gc-city">Coburg</span></div>
+  <p>Das Spiel ist beendet und gespeichert. Die 3D-Grafik ist angehalten.</p>
+  <p class="mm-hint" id="mm-quit-hint">Du kannst diesen Tab jetzt schließen.</p>
+  <div class="mm-dialog-btns"><button id="mm-quit-close" class="mm-btn">Fenster schließen</button><button id="mm-quit-back" class="mm-btn primary">Zurück zum Hauptmenü</button></div>
 </div>
 
 <!-- HUD -->
@@ -170,6 +177,7 @@
         <p>Landeplätze: Bahnhof, Klinikum, Flugplatz Brandensteinsebene</p>
       </div>
       <div><h3>Allgemein</h3>
+        <p><kbd>P</kbd> oder <kbd>Esc</kbd> Pausenmenü: speichern, laden, Einstellungen</p>
         <p><kbd>E</kbd> ein-/aussteigen, Auto klauen</p>
         <p><kbd>F</kbd> Rennen starten/abbrechen, Auto verkaufen</p>
         <p><kbd>F</kbd> an Haustür oder Autohaus: ansehen, kaufen</p>
@@ -203,6 +211,7 @@
 <!-- three.js-Erweiterungen (KTX2Loader) importieren „three“: dieselbe Version wie THREE_VERSION in js/boot.js -->
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js", "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js", "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/" } }</script>
 <!-- Lädt three.js, Kartendaten und Spiel (mit Fortschritt, Zeitlimit und Fehlermeldung) -->
+<script src="js/loadscreen.js"></script>
 <script src="js/boot.js"></script>
 <script>
   // Fehlt sogar der Lader, nicht endlos „Lade …“ zeigen

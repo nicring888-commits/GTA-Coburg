@@ -144,6 +144,12 @@
   let night = false;
   let camMode = 0;         // 0 Verfolger, 1 Motorhaube
   let over = null;         // Verhaftet/Erledigt-Sequenz
+  let menu = null;         // Hauptmenü und Pausenmenü (js/mainmenu.js, seit v3.21.0)
+  let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
+  let paused = false;      // Pausenmenü offen
+  let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
+  const VERSION = '3.21.0';
+  const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
   world.build(progress).then(() => {
@@ -209,18 +215,32 @@
       enterCar, startRide, endRide, remoteBoom, correct,
       forceExit: () => { if (car) { ui.toast('Jemand anderes sitzt schon am Steuer', 2); exitCar(); } },
     });
+    // Online-Modus (Fenster im Hauptmenü): nach dem Beitreten in die Welt bzw. zurück in die laufende Sitzung
     lobby = new NetLobby(net, w => {
-      begin();
-      ui.bigMessage('ONLINE', 3, '#3aa0ff', `${w.room.name} · ${w.players.length + 1} Spieler · Code ${w.room.code}`);
-      net.sys(`Willkommen, ${w.name}! T = Chat, Tab = Spielerliste und Einladungslink`);
+      const hello = () => {
+        ui.bigMessage('ONLINE', 3, '#3aa0ff', `${w.room.name} · ${w.players.length + 1} Spieler · Code ${w.room.code}`);
+        net.sys(`Willkommen, ${w.name}! T = Chat, Tab = Spielerliste und Einladungslink`);
+      };
+      if (session) { menu.hide(); resume(); hello(); } else { menu.busy = true; menu.audio.start(); menu.hide(); enterWorld({ how: 'online' }).then(hello).finally(() => { menu.busy = false; }); }
     });
+    // Hauptmenü (js/mainmenu.js) mit Kamerafahrt durch die Welt
+    menu = new MainMenu(menuApi);
     progress('Fertig', 1);
     boot.done();
-    $('loading').classList.add('hidden');
-    $('start').classList.remove('hidden');
-    lobby.ready();
     renderer.compile(scene, camera);
+    player.visible = false;
     requestAnimationFrame(loop);
+    // Spielstand geladen / neues Spiel (Seite neu geladen): Ladebildschirm bleibt, gleich in die Welt
+    let auto = null;
+    try { auto = sessionStorage.getItem(AUTOPLAY_KEY); sessionStorage.removeItem(AUTOPLAY_KEY); } catch (e) { /* ohne Speicher */ }
+    if (auto === 'new' || auto === 'continue') enterWorld({ how: auto, keepLoader: true });
+    else {
+      // Menü erst zeigen, wenn die erste Szene steht (Kacheln gebaut), dann den Ladebildschirm ausblenden
+      menuSky(true);
+      menu.show('main');
+      if (window.LoadScreen) LoadScreen.hide(null, 1400); else $('loading').classList.add('hidden');
+      if (lobby.invite) setTimeout(() => menu.openPanel('online'), 900);
+    }
   }).catch(err => {
     console.error(err);
     boot.fail('Fehler beim Aufbau der Welt.', err && err.message);
@@ -288,14 +308,19 @@
   const keys = {};
   const pressed = {};
   let started = false;
+  // Tastenbelegung (Einstellungen → Steuerung): eigene Tasten werden in die Standardcodes übersetzt, die das Spiel abfragt
+  const keyCode = code => (typeof Settings !== 'undefined' ? Settings.mapKey(code) : code);
   addEventListener('keydown', e => {
     if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // Namen, Lobby-Code, Chat tippen
+    if (menu && menu.open) return;   // Menü bedient sich selbst (Pfeile, Enter, Esc)
     if (e.code === 'F1' || e.code === 'Tab') e.preventDefault();
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
-    if (!keys[e.code]) pressed[e.code] = true;
-    keys[e.code] = true;
+    const code = keyCode(e.code);
+    if (!code) return;
+    if (!keys[code]) pressed[code] = true;
+    keys[code] = true;
   });
-  addEventListener('keyup', e => { keys[e.code] = false; });
+  addEventListener('keyup', e => { const code = keyCode(e.code); if (code) keys[code] = false; keys[e.code] = false; });
   addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
   const cam = { yaw: 0, pitch: 0.28, dist: 6.5, lastMouse: -10, x: 0, y: 0, z: 0, init: false };
@@ -319,8 +344,9 @@
     if (!started || ui.mapOpen || property.menuOpen) return;
     if (document.pointerLockElement === canvas || dragging) {
       const aim = weapons && weapons.aiming;
-      cam.yaw -= e.movementX * (aim ? 0.0022 : 0.0032);
-      cam.pitch = U.clamp(cam.pitch + e.movementY * (aim ? 0.0018 : 0.0025), aim ? -0.9 : -0.35, 1.25);
+      const C = typeof Settings !== 'undefined' ? Settings.get('controls') : { sens: 1, invertY: false };
+      cam.yaw -= e.movementX * (aim ? 0.0022 : 0.0032) * C.sens;
+      cam.pitch = U.clamp(cam.pitch + e.movementY * (aim ? 0.0018 : 0.0025) * C.sens * (C.invertY ? -1 : 1), aim ? -0.9 : -0.35, 1.25);
       cam.lastMouse = performance.now() / 1000;
     }
   });
@@ -328,16 +354,143 @@
     cam.dist = U.clamp(cam.dist * (e.deltaY > 0 ? 1.12 : 1 / 1.12), 2.2, 40);
   }, { passive: true });
 
+  // ---------- Hauptmenü, Ladebildschirm, Pause (seit v3.21.0) ----------
+  // Spiel läuft: HUD an, Eingabe an, Ton an
+  let introT = 0, introDist = 6.5;
   function begin() {
-    $('start').classList.add('hidden');
     $('hud').classList.remove('hidden');
-    started = true;
+    started = true; session = true; paused = false;
     audio.init();
+    applyVolume();
+    applyHints();
     lockPointer();
   }
-  $('start-btn').onclick = () => {
+  // Uhrzeit und Wetter des Spiels merken, solange das Menü eigene Szenen zeigt
+  let worldSky = null;
+  function menuSky(on) {
+    if (on && !worldSky) worldSky = { clock: atmo.clock, kind: atmo.kind, auto: atmo.auto };
+    if (on) atmo.auto = false;
+    if (!on && worldSky) { atmo.clock = worldSky.clock; atmo.setWeather(worldSky.kind, true); atmo.auto = worldSky.auto; worldSky = null; post.eye.reset = true; }
+  }
+  const nextFrame = () => new Promise(r => { let done = false; const go = () => { if (!done) { done = true; r(); } }; requestAnimationFrame(go); setTimeout(go, 120); });
+  // Kacheln um einen Punkt in Zeitscheiben bauen; meldet den echten Anteil fertiger Kacheln und Bäume
+  async function prepareArea(x, z, onProgress, maxMs = 15000) {
+    const R = world.region;
+    if (!R) return;
+    const rad = Math.min(Q.ensure || 1400, 1100);
+    const [pi, pj] = R.tileOf(x, z), list = [];
+    for (let tj = pj - 3; tj <= pj + 3; tj++) for (let ti = pi - 3; ti <= pi + 3; ti++) {
+      const st = R.stateOf(ti, tj), d = R.rectDist(ti, tj, x, z);
+      if (st && d < rad) list.push({ key: tileKey(ti, tj), trees: st === 2 && d < REGION.trees });
+    }
+    const total = list.length + list.filter(t => t.trees).length || 1;
+    const t0 = performance.now();
+    for (;;) {
+      R.update(x, z);
+      let n = 0;
+      for (const t of list) { const T = R.loaded.get(t.key); if (T && T.ready) n++; if (t.trees && R.treesOn.has(t.key) && !(R.job && R.job.kind === 'trees' && R.job.t.key === t.key)) n++; }
+      onProgress(n / total);
+      if (n >= total) break;
+      if (performance.now() - t0 > maxMs) { R.ensure(x, z, rad); onProgress(1); break; }
+      await nextFrame();
+    }
+  }
+  // Aus dem Menü in die Welt: Ladebildschirm mit echtem Fortschritt, dann weicher Übergang zur Spielkamera
+  async function enterWorld(o) {
+    const L = window.LoadScreen;
+    const title = o.how === 'online' ? 'Online-Sitzung' : o.how === 'new' ? 'Neues Spiel' : 'Weiterspielen';
+    if (L) { if (!L.visible || !o.keepLoader) L.show(title); else $('ls-title').textContent = title; L.set('Spielwelt vorbereiten …', null); }
+    if (menu.director.active) menu.director.stop();
+    await nextFrame();
+    menuSky(false);
+    respawn(true);
+    // Weiterspielen: an der zuletzt gemerkten Stelle (draußen, ohne Fahndung), sonst am Bahnhof
+    const P = save.pos;
+    if (o.how === 'continue' && P && Settings.get('general', 'autosave') && isFinite(P.x) && isFinite(P.z) && (world.inCoreRect(P.x, P.z) || (world.region && world.region.stateOf(...world.region.tileOf(P.x, P.z))))) {
+      if (world.region) world.region.ensure(P.x, P.z, 400);
+      let x = P.x, z = P.z;
+      if (world.insideBuilding(x, z, 0.6)) { const r = world.nearestRoad(x, z, 300); if (r) { x = r.x; z = r.z; } }
+      player.place(x, z, world); player.heading = P.h || 0; cam.yaw = player.heading;
+    }
+    if (o.how === 'new') { delete save.pos; persist(); }
+    await prepareArea(player.x, player.z, f => L && L.set(f < 1 ? 'Coburg wird aufgebaut …' : 'Fast fertig …', 0.05 + f * 0.85));
+    if (L) L.set('Grafik vorbereiten …', 0.93);
+    await nextFrame();
+    renderer.compile(scene, camera);
+    // Fußgänger und Verkehr kurz anlaufen lassen, damit die Stadt beim Aufblenden schon lebt
+    started = true;
+    for (let i = 0; i < 20; i++) { step(1 / 30); for (const k in pressed) delete pressed[k]; }
+    started = false;
+    if (L) L.set('Bereit', 1);
+    cam.init = false; introDist = cam.dist; cam.dist = 26; cam.pitch = 0.78; introT = 3.2;
+    await nextFrame();
     begin();
-    ui.bigMessage('GTA COBURG', 2.5, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
+    if (L) await new Promise(r => L.hide(r, 1300));
+    if (o.how === 'new') ui.bigMessage('GTA COBURG', 2.8, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
+    else if (o.how === 'continue') ui.bigMessage('GTA COBURG', 2.2, '#e9b949', `Willkommen zurück · € ${Math.round(save.money).toLocaleString('de-DE')}`);
+  }
+  function resume() {
+    paused = false;
+    begin();
+  }
+  function openPause() {
+    if (!menu) return;
+    paused = true; started = false;
+    for (const k in keys) keys[k] = false;
+    if (car) audio.engine(false, 0, 0);
+    audio.horn(false);
+    applyVolume();
+    document.exitPointerLock?.();
+    $('hud').classList.add('hidden');
+    $('help').classList.add('hidden');
+    menu.show('pause');
+  }
+  // Pausenmenü → Hauptmenü: speichern, Online-Lobby verlassen, Kamera-Regie wieder an
+  function toMenu() {
+    persist();
+    if (net.online) net.leave();
+    if (ui.mapOpen) ui.closeMap();
+    if (property.menuOpen) property.closeMenu();
+    if (property.inside) property.exit();
+    if (mode === 'fly') exitHeli();
+    if (races.active) races.stop();
+    paused = false; started = false; session = false;
+    audio.engine(false, 0, 0); audio.siren(0); audio.crowd(0); audio.horn(false);
+    applyVolume();
+    $('hud').classList.add('hidden');
+    player.visible = false;
+    menuSky(true);
+  }
+  // Lautstärke aus den Einstellungen; im Menü und im Hintergrund stumm
+  function applyVolume() {
+    if (!audio.ctx) return;
+    const A = typeof Settings !== 'undefined' ? Settings.get('audio') : { master: 1, sfx: 1, ambient: 1 };
+    const mute = !started || halted || (A.muteHidden && document.hidden);
+    const t = audio.ctx.currentTime;
+    audio.master.gain.setTargetAtTime(mute ? 0 : 0.5 * A.master * A.sfx, t, 0.12);
+    if (audio.amb) audio.amb.gain.setTargetAtTime(mute ? 0 : 0.5 * A.master * A.ambient, t, 0.12);
+  }
+  const applyHints = () => $('help-hint').classList.toggle('hidden', typeof Settings !== 'undefined' && !Settings.get('general', 'hints'));
+  document.addEventListener('visibilitychange', applyVolume);
+  if (typeof Settings !== 'undefined') Settings.onChange(() => { applyVolume(); applyHints(); });
+  // Schnittstelle für das Menü (js/mainmenu.js)
+  const menuApi = {
+    version: VERSION, world, atmo, post, renderer, camera,
+    get net() { return net; }, get lobby() { return lobby; },
+    landmarks: () => ui.landmarks,
+    session: () => session,
+    persist: () => persist(),
+    prepare: (x, z) => { if (world.region) world.region.ensure(x, z, 650); },
+    enterWorld, resume, toMenu,
+    whereText: () => { const s = $('loc-street').textContent, m = $('loc-mode').textContent; return /·/.test(m) ? s + ', ' + m.split('·')[0].trim() : s; },
+    reloadInto(how) { try { sessionStorage.setItem(AUTOPLAY_KEY, how); } catch (e) { /* ohne Speicher */ } location.reload(); },
+    reloadGraphics(lv) {
+      persist();
+      try { localStorage.setItem('gta-coburg-grafik', lv); localStorage.removeItem('gta-coburg-start'); if (session) sessionStorage.setItem(AUTOPLAY_KEY, 'continue'); } catch (e) { /* ohne Speicher */ }
+      const u = new URL(location.href); u.searchParams.delete('grafik'); location.replace(u.toString());
+    },
+    stopRendering() { halted = true; applyVolume(); },
+    resumeRendering() { halted = false; last = performance.now(); },
   };
   $('help-close').onclick = () => { $('help').classList.add('hidden'); };
 
@@ -389,7 +542,9 @@
         this.sirenGain = c.createGain(); this.sirenGain.gain.value = 0;
         const sf = c.createBiquadFilter(); sf.type = 'lowpass'; sf.frequency.value = 1800;
         this.sirenOsc = c.createOscillator(); this.sirenOsc.type = 'sawtooth'; this.sirenOsc.frequency.value = 440;
-        this.sirenOsc.connect(sf); sf.connect(this.sirenGain); this.sirenGain.connect(this.master); this.sirenOsc.start();
+        // Umgebung (Martinshorn, Stimmengewirr) über eigenen Regler (Einstellungen → Audio → Umgebung)
+        this.amb = c.createGain(); this.amb.gain.value = 0.5; this.amb.connect(c.destination);
+        this.sirenOsc.connect(sf); sf.connect(this.sirenGain); this.sirenGain.connect(this.amb); this.sirenOsc.start();
         // Stimmengewirr in der Fußgängerzone: gefiltertes Rauschen in einer Schleife
         const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
         let b = 0;
@@ -397,7 +552,7 @@
         const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
         const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.8;
         this.crowdGain = c.createGain(); this.crowdGain.gain.value = 0;
-        src.connect(bp); bp.connect(this.crowdGain); this.crowdGain.connect(this.master); src.start();
+        src.connect(bp); bp.connect(this.crowdGain); this.crowdGain.connect(this.amb); src.start();
         // Reifenquietschen: Rauschen durch einen schmalen Bandpass
         const sq = c.createBuffer(1, c.sampleRate, c.sampleRate), sd = sq.getChannelData(0);
         for (let i = 0; i < sd.length; i++) sd[i] = Math.random() * 2 - 1;
@@ -951,6 +1106,13 @@
     if (window.game.debugCam) { // freie Kamera für Tests: game.debugCam = { pos: [x,y,z], look: [x,y,z] }
       camera.position.fromArray(window.game.debugCam.pos); camera.lookAt(...window.game.debugCam.look); return;
     }
+    if (menu && menu.director.active) { menu.director.apply(camera); return; }   // Kamerafahrt im Hauptmenü
+    // Übergang aus dem Ladebildschirm: von weit oben langsam hinter die Figur
+    if (introT > 0) {
+      introT -= dt;
+      cam.dist = U.damp(cam.dist, introDist, 1.5, dt); cam.pitch = U.damp(cam.pitch, 0.3, 1.5, dt);
+      if (introT <= 0) cam.dist = introDist;
+    }
     if (property.inside) { indoorCamera(dt); return; }
     let tx, ty, tz, follow = false, heading = 0;
     // eigenes Auto, (Mehrspieler) das Auto, in dem man mitfährt, oder der Helikopter (weiter weg, etwas höher)
@@ -1000,7 +1162,7 @@
     const lam = follow ? 12 : 30;
     cam.x = U.damp(cam.x, wx, lam, dt); cam.y = U.damp(cam.y, wy, lam, dt); cam.z = U.damp(cam.z, wz, lam, dt);
     // bei hohem Tempo etwas weiteres Sichtfeld (Geschwindigkeitsgefühl, ohne Verzerrung)
-    const fov = BASE_FOV + (vc ? Math.min(Math.abs(vc.speed), 45) * 0.16 : 0);
+    const fov = (typeof Settings !== 'undefined' ? Settings.get('controls', 'fov') : BASE_FOV) + (vc ? Math.min(Math.abs(vc.speed), 45) * 0.16 : 0);
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = U.damp(camera.fov, fov, 3, dt); camera.updateProjectionMatrix(); }
     camera.position.set(cam.x, cam.y, cam.z);
     camera.lookAt(tx, ty, tz);
@@ -1041,22 +1203,46 @@
   // ---------- Schleife ----------
   let last = performance.now();
   let hudTimer = 0;
-  let prevPX = 0, prevPZ = 0, pedCapT = 0;
+  let prevPX = 0, prevPZ = 0, pedCapT = 0, posSaveT = 20;
   let burnWarned = null;
   let lastTown = null;
   function loop(now) {
     requestAnimationFrame(loop);
     // Messlauf (js/bench.js) zeichnet selbst: Spiel anhalten
-    if (window.game && window.game.hold) { last = now; return; }
+    if ((window.game && window.game.hold) || halted) { last = now; return; }
     const dt = Math.min(0.05, (now - last) / 1000);
-    if (started) post.adapt(now - last);
+    if (started || (menu && menu.director.active)) post.adapt(now - last);
     last = now;
     if (started && ui.mapOpen && (pressed.KeyM || pressed.Escape)) ui.closeMap();
     else if (started && property.menuOpen) { if (pressed.Escape || pressed.KeyF || pressed.KeyG) property.closeMenu(); }
     else if (started && !ui.mapOpen) step(dt);
-    if (started) netStep(dt);
+    else if (!started && menu && menu.director.active) menuStep(dt);
+    if (started || (paused && net.online)) netStep(dt);
     render(dt);
     for (const k in pressed) delete pressed[k];
+  }
+
+  // Hauptmenü: Kamera-Regie, und die Stadt lebt um die gezeigte Stelle (Verkehr, Busse, Fußgänger, Tauben)
+  function menuStep(dt) {
+    const D = menu.director;
+    D.update(dt);
+    menu.tick();
+    const f = D.focus;
+    if (world.region) {
+      world.region.update(f.x, f.z);
+      if (world.region.lifeChanged) { world.region.lifeChanged = false; peds.setExtra(world.region.lifeSegments()); }
+      if ((pedCapT -= dt) <= 0) {
+        pedCapT = 1;
+        const c = atmo.clock, day = c < 5 ? 0.08 : c < 7 ? 0.3 : c < 9 ? 0.75 : c < 18 ? 1 : c < 21 ? 0.6 : 0.25;
+        peds.cap = world.inCoreRect(f.x, f.z) ? Math.round(PEDS.max * Math.max(0.3, day)) : peds.capacity(f.x, f.z, day);
+      }
+    }
+    fx.update(dt);
+    traffic.update(dt, f.x, f.z, buses ? buses.obstacles() : []);
+    if (buses) buses.update(dt, f.x, f.z, []);
+    peds.update(dt, f.x, f.z, [], traffic.cars, false);
+    props.update(dt, f.x, f.z, [], performance.now() / 1000);
+    life.update(dt, f.x, f.z);
   }
 
   // Mehrspieler-Takt: Zustand senden, andere Spieler darstellen, Chat und Spielerliste
@@ -1083,6 +1269,17 @@
       ui.setBust(0); ui.setPrompt(null); ui.setSpeed(0, '', false);
       if (over.t > 3.8) respawn(false);
       return;
+    }
+    // Pausenmenü: P (änderbar) oder Esc, wenn die Maus schon frei ist und nichts anderes offen ist
+    if (pressed.KeyP || (pressed.Escape && !document.pointerLockElement && $('help').classList.contains('hidden') && $('menu').classList.contains('hidden') && !net.typing)) { openPause(); return; }
+    // Ort für „Weiterspielen“ merken (draußen, ohne Fahndung, nicht im Rennen, nicht in der Luft)
+    if ((posSaveT -= dt) <= 0) {
+      posSaveT = 20;
+      if (Settings.get('general', 'autosave') && !property.inside && police.stars === 0 && !races.active && !ride && mode !== 'fly') {
+        const p = mode === 'drive' ? car : player;
+        save.pos = { x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, h: Math.round(p.heading * 100) / 100 };
+        persist();
+      }
     }
     if (property.inside) { indoorStep(dt); return; }
     // Tasten mit einmaliger Wirkung
@@ -1354,7 +1551,7 @@
   function render(dt) {
     if (!player) return;
     updateCamera(dt);
-    const t = mode === 'drive' ? car : player;
+    const t = menu && menu.director.active ? menu.director.focus : mode === 'drive' ? car : player;
     // Sonne folgt dem Spieler (auf Schattentexel gerastert, damit nichts flimmert)
     const texel = (SC * 2) / sun.shadow.mapSize.x;
     const sx = Math.round(t.x / texel) * texel, sz = Math.round(t.z / texel) * texel;
@@ -1389,6 +1586,8 @@
     if (world.region && world.region.land) world.region.land.update(camera.position.x, camera.position.z, !property.inside);
     waterTick(dt);
     ui.updateLabels(camera);
+    // Menü: keine Ortsschilder, Säulen und Marker im Bild (nur für dieses Bild ausgeblendet)
+    if (menu && menu.director.active) for (const o of (ui.labels || []).concat(typeof GAME_MARKERS !== "undefined" ? GAME_MARKERS : [])) if (o.visible) { o.visible = false; farHidden.push(o); }
     // WebGPU-Probe (?gfx=webgpu, js/gfx-webgpu.js) zeichnet statt der WebGL-Kette; ?gfx=stats misst die WebGL-Kette
     hideFar();
     if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color, property.inside ? null : atmo);
@@ -1427,7 +1626,7 @@
   window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get buses() { return buses; }, set buses(v) { buses = v; }, get heli() { return heli; }, get heliPads() { return heliPads; }, enterHeli, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, bench: typeof Bench !== 'undefined' ? Bench : null, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
-    keys, pressed,
+    keys, pressed, get menu() { return menu; }, menuStep, openPause,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); netStep(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
 })();

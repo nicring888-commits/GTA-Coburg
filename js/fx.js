@@ -142,8 +142,12 @@ function makeBeacon(color, radius, height, checker = false) {
     opacity: 0.8, side: THREE.DoubleSide, blending: checker ? THREE.NormalBlending : THREE.AdditiveBlending, fog: false });
   const m = new THREE.Mesh(geo, mat);
   m.renderOrder = 2;
+  GAME_MARKERS.push(m);
   return m;
 }
+
+// Spielmarker (Säulen, Schilder): das Hauptmenü blendet sie für seine Kamerafahrt aus (seit v3.21.0)
+const GAME_MARKERS = [];
 
 // Text-Schild als Sprite (für Markierungen)
 function makeLabel(text, accent = '#e9b949', sub = '') {
@@ -164,5 +168,6 @@ function makeLabel(text, accent = '#e9b949', sub = '') {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true }));
   sp.scale.set(w / 76 * 2.6, h / 76 * 2.6, 1);
+  GAME_MARKERS.push(sp);
   return sp;
 }

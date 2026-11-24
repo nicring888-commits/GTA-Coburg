@@ -691,89 +691,177 @@ function r1(v) { return Math.round(v * 10) / 10; }
 function r2(v) { return Math.round(v * 100) / 100; }
 function r3(v) { return Math.round(v * 1000) / 1000; }
 
-// ---------- Lobby auf dem Startbildschirm ----------
+// ---------- Online-Modus im Hauptmenü (seit v3.21.0; vorher Lobby-Fenster auf dem Startbildschirm) ----------
+// Das Menü (js/mainmenu.js) legt das Fenster aus der Vorlage #tpl-online an und ruft attach()/detach().
+// Zustände: idle (nicht verbunden) → connecting (Dienst suchen) → ready (Lobbys sichtbar, Ping) → joining → online;
+// Fehler mit verständlicher Erklärung und technischem Detail.
 class NetLobby {
   constructor(net, onJoined) {
     this.net = net; this.onJoined = onJoined;
-    const $ = id => document.getElementById(id);
-    this.$ = $;
     this.url = '';
-    $('mp-btn').onclick = () => this.open();
-    $('lobby-back').onclick = () => this.close();
+    this.state = 'idle';
+    this.rooms = null;
+    this.body = null;
+    try { this.name = localStorage.getItem(NET_NAME_KEY) || ''; } catch (e) { this.name = ''; }
+    const code = new URLSearchParams(location.search).get('lobby');
+    if (code) { this.code = code.toUpperCase().slice(0, 8); this.invite = true; }
+  }
+
+  // Fenster ist offen: Elemente verbinden, gleich nach Lobbys suchen
+  attach(body) {
+    this.body = body;
+    const $ = id => body.querySelector('#' + id);
+    this.$ = $;
+    $('lobby-name').value = this.name;
+    if (this.code) $('lobby-code').value = this.code;
+    let set = '';
+    try { set = localStorage.getItem(NET_SERVER_KEY) || ''; } catch (e) { /* ohne Speicher */ }
+    $('lobby-server').value = set;
+    $('lobby-name').addEventListener('input', () => { this.name = $('lobby-name').value; });
+    $('ol-connect').onclick = () => (this.net.online ? this.leave() : this.connect());
     $('lobby-refresh').onclick = () => this.refresh();
     $('lobby-quick').onclick = () => this.join({});
     $('lobby-create').onclick = () => this.join({ create: { name: $('lobby-new-name').value, priv: $('lobby-new-priv').checked } });
     $('lobby-code-join').onclick = () => this.join({ code: $('lobby-code').value });
+    $('lobby-code').addEventListener('keydown', e => { if (e.key === 'Enter') this.join({ code: $('lobby-code').value }); });
     $('lobby-server-save').onclick = () => {
       const v = $('lobby-server').value.trim();
       try { if (v) localStorage.setItem(NET_SERVER_KEY, v); else localStorage.removeItem(NET_SERVER_KEY); } catch (e) { /* ohne Speicher */ }
-      this.url = ''; this.refresh();
+      this.url = ''; this.connect();
     };
-    let name = '';
-    try { name = localStorage.getItem(NET_NAME_KEY) || ''; } catch (e) { /* ohne Speicher */ }
-    $('lobby-name').value = name;
-    for (const id of ['lobby-name', 'lobby-code', 'lobby-new-name', 'lobby-server']) $(id).addEventListener('keydown', e => e.stopPropagation());
-    const code = new URLSearchParams(location.search).get('lobby');
-    if (code) { $('lobby-code').value = code.toUpperCase(); this.invite = true; }
+    if (this.net.online) this.showOnline();
+    else if (this.state === 'ready' && this.rooms) { this.paint(); this.refresh(); }
+    else this.connect();
+    clearInterval(this.timer);
+    this.timer = setInterval(() => { if (this.body && this.state === 'ready') this.refresh(true); else if (this.body && this.net.online) this.showOnline(); }, 8000);
+    if (!this.name) setTimeout(() => { if (this.body) $('lobby-name').focus(); }, 120);
+  }
+  detach() { clearInterval(this.timer); this.body = null; this.$ = null; }
+  ready() { /* Einladungslink: das Menü öffnet das Fenster selbst (invite) */ }
+
+  // ---------- Anzeige ----------
+  setState(state, title, detail) {
+    this.state = state;
+    if (!this.body) return;
+    const led = this.$('ol-led');
+    led.className = 'ol-led ' + state;
+    this.$('ol-state').textContent = title;
+    this.$('ol-detail').textContent = detail || '';
+    const btn = this.$('ol-connect');
+    btn.textContent = state === 'online' ? 'Lobby verlassen' : state === 'error' ? 'Erneut verbinden' : state === 'ready' ? 'Neu verbinden' : 'Verbinden';
+    btn.disabled = state === 'connecting' || state === 'joining';
+    const can = state === 'ready';
+    for (const id of ['lobby-quick', 'lobby-create', 'lobby-code-join']) this.$(id).disabled = !can;
+    this.body.querySelector('.ol').classList.toggle('is-online', state === 'online');
+  }
+  status(text, bad) {
+    if (!this.body) return;
+    const s = this.$('lobby-status');
+    s.textContent = text || ''; s.classList.toggle('bad', !!bad);
+  }
+  mode() { return this.url === 'p2p' ? 'Peer-to-Peer (WebRTC)' : 'Server ' + this.url.replace(/^wss?:\/\//, '').replace(/\/mp$/, ''); }
+
+  // Fehlermeldungen in verständliche Sprache übersetzen; Original als Detail
+  static explain(e, url) {
+    const m = String((e && e.message) || e || '');
+    const p2p = url === 'p2p';
+    if (/Failed to fetch|NetworkError|Load failed|nicht erreichbar|Server antwortet nicht/i.test(m))
+      return 'Der Mehrspieler-Server antwortet nicht. Läuft er (node server.js) und stimmt die Adresse? Sonst Internetverbindung prüfen.';
+    if (/Zeitüberschreitung/.test(m))
+      return p2p ? 'Der Gastgeber der Lobby antwortet nicht (Zeitüberschreitung). Vielleicht blockiert ein Router oder eine Firewall die direkte Verbindung – nochmal versuchen oder eine andere Lobby wählen.'
+        : 'Keine Antwort vom Server (Zeitüberschreitung). Kostenlose Server schlafen nach einer Pause ein und brauchen beim ersten Aufruf bis zu einer Minute – gleich nochmal versuchen.';
+    if (/PeerJS konnte nicht geladen/.test(m)) return 'Peer-to-Peer ist nicht verfügbar: Die Bibliothek PeerJS konnte nicht geladen werden (Internetverbindung, Werbeblocker?).';
+    if (/Vermittlungsdienst/.test(m)) {
+      if (/unavailable-id/.test(m)) return 'Diese Lobby wird gerade von einem anderen Gastgeber übernommen. Bitte in ein paar Sekunden nochmal beitreten.';
+      if (/browser-incompatible/.test(m)) return 'Dieser Browser unterstützt die direkte Verbindung (WebRTC) nicht.';
+      return 'Der Vermittlungsdienst für Peer-to-Peer (PeerJS) ist nicht erreichbar. Firewall, Werbeblocker oder fehlende Internetverbindung?';
+    }
+    if (/Peer-to-Peer|peer-unavailable/.test(m)) return 'Der Gastgeber dieser Lobby ist nicht mehr erreichbar. Lobbyliste aktualisieren oder eine neue Lobby erstellen.';
+    if (/Verbindung abgelehnt|Keine Verbindung zum Server/.test(m)) return 'Der Server hat die Verbindung abgelehnt oder ist nicht erreichbar (zu viele Verbindungen von dieser Adresse oder Seite nicht freigegeben).';
+    if (/andere Spielversion|Neue Spielversion/.test(m)) return 'Der Server läuft mit einer anderen Spielversion. Bitte die Seite neu laden.';
+    return m || 'Unbekannter Fehler beim Verbinden.';
   }
 
-  // Startbildschirm ist bereit: mit Einladungslink gleich die Lobby zeigen
-  ready() { if (this.invite) this.open(); }
-
-  open() {
-    this.$('start').classList.add('hidden');
-    this.$('lobby').classList.remove('hidden');
-    let set = '';
-    try { set = localStorage.getItem(NET_SERVER_KEY) || ''; } catch (e) { /* ohne Speicher */ }
-    this.$('lobby-server').value = set;
-    this.refresh();
-    if (!this.$('lobby-name').value) this.$('lobby-name').focus();
-  }
-  close() { this.$('lobby').classList.add('hidden'); this.$('start').classList.remove('hidden'); }
-
-  status(html, bad) { const s = this.$('lobby-status'); s.innerHTML = html; s.classList.toggle('bad', !!bad); }
-
-  async refresh() {
-    const ul = this.$('lobby-rooms');
-    ul.innerHTML = '<li class="muted">Suche Lobbys …</li>';
-    if (!this.url) this.url = await NetClient.resolveUrl();
+  // ---------- Verbinden: Dienst suchen und Lobbys laden ----------
+  async connect() {
+    this.setState('connecting', 'Verbindung wird hergestellt …', 'Suche Mehrspieler-Dienst');
+    this.status('');
     try {
-      const r = await this.net.listRooms(this.url);
-      if (r.protocol !== MP.PROTOCOL) { this.status('Der Server hat eine andere Spielversion. Bitte die Seite neu laden.', true); return; }
-      ul.innerHTML = '';
-      for (const room of r.rooms) {
-        const li = document.createElement('li');
-        const full = room.n >= room.max;
-        li.innerHTML = `<span class="ln"></span><span class="lc">${room.n}/${room.max}</span>`;
-        li.querySelector('.ln').textContent = room.name;
-        const b = document.createElement('button');
-        b.textContent = full ? 'Voll' : 'Beitreten'; b.disabled = full;
-        b.onclick = () => this.join({ code: room.code });
-        li.appendChild(b); ul.appendChild(li);
-      }
-      if (!r.rooms.length) ul.innerHTML = '<li class="muted">Keine öffentlichen Lobbys</li>';
-      this.status(r.p2p ? `Peer-to-Peer (ohne eigenen Server) · ${r.online} online · Wer eine leere Lobby betritt, wird Gastgeber`
-        : `Server verbunden · ${r.online} online`);
+      this.url = await NetClient.resolveUrl();
+      if (this.body) this.$('ol-detail').textContent = this.url === 'p2p' ? 'Kein eigener Server – verbinde über Peer-to-Peer' : 'Server gefunden – lade Lobbys';
+      await this.refresh(false, true);
     } catch (e) {
-      ul.innerHTML = '';
-      this.status(this.url === 'p2p' ? 'Peer-to-Peer nicht verfügbar: ' + String(e.message).replace(/[<>]/g, '')
-        : 'Kein Mehrspieler-Server erreichbar (' + this.url.replace(/[<>]/g, '') + '). Läuft <code>node server.js</code>?', true);
+      this.setState('error', 'Verbindung fehlgeschlagen', NetLobby.explain(e, this.url));
+      this.status('Technisch: ' + String(e && e.message || e), true);
     }
   }
 
+  async refresh(quiet, first) {
+    if (!this.url) return this.connect();
+    if (!quiet && this.body && !first) this.$('lobby-rooms').innerHTML = '<li class="muted">Suche Sitzungen …</li>';
+    try {
+      const t0 = performance.now();
+      const r = await this.net.listRooms(this.url);
+      const ping = Math.round(performance.now() - t0);
+      if (r.protocol !== MP.PROTOCOL) throw new Error('andere Spielversion');
+      this.rooms = r.rooms; this.online = r.online; this.p2p = !!r.p2p; this.ping = ping;
+      this.setState('ready', 'Verbunden · ' + (this.p2p ? 'Peer-to-Peer' : 'Mehrspieler-Server'),
+        `${this.mode()} · ${r.online} ${r.online === 1 ? 'Spieler' : 'Spieler'} online · Antwortzeit ${ping} ms`);
+      this.paint();
+      if (!quiet) this.status(this.p2p ? 'Wer eine leere Lobby betritt, wird ihr Gastgeber; das Spiel läuft dann über deinen Browser.' : '');
+    } catch (e) {
+      if (quiet && this.state === 'ready') return;  // einzelner Aussetzer beim Aktualisieren
+      this.rooms = null;
+      if (this.body) this.$('lobby-rooms').innerHTML = '<li class="muted">Keine Verbindung</li>';
+      this.setState('error', 'Keine Verbindung', NetLobby.explain(e, this.url));
+      this.status('Technisch: ' + String(e && e.message || e).replace(/[<>]/g, ''), true);
+    }
+  }
+
+  paint() {
+    if (!this.body || !this.rooms) return;
+    const ul = this.$('lobby-rooms');
+    ul.innerHTML = '';
+    this.$('ol-count').textContent = this.rooms.length ? `(${this.rooms.length})` : '';
+    for (const room of this.rooms) {
+      const li = document.createElement('li');
+      const full = room.n >= room.max;
+      li.innerHTML = `<span class="ol-fill"><i style="width:${Math.round(room.n / room.max * 100)}%"></i></span><span class="ln"></span><span class="lc">${room.n}/${room.max}</span>`;
+      li.querySelector('.ln').textContent = room.name;
+      const b = document.createElement('button');
+      b.className = 'mm-btn'; b.textContent = full ? 'Voll' : 'Beitreten'; b.disabled = full;
+      b.onclick = () => this.join({ code: room.code });
+      li.appendChild(b); ul.appendChild(li);
+    }
+    if (!this.rooms.length) ul.innerHTML = '<li class="muted">Keine öffentlichen Lobbys. „Schnell beitreten“ eröffnet eine – andere finden dich dann hier.</li>';
+  }
+
+  showOnline() {
+    const n = this.net;
+    this.setState('online', `Online in „${n.room.name}“`, `${n.players.size + 1}/${n.max} Spieler · Code ${n.room.code} · Ping ${Math.round(n.rtt)} ms${n.isHost ? ' · du bist Gastgeber' : ''}`);
+    this.status('Einladungslink: Im Spiel Tab drücken. Zum Wechseln die Lobby verlassen.');
+  }
+  leave() {
+    this.net.leave();
+    this.status('Lobby verlassen – du spielst allein weiter.');
+    this.connect();
+  }
+
   async join(how) {
-    const name = this.$('lobby-name').value.trim();
-    if (name.length < 2) { this.status('Bitte zuerst einen Namen eingeben (mindestens 2 Zeichen).', true); this.$('lobby-name').focus(); return; }
-    this.status(this.url === 'p2p' ? 'Verbinde (Peer-to-Peer) …' : 'Verbinde …');
-    for (const b of this.$('lobby').querySelectorAll('button')) b.disabled = true;
+    const name = (this.$ ? this.$('lobby-name').value : this.name).trim();
+    if (name.length < 2) { this.status('Bitte zuerst einen Spielernamen eingeben (mindestens 2 Zeichen).', true); if (this.$) this.$('lobby-name').focus(); return; }
+    if (how.code !== undefined && !String(how.code).trim()) { this.status('Bitte einen Lobby-Code eingeben.', true); return; }
+    this.name = name;
+    const prev = this.state;
+    this.setState('joining', 'Betrete Online-Spiel …', this.url === 'p2p' ? 'Peer-to-Peer: Verbindung zum Gastgeber (kann bis zu 45 s dauern)' : 'Verbinde mit dem Server');
+    this.status('');
     try {
       const w = await this.net.connect(this.url, Object.assign({ name }, how));
-      this.$('lobby').classList.add('hidden');
+      this.code = '';
       this.onJoined(w);
     } catch (e) {
-      this.status(String(e.message).replace(/[<>]/g, ''), true);
-    } finally {
-      for (const b of this.$('lobby').querySelectorAll('button')) b.disabled = false;
+      this.setState(prev === 'ready' ? 'ready' : 'error', prev === 'ready' ? 'Verbunden · ' + (this.p2p ? 'Peer-to-Peer' : 'Mehrspieler-Server') : 'Verbindung fehlgeschlagen', prev === 'ready' ? this.mode() : '');
+      this.status(NetLobby.explain(e, this.url) + ' (' + String(e && e.message || e) + ')', true);
     }
   }
 }

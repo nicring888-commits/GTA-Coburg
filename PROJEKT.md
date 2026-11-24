@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.20.0 „Lebendige Stadt“ (seit 24.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.21.0 „Hauptmenü“ (24.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -41,12 +41,12 @@ rechts), `?gfx=webgpu-gl` mit dessen WebGL2-Rückfall, `?gfx=stats` zeigt diesel
 Ohne Angabe bleibt alles wie bisher (WebGL). `?ktx2=0` lädt die Luftbilder des Umlands zum Vergleich als JPG.
 
 **Grafikstufen (seit v3.1.2):** `voll` (Desktop), `mobil` (Standard auf iPhone, iPad und Android-Handys) und `leicht`.
-Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder auf dem Startbildschirm; die Wahl bleibt gespeichert
+Wählen per `?grafik=voll|mobil|leicht` in der Adresse oder im Hauptmenü unter Einstellungen → Grafik; die Wahl bleibt gespeichert
 (`localStorage` `gta-coburg-grafik`). Bricht ein Start beim Aufbau ab (Safari lädt die Seite nach zu viel Speicher neu),
 startet das Spiel beim nächsten Mal automatisch eine Stufe leichter und sagt das auf dem Ladebildschirm.
 
 **Online spielen (seit v3.0.0):** Der Server (`server.js`) betreibt neben dem Spiel den Mehrspieler-Server
-(WebSocket unter `/mp`, ohne Fremdpakete). Auf dem Startbildschirm „🌐 Online spielen“ → Name, Lobby wählen,
+(WebSocket unter `/mp`, ohne Fremdpakete). Im Hauptmenü „Online-Modus“ (seit v3.21.0; vorher „🌐 Online spielen“) → Name, Lobby wählen,
 „Schnell beitreten“, eigene (auch private) Lobby erstellen oder mit Code beitreten. Einladungslink: `?lobby=CODE`.
 - **Auf Vercel, GitHub Pages & Co. (seit v3.1.0, ohne eigenen Server):** Das Spiel merkt, dass die Seite keinen
   Mehrspieler-Server hat (`/api/health` fehlt), und spielt **Peer-to-Peer** über WebRTC: Wer eine leere Lobby betritt,
@@ -77,6 +77,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Waffen | `Linke Maustaste` schießen, schlagen, Granate werfen · `Rechte Maustaste` zielen (Schulterkamera, Fadenkreuz, Zoom) · `V` beim Zielen: über das Visier (Kimme und Korn, Perlkorn, Leuchtpunkt) · `1`–`7` oder `Q` Waffe wechseln · `R` nachladen | `Linke Maustaste` Drive-by (Pistole, Maschinenpistole) |
 | Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
 | Helikopter (seit v3.20.0) | `Leertaste` steigen · `Shift` sinken · `W`/`S` vor/zurück (Nase neigen) · `A`/`D` drehen · `E` aussteigen (nur gelandet, nicht auf Dächern) | |
+| Menü (seit v3.21.0) | `P` oder `Esc` (bei freier Maus) Pausenmenü: Fortsetzen, Speichern, Laden, Online, Einstellungen, Hauptmenü, Beenden · im Menü `↑`/`↓` Auswahl, `Enter` bestätigen, `Esc` zurück · Tasten lassen sich unter Einstellungen → Steuerung ändern | |
 | Allgemein | `E` einsteigen, Auto klauen, Helikopter fliegen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `B` Bewegungsunschärfe an/aus (wird gespeichert, auch auf dem Startbildschirm) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
@@ -146,7 +147,11 @@ und müssen dort bleiben.
 
 | Datei | Aufgabe |
 |---|---|
-| `index.html`, `css/style.css` | Lade- und Startbildschirm, HUD, Stadtplan, Hilfe |
+| `index.html`, `css/style.css` | HUD, Stadtplan, Hilfe; Gerüst von Ladebildschirm und Hauptmenü |
+| `css/menu.css` | Hauptmenü, Pausenmenü, Ladebildschirm, Einstellungen, Online-Fenster, Dialoge (seit v3.21.0). Logo und Schriften: Anton, Cinzel, Inter (Google Fonts, Ersatzschriften eingetragen) |
+| `js/loadscreen.js` | Ladebildschirm (seit v3.21.0, läuft vor `boot.js`): wechselnde Standbilder aus der Spielwelt (`assets/menu/ls-*.jpg`, 1440 × 810, zusammen 0,9 MB) mit langsamer Kamerabewegung, Ortsname, wechselnde Tipps, Fortschritt. `LoadScreen.set(text, f)` mit echtem Anteil oder `null` = unbestimmte Animation; `show(titel)`, `hide(cb)` |
+| `js/settings.js` | Einstellungen (seit v3.21.0, `localStorage` `gta-coburg-settings`): Audio (Gesamt, Effekte, Umgebung, Menü, stumm im Hintergrund), Steuerung (Mausempfindlichkeit, Y umkehren, Sichtfeld, Tastenbelegung als Übersetzung eigener Tasten in die Standardcodes: `Settings.mapKey`), Anzeige (Renderauflösung, dynamische Auflösung), Allgemein. Grafikstufe, Nachbearbeitung und Unschärfe behalten ihre alten Schlüssel |
+| `js/mainmenu.js` | Hauptmenü (seit v3.21.0): `MenuDirector` (Kamera-Regie mit 7 Szenen an Landmarken aus `ui.landmarks`, je Szene Uhrzeit und Wetter, Abblende, Kacheln werden während der Abblende gebaut), `MenuAudio` (erzeugte Klicks, Wischen, Stadtrauschen, leise Klangfläche), `SaveSlots` (aktiver Stand `gta-coburg-v1`, 6 Plätze `gta-coburg-slot-N`, Sicherung `gta-coburg-slot-backup`, Import/Export als JSON), `MainMenu` (Liste, Fenster Online/Laden/Speichern/Einstellungen/Credits, Dialoge, Tastatur, Touch). Schnittstelle zum Spiel: `menuApi` in `game.js` |
 | `js/boot.js` | Startlader (seit v3.1.2): Grafikstufe (`window.QUALITY`), lädt three.js (seit v3.9.0 `THREE_VERSION` 0.186.1 per `import()` als ES-Modul und stellt es als `window.THREE` bereit; Ersatz `three.min.js` r160, erzwingbar mit `?three=160`; jsDelivr, sonst unpkg), Kartendaten per `fetch` + `JSON.parse` mit Fortschritt in MB (bei `file://` oder Fehlern als `<script>`), dann die Spielskripte; Zeitlimits, Fehlermeldungen mit „Neu laden“/„Leichte Grafik“, Erkennung abgestürzter Starts (`localStorage` `gta-coburg-start`); `Boot.progress/fail/done` für `game.js` |
 | `js/util.js` | Zufall, Raster für Nachbarschaftssuche, Polygon-Hilfen; Figurenteile seit v2.4.0 (`roundBox`: Quader mit runden Kanten und Verjüngung, `mergeParts`, `figParts`: Bein mit Schuh, Arm mit Hand, Rumpf, Kopf mit Hals, Nase, Augen und Mund, Haar) |
 | `js/materials.js` | Materialbibliothek (seit v3.11.0, `Mat`): Voreinstellungen `MAT_PRESETS` (Lack, Chrom, Glas, Gummi, Kunststoff, Metall …), `Mat.make(voreinstellung, werte, schlüssel)` stuft je Grafikstufe ab (voll Physical/Standard, mobil Standard, leicht Lambert) und lässt unbekannte Werte weg; Budget `Mat.aniso`, `Mat.size` (gemalte Texturen); KTX2-Lader (`Mat.ktx2`, `Mat.loadKTX2`, three.js-Erweiterung `KTX2Loader` mit Basis-Transcoder vom CDN, Import-Map in `index.html`) |
@@ -305,6 +310,57 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.21.0 (24.11.2026, `main`): **Hauptmenü, Ladebildschirm, Online-Modus, Einstellungen.**
+  - **Architektur:** Lader (`boot.js`) → Ladebildschirm (`loadscreen.js`) mit echtem Fortschritt → Weltaufbau →
+    **Hauptmenü über der echten Spielwelt** (`mainmenu.js`) → beim Start ein zweiter Ladeschritt mit echtem Fortschritt
+    (fertige Kacheln und Bäume um den Startpunkt, Grafik vorbereiten, Verkehr und Fußgänger 0,7 s anlaufen lassen) →
+    Abblende und Kamerafahrt von oben hinter die Figur. Menü und Spiel sind getrennt: im Menü läuft keine Spiellogik
+    (keine Polizei, keine Eingabe, Spielton stumm), nur Verkehr, Busse, Fußgänger, Tauben und Kacheln um die gezeigte
+    Stelle (`menuStep` in `game.js`). Die Spielwelt selbst ist unverändert.
+  - **Hauptmenü:** Weiterspielen (an der zuletzt gemerkten Stelle, sonst Bahnhof; ohne Spielstand gesperrt), Neues
+    Spiel (bisheriger Stand wird vorher als Sicherung abgelegt, Seite lädt neu und startet direkt), Online-Modus, Spiel
+    laden, Einstellungen, Credits, Beenden. Hinter dem Menü fährt die Kamera durch Coburg: Veste im Abendlicht,
+    Marktplatz mit Prinz-Albert-Denkmal, Schloss Ehrenburg über dem Schlossplatz, Altstadt um St. Moriz am Morgen,
+    Bahnhof bei Nacht, Landestheater im Regen, Marktplatz am Abend. Spielmarker (Säulen, Schilder) sind dabei
+    ausgeblendet, die Spieluhr und das Spielwetter werden gemerkt und beim Start zurückgesetzt. Kinoformat-Balken,
+    Filmkorn, Abblenden, eingeblendeter Ortsname; Knöpfe mit Goldleiste, Pfeil und gestaffeltem Einblenden.
+  - **Pausenmenü** (`P`, `Esc` bei freier Maus, Touch-Knopf ❚❚): Fortsetzen, Spiel speichern (6 Plätze), Laden, Online,
+    Einstellungen, Hauptmenü (verlässt die Lobby, speichert), Beenden. Online läuft der Netztakt in der Pause weiter.
+  - **Online-Modus** auf der bestehenden Technik (eigener WebSocket-Server, sonst Peer-to-Peer): Verbindungsstatus mit
+    Leuchte (nicht verbunden, verbindet, verbunden mit Server bzw. P2P, Fehler, online), Antwortzeit, Spieler online,
+    Sitzungsliste mit Belegung, Schnell beitreten, Code, eigene/private Lobby, Server-Adresse. Fehler werden erklärt
+    (Server antwortet nicht, Zeitüberschreitung/schlafender Free-Server, PeerJS nicht erreichbar, Gastgeber weg, andere
+    Spielversion, abgelehnt) und das technische Original steht darunter. Keine vorgetäuschten Funktionen: alles läuft
+    über `NetClient.listRooms/connect`.
+  - **Einstellungen:** Grafik (Stufe voll/mobil/leicht mit Neuladen, Nachbearbeitung, Bewegungsunschärfe, dynamische
+    Auflösung, Systeminfo), Anzeige (Fenster/Vollbild, Renderauflösung 50–100 %, Sichtfeld, Tastenhinweise), Audio (4
+    Regler, stumm im Hintergrund), Steuerung (Mausempfindlichkeit, Y umkehren, 19 Tasten änderbar mit Tausch bei
+    Doppelbelegung), Allgemein (Kamerafahrt an/aus, Tipps, Ort merken, alles zurücksetzen). Martinshorn und
+    Stimmengewirr laufen jetzt über einen eigenen Umgebungs-Regler.
+  - **Spielstände:** aktiver Stand bleibt `gta-coburg-v1` (alte Spielstände laufen weiter), dazu `pos` (Ort für
+    „Weiterspielen“, alle 20 s draußen ohne Fahndung, nicht im Rennen, nicht im Helikopter). Laden setzt den Stand und
+    lädt die Seite neu (`sessionStorage` `gta-coburg-autoplay`), damit Garage, Wohnungen und Waffen sauber aufgebaut
+    werden; der Ladebildschirm bleibt dabei stehen und das Spiel startet direkt.
+  - **Ladebildschirm:** 7 Standbilder aus dem Spiel (`bench/menu-shots.js` nimmt sie in 1600 × 900 auf), langsame
+    Kamerabewegung (4 Varianten), Überblendung, Ortsname, 15 Tipps, Goldbalken mit Prozent nur bei echtem Wert, sonst
+    Lauflicht. Fehleranzeige wie bisher mit „Neu laden“/„Leichte Grafik“.
+  - **Responsiv:** Handy hochkant und quer (Fenster als Vollbild mit Zurück-Knopf, kompakte Liste), Touch tippt
+    Vollbild an, `prefers-reduced-motion` schaltet Bewegungen ab.
+  - ✅ **Getestet** (Browser, 1280 × 720, 844 × 390, 375 × 812): Ladebildschirm mit Bildern und echtem Fortschritt;
+    Hauptmenü mit allen 7 Szenen (Bilder geprüft); Neues Spiel ohne Spielstand → Ladeschritt → Spiel mit HUD;
+    Pausenmenü mit `P`; Einstellungen alle Reiter, Tastentausch (`E`→`X`, danach `F`→`X` tauscht `E` auf `F`),
+    Nachbearbeitung setzen; Online gegen den lokalen Server: Verbindung, Sitzungsliste (2 Lobbys), Beitreten aus der
+    Pause („Coburg Altstadt“, zurück ins Spiel), falsche Server-Adresse → verständliche Meldung, zurück auf automatisch;
+    Pause → Hauptmenü verlässt die Lobby; Weiterspielen setzt die Figur an die gemerkte Stelle; Platz speichern und
+    laden mit Neuladen (Geld übernommen, Sicherung angelegt); Beenden hält das Zeichnen an (0 Bilder), Zurück geht;
+    Bildzeit im Menü 16,7 ms (Vsync, Stufe Hoch). Keine Skriptfehler in der Konsole.
+  - ⚠️ **Grenzen:** „Beenden“ kann einen Browser-Tab nicht schließen (Browser verbieten das; nur als installierte App
+    oder per Skript geöffnetes Fenster) – das Spiel speichert, hält die Grafik an und sagt das. Peer-to-Peer wurde nur
+    über die vorhandene Technik angebunden, nicht live gegen den öffentlichen PeerJS-Dienst getestet. Laden und Neues
+    Spiel laden die Seite neu (bei warmem Browser-Cache wenige Sekunden). Das Menü braucht die Welt: es erscheint erst
+    nach dem Weltaufbau. Spielstände nur im Browser (Export/Import für andere Geräte). Schriften kommen von Google Fonts
+    (ohne Internet: Ersatzschriften). Gamepad-Steuerung im Menü fehlt noch.
 
 - ✅ v3.20.0 (14.11.2026, Branch `urban/lebendige-stadt`, Commits `c83fd4d`..): **Update „Lebendige Stadt“.** Ziel: der harte
   Übergang zwischen scharfen 3D-Häusern/Straßen und dem unscharfen Luftbild am Boden, ohne das Luftbild zu schärfen.
@@ -1512,6 +1568,16 @@ Rohdaten. Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Gel
   Jeder Download wird vorher mit Datei, Quelle und Größe zur Freigabe vorgelegt.
 - Bewegungsunschärfe (G9): dezent, in den Einstellungen abschaltbar.
 - Ziel: am Ende ein deutlich sichtbarer Fortschritt; Vorher/Nachher-Bilder aus G0 belegen ihn.
+
+### 7.5 Nächste Schritte nach dem Hauptmenü (v3.21.0)
+
+- [ ] Vercel-Deployment von v3.21.0 im Browser und auf dem Handy prüfen (Ladebildschirm, Menü, P2P-Online).
+- [ ] Gamepad im Menü und im Spiel (Gamepad-API), Belegung im Einstellungsmenü.
+- [ ] Menümusik als echtes Stück (Lizenz klären) statt erzeugter Klangfläche; Lautstärke-Vorschau beim Schieben.
+- [ ] Mehr Menü-Szenen (Hofgarten, Rosengarten, Schloss Rosenau, Fahrt mit einem Auto aus dem Verkehr), Szenen
+  nach Tageszeit des Spielers wählen.
+- [ ] Spielstände in der Cloud (optional, mit Konto) und Vorschaubild je Speicherplatz.
+- [ ] Pausenmenü: Karte und Statistik (gefahrene km, Fahndungen, Rennen) als eigene Reiter.
 
 ### 7.4 Nächste Schritte nach „Lebendige Stadt“ (v3.20.0)
 

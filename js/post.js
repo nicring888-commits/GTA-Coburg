@@ -142,8 +142,11 @@ class PostFX {
   }
 
   // Qualitätsstufe wechseln (Taste O); gibt den Namen zurück
-  cycle() {
-    this.level = POST_ORDER[(POST_ORDER.indexOf(this.level) + 1) % POST_ORDER.length];
+  cycle() { return this.setLevel(POST_ORDER[(POST_ORDER.indexOf(this.level) + 1) % POST_ORDER.length]); }
+  // Stufe direkt setzen (Einstellungsmenü, seit v3.21.0)
+  setLevel(level) {
+    if (!POST_QUALITY[level]) return this.q.name;
+    this.level = level;
     try { localStorage.setItem('gta-coburg-quality', this.level); } catch (e) { /* ohne Speicher */ }
     this.scale = 1; this.cool = 3;
     this.apply();
@@ -152,7 +155,9 @@ class PostFX {
 
   apply() {
     const r = this.renderer;
-    r.setPixelRatio(Math.min(devicePixelRatio || 1, this.q.ratio, (window.QUALITY && window.QUALITY.pixelRatio) || Infinity));
+    // Renderauflösung aus den Einstellungen (Anzeige → Renderauflösung, seit v3.21.0) als Anteil
+    const res = window.Settings ? window.Settings.get('display', 'res') : 1;
+    r.setPixelRatio(Math.min(devicePixelRatio || 1, this.q.ratio, (window.QUALITY && window.QUALITY.pixelRatio) || Infinity) * (res > 0.2 && res <= 1 ? res : 1));
     r.setSize(innerWidth, innerHeight);
     // ohne Nachbearbeitung macht der Renderer Tonwertkurve und Farbraum selbst
     r.toneMapping = this.enabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
@@ -598,6 +603,8 @@ class PostFX {
   // Bildzeit messen und Auflösung anpassen (bei Ruckeln kleiner, bei Luft wieder größer)
   adapt(dtMs) {
     if (!this.enabled) return;
+    // abschaltbar (Einstellungen → Grafik → Dynamische Auflösung)
+    if (window.Settings && !window.Settings.get('display', 'adaptive')) { if (this.scale !== 1) this.scale = 1; return; }
     this.ft += (Math.min(dtMs, 100) - this.ft) * 0.08;
     this.cool -= dtMs / 1000;
     if (this.cool > 0) return;

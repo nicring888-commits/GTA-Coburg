@@ -34,6 +34,7 @@
       <button data-key="KeyQ" id="t-wpn">⇄<small>Waffe</small></button>
     </div>
     <div id="t-top">
+      <button data-key="KeyP" id="t-pause" aria-label="Pause">❚❚</button>
       <button data-key="KeyM">🗺</button>
       <button data-key="KeyN">☾</button>
       <button id="t-help">?</button>
@@ -122,8 +123,9 @@
       if (pinch) g.cam.dist = Math.min(40, Math.max(2.2, g.cam.dist * pinch / d));
       pinch = d;
     } else {
-      g.cam.yaw -= dx * 0.0055;
-      g.cam.pitch = Math.min(1.25, Math.max(-0.35, g.cam.pitch + dy * 0.004));
+      const C = window.Settings ? Settings.get('controls') : { sens: 1, invertY: false };
+      g.cam.yaw -= dx * 0.0055 * C.sens;
+      g.cam.pitch = Math.min(1.25, Math.max(-0.35, g.cam.pitch + dy * 0.004 * C.sens * (C.invertY ? -1 : 1)));
       g.cam.lastMouse = performance.now() / 1000;
     }
   });
@@ -143,8 +145,8 @@
   // ---------- Sichtbarkeit / Modus ----------
   // Vollbild braucht eine Nutzergeste: beim Tippen auf „Allein spielen“ bzw. „Online spielen“
   const fullscreen = () => { if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); };
-  $('start-btn').addEventListener('click', fullscreen);
-  if ($('mp-btn')) $('mp-btn').addEventListener('click', fullscreen);
+  // seit v3.21.0 fordert das Hauptmenü (js/mainmenu.js) das Vollbild beim ersten Tippen an
+  void fullscreen;
   const hidden = id => { const el = $(id); return !el || el.classList.contains('hidden'); };
   const tick = () => {
     requestAnimationFrame(tick);

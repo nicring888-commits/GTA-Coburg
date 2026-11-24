@@ -57,9 +57,13 @@
   // ---------- Anzeige ----------
   const SCRIPT_SHARE = 0.25;    // Anteil des Balkens für das Herunterladen der Skripte
   let lastChange = Date.now(), finished = false, failed = false, warned = false, building = false;
+  // Ladebildschirm (js/loadscreen.js): echter Anteil oder – solange es keinen gibt (three.js lädt) – unbestimmt
   const setText = (text, f) => {
-    $('load-text').textContent = text;
-    if (f != null) $('load-bar').style.width = Math.round(Math.min(1, f) * 100) + '%';
+    if (window.LoadScreen) window.LoadScreen.set(text, f == null || f < 0.02 ? null : f);
+    else {
+      $('load-text').textContent = text;
+      if (f != null) $('load-bar').style.width = Math.round(Math.min(1, f) * 100) + '%';
+    }
     lastChange = Date.now();
     if (warned && !failed) { warned = false; $('load-detail').textContent = note(); $('load-actions').classList.add('hidden'); }
   };
@@ -178,9 +182,9 @@
     { src: 'data/busstops.js', what: 'Bushaltestellen' },
     Q.hd && { src: 'data/region/ortho-hd.js', what: 'scharfe Luftbilder' },
   ].filter(Boolean);
-  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'urbanground', 'houses', 'archetypes', 'tile-worker', 'signals', 'region',
+  const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['settings', 'util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'urbanground', 'houses', 'archetypes', 'tile-worker', 'signals', 'region',
     'vehicle', 'parking', 'carlights', 'lightcarpet', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'bus', 'heli', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
-    'property', 'venues', 'net-p2p', 'net', 'tsl-materials', 'tsl-facade', 'tsl-post', 'gfx-webgpu'].concat(/[?&]bench\b/.test(location.search) ? ['bench'] : [], ['game', 'touch']).map(n => `js/${n}.js`));
+    'property', 'venues', 'net-p2p', 'net', 'tsl-materials', 'tsl-facade', 'tsl-post', 'gfx-webgpu', 'mainmenu'].concat(/[?&]bench\b/.test(location.search) ? ['bench'] : [], ['game', 'touch']).map(n => `js/${n}.js`));
 
   const TIMEOUT = 90000;  // ohne jeden Fortschritt; große Dateien bei langsamer Mobilverbindung
   function loadScript(src) {
