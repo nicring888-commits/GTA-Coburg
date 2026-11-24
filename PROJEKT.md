@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.20.0 „Lebendige Stadt“ (auf dem Branch `urban/lebendige-stadt`, noch nicht auf `main`; live auf https://gta-coburg.vercel.app ist v3.19.2) · **Letzte Aktualisierung:** 14.11.2026
+**Version:** 3.20.0 „Lebendige Stadt“ (seit 24.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -1515,7 +1515,7 @@ Rohdaten. Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Gel
 
 ### 7.4 Nächste Schritte nach „Lebendige Stadt“ (v3.20.0)
 
-- [ ] Branch `urban/lebendige-stadt` durchsehen und auf `main` übernehmen (löst das Vercel-Deployment aus) – nur nach
+- [x] Branch `urban/lebendige-stadt` auf `main` übernommen und gepusht (24.11.2026); Vercel-Deployment prüfen.
   ausdrücklicher Freigabe.
 - [ ] Stadtboden für WebGPU (TSL-Zwilling des Atlas-Materials) und eine billige Fassung für „mobil“.
 - [ ] Eingänge an echte Haustüren (OSM `entrance=*`, Hausnummern `addr:*`), Wege mit Knick um Hindernisse.
