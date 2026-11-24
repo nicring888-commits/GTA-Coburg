@@ -149,7 +149,7 @@
   let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
   let paused = false;      // Pausenmenü offen
   let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
-  const VERSION = '3.22.0';
+  const VERSION = '3.23.0';
   const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
@@ -231,7 +231,7 @@
       scene, world, ui, nav, audio, save, persist, addMoney, parkCarNear, parked, cam, places, property, props, atmo, spawn, camera, keys,
       get net() { return net; },
       player: () => player, car: () => car, mode: () => mode, stars: () => police.stars,
-      enterCar, exitCar, lockPointer, landmarks: () => ui.landmarks,
+      enterCar, exitCar, lockPointer, landmarks: () => ui.landmarks, trafficCars: () => traffic.cars,
       over: () => !!over, busy: () => !!(races.active || property.inside || ride || property.menuOpen),
       menuOpen: () => !!(menu && menu.open) || paused, playing: () => started,
     });
@@ -640,7 +640,7 @@
     const list = traffic.cars.concat(parked, wrecks, net.remoteCars);
     return mode === 'drive' ? list.filter(c => c !== car) : list;
   }
-  function allCars() { return traffic.cars.concat(parked, wrecks, police.cars(), races.cars(), net.remoteCars); }
+  function allCars() { return traffic.cars.concat(parked, wrecks, police.cars(), races.cars(), net.remoteCars, story ? story.driven : []); }
 
   // Autos, in die der Spieler einsteigen kann
   function enterable() {
@@ -1437,7 +1437,7 @@
         peds.cap = world.inCoreRect(px, pz) ? Math.round(PEDS.max * Math.max(0.3, day)) : peds.capacity(px, pz, day);
       }
     }
-    const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars(), net.remoteCars, net.walkers);
+    const obstacles = (mode === 'drive' ? [car] : [{ x: player.x, z: player.z }]).concat(police.cars(), races.cars(), net.remoteCars, net.walkers, story ? story.driven : []);
     traffic.update(dt, px, pz, buses ? obstacles.concat(buses.obstacles()) : obstacles);
     if (buses) {
       buses.update(dt, px, pz, obstacles);

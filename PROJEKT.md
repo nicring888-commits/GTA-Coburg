@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.22.0 „Story-Modus, Kapitel 1“ (24.11.2026, Branch `story/zurueck-in-der-heimat`, noch nicht auf `main`; live auf https://gta-coburg.vercel.app ist v3.21.0) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.23.0 „Story-Modus, Kapitel 2“ (24.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live auf https://gta-coburg.vercel.app ist v3.22.0 mit Kapitel 1) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -198,6 +198,7 @@ und müssen dort bleiben.
 | `js/story-dialogue.js` | Story-Oberfläche (seit v3.22.0): `STORY_CAST` (Figuren mit Name, Farbe, 3D-Aussehen, Porträt), `Portrait` (gezeichnete Porträts mit Blinzeln, Mundbewegung beim Sprechen, 9 Stimmungen), `DialogueManager` (Szenen mit Schreibmaschine, Antworten, Bedingungen, Wirkungen; Untertitel im Spiel; automatisches Weiterblättern und Textgeschwindigkeit aus den Einstellungen), `StoryHUD` (Missionsziel, Zeit, Balken, Handy mit SMS/Anruf, Titelkarten, Erfolg/Gescheitert, Dokumente, Beziehungs-Hinweise) |
 | `js/story-core.js` | Story-Kern (seit v3.22.0): `Story` (StoryManager + MissionManager: Start/Fortsetzen/Ruhen, verfügbare Missionen, Marker betreten, Erfolg, Fehlschlag mit Checkpoint, Kapitelabschluss, Tagebuch `J`), `StorySave` (`save.story`), `Relationships`, `CharacterManager` (Story-Figuren aus `Player` mit Zubehör: Brille, Bart, Krawatte, Kettchen, Locken, Bob; Laufen, Blick, Gesten), `CutsceneManager` (Einstellungen und Fahrten, Kamera wird aus Wänden gezogen, Schuss/Gegenschuss), `WorldEventManager` (Marker, Ziele, Route über `RoadNav`, Voss-Plakat am Markt, Schild „Kfz Weber“, Kisten), `MissionRun` (Bausteine für Missionsskripte), `STORY_LIST` (35 Missionen), `STORY_CHAPTERS` |
 | `js/story-k1.js` | Kapitel 1 „Zurück in Coburg“, Missionen 1–5 (seit v3.22.0); Handlung aller Kapitel in `STORY.md` |
+| `js/story-k2.js` | Kapitel 2 „Neue Möglichkeiten“, Missionen 6–10 (seit v3.23.0) |
 | `css/story.css` | Kinobalken, Dialogfenster, Untertitel, Missions-HUD, Handy, Titelkarten, Ergebnis, Dokument, Tagebuch (seit v3.22.0) |
 | `js/heli.js` | Helikopter (seit v3.20.0): `Helicopter` (prozedurales Modell, Flugmodell `update`, Boden/Dach `floorAt`, Gebäude `blocked`, Rotor mit unscharfer Scheibe in `sync`), `HeliPads` (Landeplätze `HELIPADS`, Platz suchen und bauen ab 900 m, bereitstehende Hubschrauber, `take`/`park`/`remove`, `mapPlaces`, `worldWithPads`); in `game.js` Modus `fly` (`enterHeli`, `exitHeli`, Kamera, Hinweise); `?heli=0` |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
@@ -317,7 +318,8 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🟡 v3.22.0 (24.11.2026, Branch `story/zurueck-in-der-heimat`, nicht gepusht): **Story-Modus „Zurück in der Heimat“, Phasen 1–3.**
+- 🟡 v3.23.0 (24.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 2 „Neue Möglichkeiten“ (Missionen 6–10)**, siehe 8.6.
+- ✅ v3.22.0 (24.11.2026, `main`, gepusht): **Story-Modus „Zurück in der Heimat“, Phasen 1–3** (Kapitel 1).
   Details, Technik, Tests und offene Aufgaben in Abschnitt 8, Handlung in `STORY.md`.
 
 - ✅ v3.21.0 (24.11.2026, `main`): **Hauptmenü, Ladebildschirm, Online-Modus, Einstellungen.**
@@ -1439,11 +1441,14 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ### 7.6 Nächste Schritte Story-Modus (nach v3.22.0)
 
-- [ ] Branch `story/zurueck-in-der-heimat` auf `main` übernehmen und pushen (nur nach Freigabe; Vercel veröffentlicht dann).
+- [x] v3.22.0 (Kapitel 1) auf `main` übernommen und gepusht (24.11.2026).
+- [ ] v3.23.0 (Kapitel 2) auf `main` übernehmen und pushen (nach Freigabe).
+- [x] Kapitel 2 (Missionen 6–10) umgesetzt (v3.23.0).
 - [ ] Kapitel 1 im echten Spiel ohne Abkürzungen durchspielen (Fahrzeiten und Zeitlimits feinjustieren; Treffpunkte bei
   allen Grafikstufen ansehen; Handy/Touch: Dialog antippen).
-- [ ] Phase 4: Missionen 6–25 nach `STORY.md` (Kapitel 2–5), neue Bausteine: Verfolgen eines KI-Wagens (`AutoDriver`),
-  Beschatten (Abstand halten), Schleichen (Sichtkegel), Fotografieren, Wahl zwischen zwei Markern.
+- [ ] Phase 4 weiter: Missionen 11–25 (Kapitel 3–5). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
+  Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
+  Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
 - [ ] Phase 5: Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
 - [ ] Nebenmissionen (`STORY.md` 6): Kfz-Weber-Aufträge, Taxi, Bratwurst-Lieferdienst, Voss-Plakate sammeln.
 - [ ] Polish: Lippen-/Kopfbewegung der 3D-Figuren, eigene Innenräume (Voss-Villa, Redaktion), Story-Musik.
@@ -1733,3 +1738,27 @@ Belohnungen: € 50 / € 150 / Wohnung Lossaustraße (gemietet) / € 300 + €
 ### 8.5 Offen
 
 Siehe 7.6. Kapitel 2–7 sind in `STORY.md` ausgearbeitet, im Tagebuch als „in Entwicklung“ markiert und noch nicht spielbar.
+
+### 8.6 Phase 4, Teil 1 – Kapitel 2 (v3.23.0)
+
+| # | Mission | Orte | Spielablauf | Entscheidung |
+|---|---|---|---|---|
+| 6 | Neue Wege | Lossaustraße → Albertsplatz → Ketschengasse → Bahnhof | Max fährt voraus (KI), Leon folgt; Gül (Taxi), Rocco (Hehler), Max’ Schließfach | nachhaken / gut sein lassen |
+| 7 | Gute Geschäfte | Villa → Glockenberg, Autohaus Süd, Albertsplatz → Speditionshof Kessler | 3 Wagen je 3:20 abliefern, Dragan, Lohn nach Schäden | – |
+| 8 | Auf vier Rädern | Kfz Weber → Autohaus Süd → Autohändler → Kfz Weber | Teile holen, Probefahrt mit Medaille | – (Dienstwagen in die Garage) |
+| 9 | Unter Geschäftsleuten | Landestheater, abends | 2 Gespräche belauschen (Abstand, nicht rennen, Verdacht), Max’ Foto | ehrlich / ausweichend / konfrontieren |
+| 10 | Eine offene Rechnung | Ketschendorfer Straße → Speditionshof | Bäcker Hofmann, Dragan beschatten (Verdachtsbalken), Wagen durchsuchen, Liste mit „Autohaus Berger – Brand 2021“ | verschonen (€ 800) / einschüchtern |
+
+**Neu im Kern:** `MissionRun.driven` (Story-Auto außerhalb von `parked`, zählt in `allCars` und als Verkehrshindernis),
+`autoDrive` (Route über `RoadNav`, `AutoDriver`, wartet mit `lead` auf den Spieler; Festfahr-Erkennung über die echte
+Bewegung, nach 8 s ohne Fortschritt entlang der Route ein Stück weiter auf die Route gesetzt – nötig bei Stau mit dem
+KI-Verkehr), `course` (Prüfpunkte mit Zeit), `giveCar` (Auto in die Garage). Neue Figuren: Gül, Rocco, Dragan, Brandt,
+Hellmuth, Hofmann. Behaltene Missionsautos werden nach dem Missionsende zu normalen Autos.
+
+**Tests (24.11.2026, Vorschau im Hintergrund, Spielzeit per `game.simulate`):** Missionen 6–10 komplett mit allen
+Etappen, Dialogen, Entscheidungen (beide Wege bei M10), Belohnungen, Garage und Kapitelabschluss (Kapitel 3 frei);
+Max’ Fahrt über drei Etappen ohne Hängenbleiben (nach dem Einbau der Festfahr-Erkennung), Dragans Fahrt zum Hof
+selbstständig (ein Versetzen in 150 s); M10 „Ab Checkpoint wiederholen“ nach Fehlschlag. Gefunden und behoben: Max’
+Auto blieb am Bordstein hängen; Dragans SUV verkeilte sich mit dem Verkehr. Keine Konsolenfehler.
+Noch offen: Fahrzeiten im echten Spiel mit Tastatur prüfen (Zeitlimit M7, Medaillenzeiten M8), sichtbares Versetzen
+des Story-Autos bei Stau eventuell nur außer Sicht.

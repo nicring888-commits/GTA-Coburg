@@ -646,6 +646,97 @@ class MissionRun {
     G.cam.init = false;
     if (G.net && G.net.teleported) G.net.teleported();
   }
+  // Auto, das die Mission selbst fährt (Max fährt voraus, Dragan flieht); nicht in parked, damit das Spiel es nicht anhält
+  driven(kind, color, x, z, heading) {
+    const G = this.G;
+    let c;
+    if (heading === undefined || heading === null) {
+      c = G.parkCarNear(x, z, color, kind);
+      if (c) { const i = G.parked.indexOf(c); if (i >= 0) G.parked.splice(i, 1); }
+    } else { c = new Vehicle(G.scene, color, kind); c.place(x, z, heading, G.world); }
+    if (!c) return null;
+    c.story = this.def.id; c.sleeping = false; c.storyDriven = true;
+    this.S.driven.push(c); this.cars.push(c);
+    return c;
+  }
+  // Auto c fährt über das Straßennetz zu goal. o: { speed (m/s), lead (wartet auf den Spieler), corner }
+  // Rückgabe: Steuerung { done, gap, hold, stop(), arrive() }
+  autoDrive(c, goal, o = {}) {
+    const G = this.G, nav = G.nav;
+    if (c._ctl) c._ctl.stopped = true;
+    const loc = nav.locate(goal.x, goal.z, 300);
+    let raw = loc ? nav.route(nav.costsFrom(loc, 4000), c.x, c.z) : [];
+    if (raw.length < 4) raw = [c.x, c.z, goal.x, goal.z];
+    const path = resamplePath(raw, 4);
+    const drv = new AutoDriver(c, { maxSpeed: o.speed || 15, cornerFactor: o.corner || 1, world: G.world });
+    drv.setPath(path, true);
+    const speed = o.speed || 15;
+    const ctl = c._ctl = { c, drv, path, done: false, stopped: false, hold: false, gap: 0, goal };
+    ctl.stop = () => { ctl.stopped = true; };
+    ctl.arrive = () => this.wait(() => ctl.done);
+    this.every(dt => {
+      if (ctl.stopped || c.disposed || this.dead) return true;
+      const p = this.pos;
+      ctl.gap = Math.hypot(p.x - c.x, p.z - c.z);
+      let cap = Infinity;
+      if (o.lead) cap = ctl.gap > 120 ? 0 : ctl.gap > 70 ? speed * 0.45 : ctl.gap > 45 ? speed * 0.75 : Infinity;
+      const near = Math.hypot(c.x - goal.x, c.z - goal.z) < 9;
+      const stopNow = ctl.hold || near || drv.done || c.wrecked || c.burning;
+      const others = G.trafficCars().concat(G.car() ? [G.car()] : []);
+      const input = stopNow ? { throttle: 0, steer: 0, handbrake: true } : drv.steer(dt, null, cap, others);
+      // festgefahren (Räder drehen, Auto bewegt sich nicht): zurücksetzen, beim dritten Mal auf die Route versetzen
+      ctl.chk = (ctl.chk || 0) + dt;
+      if (ctl.chk > 1.5) {
+        const moved = ctl.px === undefined ? 9 : Math.hypot(c.x - ctl.px, c.z - ctl.pz);
+        ctl.px = c.x; ctl.pz = c.z; ctl.chk = 0;
+        if (!stopNow && cap > 0 && moved < 0.6) {
+          ctl.stuck = (ctl.stuck || 0) + 1;
+          if (ctl.stuck >= 3) {
+            const k = Math.min(path.length / 2 - 2, drv.idx + 4), x = path[k * 2], z = path[k * 2 + 1];
+            c.place(x, z, Math.atan2(path[k * 2 + 2] - x, path[k * 2 + 3] - z), G.world); c.vx = c.vz = 0; ctl.stuck = 0;
+          } else drv.reverse = 0.9;
+        } else if (moved > 3) ctl.stuck = 0;
+      }
+      // kein Fortschritt entlang der Route (z. B. Stau mit dem KI-Verkehr): nach 8 s ein Stück weiter auf die Route setzen
+      if (!stopNow && cap > 0) {
+        if (drv.idx > (ctl.bestIdx || 0)) { ctl.bestIdx = drv.idx; ctl.noProg = 0; }
+        else if ((ctl.noProg = (ctl.noProg || 0) + dt) > 8) {
+          const k = Math.min(path.length / 2 - 2, drv.idx + 8), x = path[k * 2], z = path[k * 2 + 1];
+          c.place(x, z, Math.atan2(path[k * 2 + 2] - x, path[k * 2 + 3] - z), G.world); c.vx = c.vz = 0;
+          drv.idx = k; ctl.bestIdx = k; ctl.noProg = 0; drv.reverse = 0;
+        }
+      } else ctl.noProg = 0;
+      c.update(dt, input, G.world);
+      if (G.car() && G.car() !== c) collideCars(c, G.car());
+      for (const t of G.trafficCars()) if (Math.abs(t.x - c.x) < 7 && Math.abs(t.z - c.z) < 7) collideCars(c, t);
+      c.updateGround(G.world, dt, false);
+      c.sync();
+      if ((near || drv.done) && Math.abs(c.speed) < 1.5) ctl.done = true;
+      return false;
+    });
+    return ctl;
+  }
+  // Prüfpunkt-Strecke im Auto: Punkte nacheinander, liefert die Zeit in Sekunden
+  async course(points, o = {}) {
+    const t0 = this.t;
+    for (let i = 0; i < points.length; i++) {
+      const last = i === points.length - 1;
+      await this.goto(points[i], { r: o.r || 12, car: o.car || true, name: (o.name || 'Prüfpunkt') + ' ' + (i + 1) + '/' + points.length, tall: true, color: last ? '#ffffff' : '#ffd23a',
+        text: (o.text || 'Fahr durch die <b>Prüfpunkte</b>') + ' (' + i + '/' + points.length + ')' });
+      if (this.G.audio.beep) this.G.audio.beep(last ? 1040 : 880, 0.12);
+    }
+    return this.t - t0;
+  }
+  // Auto in die Garage des Spielers (Belohnung); liefert den Garagen-Eintrag
+  giveCar(kind, color, name) {
+    const G = this.G, s = G.save;
+    s.carSeq = s.carSeq || s.garage.length + 1;
+    if (s.garage.length >= 8) return null;
+    const rec = { id: 'c' + (s.carSeq++), kind, color, health: 100, bought: 0, story: name || '' };
+    s.garage.push(rec);
+    G.persist();
+    return rec;
+  }
   // Spieler direkt in ein Auto setzen (Wiederholen ab Checkpoint)
   seat(c) { const G = this.G; if (G.mode() === 'drive' && G.car() === c) return; if (G.mode() === 'drive') G.exitCar(); G.enterCar(c); G.cam.yaw = c.heading; G.cam.init = false; }
 
@@ -663,7 +754,16 @@ class MissionRun {
     if (S.dialog.busy) S.dialog.finish(true);
     S.cut.clear();
     this.interactT = null;
+    // selbst fahrende Story-Autos verschwinden immer
+    for (const c of this.cars) if (c.storyDriven) {
+      const k = S.driven.indexOf(c); if (k >= 0) S.driven.splice(k, 1);
+      if (c === G.car() && G.mode() === 'drive') G.exitCar();
+      if (c._ctl) c._ctl.stopped = true;
+      c.dispose(G.scene);
+    }
+    if (keepCars) for (const c of this.cars) if (!c.storyDriven) c.story = null;   // bleiben als normale Autos stehen
     if (!keepCars) for (const c of this.cars) {
+      if (c.storyDriven) continue;
       if (c === G.car() && G.mode() === 'drive') G.exitCar();   // gescheitert/abgebrochen: aussteigen, Missionsauto verschwindet
       const i = G.parked.indexOf(c);
       if (i >= 0 && !c.ownedId) { G.parked.splice(i, 1); c.dispose(G.scene); }
@@ -690,6 +790,7 @@ class Story {
     this.world = new WorldEventManager(this);
     this.pendingFail = null;
     this.startCool = 0;
+    this.driven = [];      // Autos, die Missionen selbst fahren (für Kollision und Verkehr in game.js)
     this.dialog.blocked = () => !this.active || (this.G.menuOpen && this.G.menuOpen());
     addEventListener('keydown', e => this.key(e), true);
   }
@@ -732,6 +833,8 @@ class Story {
 
   // ---------- Orte ----------
   lm(name) { const l = this.G.landmarks().find(l => l.name === name); return l ? { x: l.x, z: l.z } : null; }
+  carShop(name) { return (typeof CAR_SHOPS !== 'undefined' ? CAR_SHOPS : []).find(c => c.name === name) || null; }
+  dealer(i = 1) { const d = this.G.places.list.filter(p => p.type === 'dealer'); return d[i] || d[0] || null; }
   workshop() { const p = this.G.places.list.find(p => p.name === 'Lackiererei Nord'); return p ? { x: p.x, z: p.z } : null; }
   home(id) { return this.G.property.homes.find(h => h.id === id) || null; }
   venue(id) { return (this.G.property.venues || []).find(v => v.id === id) || null; }

@@ -2,7 +2,8 @@
 
 > Grundlage für alle Story-Missionen. Was hier steht, gilt für Dialoge, Orte, Entscheidungen und die drei Enden.
 > Umsetzungsstand und Technik: PROJEKT.md, Abschnitt 8. Die Missionen 1–5 sind spielbar (`js/story-k1.js`),
-> alle weiteren sind hier ausgearbeitet und werden in Phase 4/5 umgesetzt.
+> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0; alle weiteren sind hier ausgearbeitet und werden in
+> Phase 4/5 umgesetzt.
 
 ## 1. Prämisse
 
@@ -113,22 +114,30 @@ Format: **Ort** · Ablauf · Erfolg · Belohnung · Übergang. Orte sind reale O
    besondere Aufgaben, € 5.000 im Monat“. Kapitel-Abschluss mit Rückblick. · Erfolg: Ankunft mit Autozustand ≥ 50 % ·
    € 1.000 Handgeld · **KAPITEL 1 ABGESCHLOSSEN** – „Ein Angebot, das sein Leben verändern könnte.“
 
-### Kapitel 2 – Neue Möglichkeiten
+### Kapitel 2 – Neue Möglichkeiten (spielbar seit v3.23.0)
 
-6. **Neue Wege** · Max zeigt Leon „sein“ Coburg: Max fährt voraus (KI-Fahrer), Leon folgt ohne den Anschluss zu
-   verlieren – Stationen: Albertsplatz (Max' „Büro“ = Café), Ketschengasse (Hehler), Bahnhof (Schließfach). Max stellt
-   Leute vor, die später wiederkommen (Hehler Rocco, Taxifahrerin Gül). Erfolg: Folgen ohne > 150 m Abstand.
-7. **Gute Geschäfte** · Erster echter Voss-Auftrag: drei Luxuswagen von verschiedenen Orten (Rödental, Neustadt,
-   Ahorn) zum Speditionshof Kessler bringen, je Wagen ein Zeitfenster. Erfolg: alle drei geliefert.
-8. **Auf vier Rädern** · Voss stellt Leon einen Dienstwagen (Sportwagen) – Tobi baut ihn um. Werkstatt-Minispiel
-   (Teile holen: Reifen vom Autohaus Süd, Auspuff vom Händler), danach Testfahrt auf der Rodachtal-Strecke mit Tobi
-   als Beifahrer. Freischaltung: Leons Wagen in der Garage.
-9. **Unter Geschäftsleuten** · Empfang im Landestheater: Leon begleitet Voss, belauscht Gespräche (zu Personen gehen,
-   zuhören), trifft Stadtrat Brandt und Bankdirektor Hellmuth. Max soll Fotos machen – vermasselt es komisch.
-10. **Eine offene Rechnung** · Schulden eintreiben bei Bäcker Hofmann (Ketschendorf). Er kann nicht zahlen, weil
-    Voss ihm die Miete verdreifacht hat. Entscheidung: verschonen (Leon zahlt selbst) oder einschüchtern. Dragan taucht
-    auf, Verfolgungsjagd. **Kapitelabschluss:** Leon sieht in Dragans Wagen das Logo der Voss Projektentwicklung –
-    Voss ist nicht so seriös.
+6. **Neue Wege** · Lossaustraße → Albertsplatz → Ketschengasse → Bahnhof · Max fährt in seinem gelben Kleinwagen voraus
+   (KI-Fahrer, wartet bei Abstand), Leon folgt in Tobis Leihwagen. Albertsplatz: Taxifahrerin **Gül** (kannte den Vater, hat
+   eine Dashcam – Zeugin in M18). Ketschengasse: Hehler **Rocco** erwähnt **Dragan** und Max’ Schulden. Bahnhof: Max holt
+   einen dicken Umschlag aus einem Schließfach („Investoren“), zahlt ggf. die € 200 zurück. Entscheidung: nachhaken oder
+   gut sein lassen (`askedEnvelope`). Fehlschlag: Max > 220 m und 12 s aus den Augen.
+7. **Gute Geschäfte** · Villa Leopoldstraße → Glockenberg / Autohaus Coburg Süd / Albertsplatz → Speditionshof Kessler
+   (Gewerbegebiet Nord) · Lenz vergibt den Auftrag (Leon erkennt den Namen Kessler), drei Wagen (Sportwagen, Cabrio,
+   Geländewagen) je 3:20 zum Hof; **Dragan** nimmt sie ab und fährt Leon zum nächsten Wagen. Lohn € 500 je Wagen
+   abzüglich Schäden. Leon sieht Licht im Büro „J. Kessler – Geschäftsführer“.
+8. **Auf vier Rädern** · Kfz Weber → Autohaus Coburg Süd → Autohändler → Kfz Weber · Voss’ Dienstwagen hat einen
+   GPS-Sender (Tobi baut ihn aus). Mit dem Kleinbus Reifen und Auspuff holen, dann Probefahrt mit Tobi über 4 Prüfpunkte
+   (Landestheater, Ehrenburg, Albertsplatz, Werkstatt) mit Medaille (Gold < 2:30, Silber < 3:20). Belohnung: Dienstwagen
+   in der Garage, Geld und Tobi ▲ nach Medaille.
+9. **Unter Geschäftsleuten** · Vorplatz Landestheater, abends · Leon belauscht Stadtrat **Brandt** und Bankdirektor
+   **Hellmuth** (Abstimmung am Zwölften, Kredit nur mit allen Grundstücken) sowie **Voss und Lenz** („Das Wegerecht steht
+   auf den Erben Berger … jeder Mensch unterschreibt“). Mithören in 2–6 m, nicht rennen; zu nah = Verdacht, aufgeflogen.
+   Max’ Foto-Pleite. Danach Voss unter vier Augen: ehrlich / ausweichend / konfrontieren (nur wenn gehört).
+10. **Eine offene Rechnung** · Ketschendorfer Straße → Speditionshof Kessler · Bäckermeister **Hofmann** kann nicht
+    zahlen (Miete verdreifacht, Lagerbrand). Entscheidung: verschonen (€ 800 aus eigener Tasche) oder einschüchtern.
+    Dragan taucht auf, Leon beschattet ihn unauffällig (Verdachtsbalken bei < 14 m, Verlust bei > 200 m). Am Hof
+    durchsucht Leon Dragans Wagen: Liste „Projekt Itzaue – offene Objekte“ mit **Autohaus Berger – Brand 2021** und
+    „Erbe L. Berger … über Fischer einbinden“. **Kapitelabschluss:** Voss ist nicht seriös – und Max steckt mit drin.
 
 ### Kapitel 3 – Hinter den Kulissen
 

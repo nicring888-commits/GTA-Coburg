@@ -40,6 +40,25 @@ const STORY_CAST = {
   lenz: { name: 'Dr. Lenz', full: 'Dr. Katharina Lenz', color: '#e86a9a',
     look: { skin: '#f0cdb4', shirt: '#2a2a33', pants: '#2a2a33', hair: '#a8562a', bob: true },
     face: { skin: '#f0cdb4', hair: '#a8562a', style: 'bun', shirt: '#2a2a33', collar: '#f4f4f4', bg: ['#3a1c2a', '#12080d'] } },
+  // Kapitel 2
+  gul: { name: 'Gül', full: 'Gül Aydın, Taxifahrerin', color: '#f2c230',
+    look: { skin: '#d8a07a', shirt: '#efe6c4', pants: '#2a2c34', hair: '#1c1410', bob: true },
+    face: { skin: '#d8a07a', hair: '#1c1410', style: 'bun', shirt: '#efe6c4', collar: '#d4c89a', bg: ['#4a3a10', '#141006'] } },
+  rocco: { name: 'Rocco', full: 'Rocco, Ketschengasse', color: '#c97a3a',
+    look: { skin: '#d9a682', shirt: '#5a3a24', pants: '#1e1e22', hair: '#141414', slick: true, chain: true },
+    face: { skin: '#d9a682', hair: '#141414', style: 'slick', shirt: '#5a3a24', collar: '#3a2414', chain: true, bg: ['#3a2414', '#100a06'] } },
+  dragan: { name: 'Dragan', full: 'Dragan', color: '#e2463f',
+    look: { skin: '#e0b494', shirt: '#151619', pants: '#151619', hair: '#e0b494', beard: '#2a2420', bald: true },
+    face: { skin: '#e0b494', hair: null, style: 'bald', shirt: '#151619', collar: '#26282c', beard: '#2a2420', lines: true, bg: ['#3a0e0c', '#100404'] } },
+  brandt: { name: 'Brandt', full: 'Stadtrat Horst Brandt', color: '#8aa7d8',
+    look: { skin: '#e9c2a4', shirt: '#1f2a44', pants: '#1f2a44', hair: '#b8b8b8', tie: '#c8a23a', glasses: true },
+    face: { skin: '#e9c2a4', hair: '#b8b8b8', style: 'short', shirt: '#1f2a44', collar: '#f2f2f2', tie: '#c8a23a', glasses: true, lines: true, bg: ['#1c2638', '#080b12'] } },
+  hellmuth: { name: 'Hellmuth', full: 'Bankdirektor Hellmuth', color: '#7fc9a8',
+    look: { skin: '#efc8ae', shirt: '#4a4d55', pants: '#4a4d55', hair: '#f0f0f0', tie: '#2a5aa0' },
+    face: { skin: '#efc8ae', hair: '#f0f0f0', style: 'short', shirt: '#4a4d55', collar: '#f2f2f2', tie: '#2a5aa0', lines: true, bg: ['#1c3a2e', '#08120e'] } },
+  hofmann: { name: 'Hofmann', full: 'Bäckermeister Hofmann', color: '#e8d2a0',
+    look: { skin: '#eab896', shirt: '#f4f1ea', pants: '#e8e4da', hair: '#6a4a2a', cap: '#f4f1ea' },
+    face: { skin: '#eab896', hair: '#6a4a2a', style: 'short', shirt: '#f4f1ea', collar: '#dcd6c8', cap: '#f4f1ea', bg: ['#4a3a20', '#14100a'] } },
 };
 
 // ---------------------------------------------------------------------------------------------------------------
