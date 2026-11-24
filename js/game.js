@@ -145,10 +145,11 @@
   let camMode = 0;         // 0 Verfolger, 1 Motorhaube
   let over = null;         // Verhaftet/Erledigt-Sequenz
   let menu = null;         // Hauptmenü und Pausenmenü (js/mainmenu.js, seit v3.21.0)
+  let story = null;        // Story-Modus „Zurück in der Heimat“ (js/story-*.js, seit v3.22.0)
   let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
   let paused = false;      // Pausenmenü offen
   let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
-  const VERSION = '3.21.0';
+  const VERSION = '3.22.0';
   const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
@@ -225,6 +226,15 @@
     });
     // Hauptmenü (js/mainmenu.js) mit Kamerafahrt durch die Welt
     menu = new MainMenu(menuApi);
+    // Story-Modus (js/story-core.js): läuft im normalen Spiel (Neues Spiel, Weiterspielen, Spiel laden), nie online
+    if (typeof Story !== 'undefined' && !/[?&]story=0\b/.test(location.search)) story = new Story({
+      scene, world, ui, nav, audio, save, persist, addMoney, parkCarNear, parked, cam, places, property, props, atmo, spawn, camera, keys,
+      get net() { return net; },
+      player: () => player, car: () => car, mode: () => mode, stars: () => police.stars,
+      enterCar, exitCar, lockPointer, landmarks: () => ui.landmarks,
+      over: () => !!over, busy: () => !!(races.active || property.inside || ride || property.menuOpen),
+      menuOpen: () => !!(menu && menu.open) || paused, playing: () => started,
+    });
     progress('Fertig', 1);
     boot.done();
     renderer.compile(scene, camera);
@@ -425,8 +435,9 @@
     cam.init = false; introDist = cam.dist; cam.dist = 26; cam.pitch = 0.78; introT = 3.2;
     await nextFrame();
     begin();
+    if (story) story.start(o.how);
     if (L) await new Promise(r => L.hide(r, 1300));
-    if (o.how === 'new') ui.bigMessage('GTA COBURG', 2.8, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
+    if (o.how === 'new' && !story) ui.bigMessage('GTA COBURG', 2.8, '#e9b949', 'Willkommen am Bahnhof. Schnapp dir ein Auto!');
     else if (o.how === 'continue') ui.bigMessage('GTA COBURG', 2.2, '#e9b949', `Willkommen zurück · € ${Math.round(save.money).toLocaleString('de-DE')}`);
   }
   function resume() {
@@ -447,6 +458,7 @@
   }
   // Pausenmenü → Hauptmenü: speichern, Online-Lobby verlassen, Kamera-Regie wieder an
   function toMenu() {
+    if (story) story.suspend();
     persist();
     if (net.online) net.leave();
     if (ui.mapOpen) ui.closeMap();
@@ -767,8 +779,8 @@
     audio.engine(false, 0, 0);
     net.exited();
     // nicht zu viele abgestellte Autos behalten
-    while (parked.length > 8) {
-      const far = parked.reduce((a, b) => Math.hypot(b.x - player.x, b.z - player.z) > Math.hypot(a.x - player.x, a.z - player.z) ? b : a);
+    while (parked.filter(c => !c.story).length > 8) {   // Missionsautos bleiben
+      const far = parked.filter(c => !c.story).reduce((a, b) => Math.hypot(b.x - player.x, b.z - player.z) > Math.hypot(a.x - player.x, a.z - player.z) ? b : a);
       parked.splice(parked.indexOf(far), 1); far.dispose(scene);
     }
   }
@@ -899,6 +911,7 @@
     if (net.online) ui.toast('Online läuft die Uhr für alle weiter (N: Zeitraffer für die Lobby)', 2.5);
     else toggleNight();
     player.health = 100;
+    if (story) story.event('sleep');
     persist();
   }
 
@@ -1022,6 +1035,7 @@
     const fine = Math.min(save.money, 100 + 100 * police.stars);
     addMoney(-fine);
     over = { t: 0 };
+    if (story) story.onDown('busted');
     const guns = weapons.confiscate();
     ui.bigMessage('VERHAFTET', 4, '#5fa0ff', (fine ? `Strafe: € ${fine}` : 'Diesmal ohne Strafe') + (guns ? ' · Waffen beschlagnahmt' : ''));
     audio.sting(); audio.engine(false, 0, 0); audio.siren(0);
@@ -1037,6 +1051,7 @@
     if (mode === 'fly') exitHeli(true);
     if (ride) { ride = null; player.visible = true; net.endedRide(); }
     over = { t: 0 };
+    if (story) story.onDown('wasted');
     ui.bigMessage('ERLEDIGT', 4, '#e2463f', `${reason} · Krankenhaus: € ${fee}`);
     audio.sting(); audio.engine(false, 0, 0); audio.siren(0);
     $('fade').classList.remove('hidden');
@@ -1107,6 +1122,7 @@
       camera.position.fromArray(window.game.debugCam.pos); camera.lookAt(...window.game.debugCam.look); return;
     }
     if (menu && menu.director.active) { menu.director.apply(camera); return; }   // Kamerafahrt im Hauptmenü
+    if (story && story.cut.active) { story.cut.apply(camera, dt); return; }       // Story: Zwischensequenz, Dialogkamera
     // Übergang aus dem Ladebildschirm: von weit oben langsam hinter die Figur
     if (introT > 0) {
       introT -= dt;
@@ -1258,7 +1274,7 @@
     const locked = police.stars > 0 ? 'Schnellreise gesperrt: Die Polizei sucht dich!' : races.active ? 'Schnellreise gesperrt: Rennen läuft'
       : ride ? 'Schnellreise gesperrt: Du fährst mit' : null;
     const players = net.blips().map(b => ({ name: 'Spieler: ' + b.name, x: b.x, z: b.z, type: 'player', color: b.color }));
-    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), heliPads ? heliPads.mapPlaces() : [], players) };
+    return { locked, raceStarts: races.list, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), heliPads ? heliPads.mapPlaces() : [], story ? story.blips() : [], players) };
   }
 
   function step(dt) {
@@ -1281,6 +1297,10 @@
         persist();
       }
     }
+    // Story: Takt, und während Szenen keine Eingabe an Figur und Auto
+    if (story) story.update(dt);
+    const SL = !!(story && story.lockInput);
+    if (SL) for (const k in pressed) if (k !== 'KeyP') delete pressed[k];
     if (property.inside) { indoorStep(dt); return; }
     // Tasten mit einmaliger Wirkung
     if (pressed.KeyM) { ui.openMap(mode === 'drive' ? car.x : player.x, mode === 'drive' ? car.z : player.z, travel, mapExtra()); document.exitPointerLock?.(); return; }
@@ -1290,7 +1310,8 @@
     if (pressed.KeyO) ui.toast('Grafik: ' + post.cycle(), 1.6);
     if (pressed.KeyB) ui.toast('Bewegungsunschärfe ' + (post.toggleBlur() ? 'an' : 'aus'), 1.6);
     if (pressed.KeyC && (mode === 'drive' || ride)) camMode = 1 - camMode;
-    const freeze = !!(races.active && races.active.t < 0);
+    const freeze = !!(races.active && races.active.t < 0) || SL;
+    if (pressed.KeyE && story && story.useKey()) delete pressed.KeyE;   // Story-Gespräche, Kisten …
     if (pressed.KeyE && !freeze) {
       if (ride) endRide(true);
       else if (mode === 'fly') {
@@ -1382,7 +1403,7 @@
       player.x = ride.x; player.y = ride.y; player.z = ride.z; player.heading = ride.heading; player.moveSpeed = 0;
       audio.horn(false);
     } else {
-      const mv = walkInput();
+      const mv = SL ? { x: 0, z: 0, run: false, jump: false } : walkInput();
       if (weapons.aiming) mv.run = false; // beim Zielen nur gehen
       player.update(dt, mv, world, allCars());
       audio.horn(false);
@@ -1515,12 +1536,14 @@
       const pp = gunShop ? `<kbd>F</kbd> ${gunShop.name}: Waffen und Munition` : property.prompt(player.x, player.z, true);
       if (pp) prompt = prompt ? prompt + ' · ' + pp : pp;
     }
+    if (story) prompt = story.prompt(prompt);
     ui.setPrompt(prompt);
     const ri = races.mapInfo();
     const vc = mode === 'drive' ? car : ride;
     ui.drawMinimap(px, pz, vc ? vc.heading : player.heading, cam.yaw, traffic.cars, vc ? vc.speed : 0, {
       police: police.cars(), officers: police.officers.filter(o => o.state === 'run').map(o => o.fig),
-      race: ri, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), heliPads ? heliPads.mapPlaces() : []), raceStarts: races.list, wanted: police.stars > 0,
+      race: ri, places: places.list.concat(property.mapPlaces(), weapons.mapPlaces(), heliPads ? heliPads.mapPlaces() : [], story ? story.blips() : []), raceStarts: races.list, wanted: police.stars > 0,
+      route: story ? story.route : null,
       players: net.blips(),
     });
   }
@@ -1587,7 +1610,7 @@
     waterTick(dt);
     ui.updateLabels(camera);
     // Menü: keine Ortsschilder, Säulen und Marker im Bild (nur für dieses Bild ausgeblendet)
-    if (menu && menu.director.active) for (const o of (ui.labels || []).concat(typeof GAME_MARKERS !== "undefined" ? GAME_MARKERS : [])) if (o.visible) { o.visible = false; farHidden.push(o); }
+    if ((menu && menu.director.active) || (story && story.cut.active)) for (const o of (ui.labels || []).concat(typeof GAME_MARKERS !== "undefined" ? GAME_MARKERS : [])) if (o.visible) { o.visible = false; farHidden.push(o); }
     // WebGPU-Probe (?gfx=webgpu, js/gfx-webgpu.js) zeichnet statt der WebGL-Kette; ?gfx=stats misst die WebGL-Kette
     hideFar();
     if (GfxProbe.ready) GfxProbe.render(scene, camera, scene.fog && scene.fog.color, property.inside ? null : atmo);
@@ -1626,7 +1649,7 @@
   window.game = { gfx: GfxProbe, world, parked, wrecks, cam, save, get car() { return car; }, get player() { return player; }, get traffic() { return traffic; },
     get police() { return police; }, get peds() { return peds; }, get buses() { return buses; }, set buses(v) { buses = v; }, get heli() { return heli; }, get heliPads() { return heliPads; }, enterHeli, get props() { return props; }, get life() { return life; }, get races() { return races; }, get places() { return places; }, get nav() { return nav; },
     get mode() { return mode; }, get spawn() { return spawn; }, get property() { return property; }, get atmo() { return atmo; }, get net() { return net; }, get ride() { return ride; }, get weapons() { return weapons; }, camera, post, csm: CSM, sunFar, bench: typeof Bench !== 'undefined' ? Bench : null, travel, toggleNight, cycleWeather, enterCar, exitCar, explode, busted, wasted, addMoney,
-    keys, pressed, get menu() { return menu; }, menuStep, openPause,
+    keys, pressed, get menu() { return menu; }, get story() { return story; }, menuStep, openPause,
     // Simulation ohne Bildschirm (z. B. im Hintergrund-Tab): game.simulate(5) rechnet 5 Sekunden
     simulate(secs, dt = 1 / 30, draw = true) { for (let t = 0; t < secs; t += dt) { step(dt); netStep(dt); for (const k in pressed) delete pressed[k]; } if (draw) render(dt); } };
 })();

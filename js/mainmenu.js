@@ -217,6 +217,7 @@ const SaveSlots = {
     const cars = n(s.garage); if (cars) parts.push(cars + (cars === 1 ? ' Auto' : ' Autos'));
     const best = n(s.best); if (best) parts.push(best + (best === 1 ? ' Bestzeit' : ' Bestzeiten'));
     const w = s.weapons ? Object.keys(s.weapons).filter(k => k !== 'fist').length : 0; if (w) parts.push(w + (w === 1 ? ' Waffe' : ' Waffen'));
+    if (s.story && typeof StorySave !== 'undefined') { const t = StorySave.summary(s.story); if (t) parts.unshift(t); }   // Story-Fortschritt (seit v3.22.0)
     return parts.join(' · ');
   },
   slot(i) { const r = this.read(this.key(i)); return r && this.valid(r.data) ? r : null; },
@@ -327,7 +328,7 @@ class MainMenu {
       { id: 'continue', label: session ? 'Fortsetzen' : 'Weiterspielen', disabled: !live && !session,
         desc: session ? 'Zurück in die laufende Sitzung.' : live ? `Dein Spielstand: ${info}.` : 'Noch kein Spielstand vorhanden – starte ein neues Spiel.',
         act: () => session ? this.resume() : this.start('continue') },
-      { id: 'new', label: 'Neues Spiel', desc: 'Neu am Coburger Bahnhof beginnen: € 500, ein Auto steht bereit.' + (live ? ' Der bisherige Stand wird vorher gesichert.' : ''), act: () => this.newGame() },
+      { id: 'new', label: 'Neues Spiel', desc: 'Die Story „Zurück in der Heimat“ von vorn: Leon kommt nach fünf Jahren am Coburger Bahnhof an. € 500.' + (live ? ' Der bisherige Stand wird vorher gesichert.' : ''), act: () => this.newGame() },
       { id: 'online', label: 'Online-Modus', desc: 'Bis zu 16 Spieler in derselben Stadt: Lobbys, Sitzungen, eigene Server oder Peer-to-Peer.', act: () => this.openPanel('online') },
       { id: 'load', label: 'Spiel laden', desc: 'Speicherplätze, automatische Sicherung, Import und Export.', act: () => this.openPanel('load') },
       { id: 'settings', label: 'Einstellungen', desc: 'Grafik, Auflösung und Darstellung, Audio, Steuerung, Allgemeines.', act: () => this.openPanel('settings') },
@@ -463,7 +464,7 @@ class MainMenu {
   newGame() {
     const live = SaveSlots.live();
     if (!live && !this.G.session()) { this.start('new'); return; }
-    this.dialog('Neues Spiel beginnen?', `Dein bisheriger Spielstand (${live ? SaveSlots.summary(live) : 'laufende Sitzung'}) wird als „Sicherung“ unter „Spiel laden“ aufbewahrt. Danach startest du neu am Bahnhof mit € 500.`, [
+    this.dialog('Neues Spiel beginnen?', `Dein bisheriger Spielstand (${live ? SaveSlots.summary(live) : 'laufende Sitzung'}) wird als „Sicherung“ unter „Spiel laden“ aufbewahrt. Danach beginnt die Story „Zurück in der Heimat“ von vorn, am Bahnhof mit € 500.`, [
       { label: 'Abbrechen' },
       { label: 'Neues Spiel', primary: true, act: () => {
         this.G.persist();
@@ -734,6 +735,10 @@ class MainMenu {
       row('Tipps auf dem Ladebildschirm', '', toggle(g.tips, v => { S.set('general', 'tips', v); this.renderSettings(); }));
       head('Spiel');
       row('Ort für „Weiterspielen“ merken', 'Speichert alle 20 s, wo du bist (draußen, ohne Fahndung, nicht im Rennen). Aus = Start immer am Bahnhof.', toggle(g.autosave, v => { S.set('general', 'autosave', v); this.renderSettings(); }));
+      head('Story und Dialoge');
+      row('Dialoge automatisch weiterblättern', 'Aus = weiter mit Leertaste, Enter oder Klick. Esc überspringt ein Gespräch.', toggle(!!g.dlgAuto, v => { S.set('general', 'dlgAuto', v); this.renderSettings(); }));
+      row('Textgeschwindigkeit', 'Wie schnell der Dialogtext erscheint.', slider(0.5, 2, 0.1, g.dlgSpeed || 1, v => v.toFixed(1).replace('.', ',') + '×', v => S.set('general', 'dlgSpeed', v)));
+      row('Untertitel im Spiel', 'Gespräche während der Fahrt, Anrufe und Gedanken von Leon.', toggle(g.subtitles !== false, v => { S.set('general', 'subtitles', v); this.renderSettings(); }));
       head('Zurücksetzen');
       const rs = document.createElement('button'); rs.className = 'mm-btn'; rs.textContent = 'Alle Einstellungen zurücksetzen';
       rs.onclick = () => this.dialog('Alle Einstellungen zurücksetzen?', 'Audio, Steuerung, Anzeige und Allgemeines gehen auf den Standard. Spielstände bleiben unberührt.', [

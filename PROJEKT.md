@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.21.0 „Hauptmenü“ (24.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.22.0 „Story-Modus, Kapitel 1“ (24.11.2026, Branch `story/zurueck-in-der-heimat`, noch nicht auf `main`; live auf https://gta-coburg.vercel.app ist v3.21.0) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -78,6 +78,7 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Online | `T`/`Enter` Chat · `Tab` Spielerliste mit Lobby-Code, Einladungslink, „Lobby verlassen“ · `E` am Auto eines Mitspielers: mitfahren (Fahrer da) bzw. übernehmen (leer) · `N`/`K` Zeitraffer und Wetter für die ganze Lobby | |
 | Helikopter (seit v3.20.0) | `Leertaste` steigen · `Shift` sinken · `W`/`S` vor/zurück (Nase neigen) · `A`/`D` drehen · `E` aussteigen (nur gelandet, nicht auf Dächern) | |
 | Menü (seit v3.21.0) | `P` oder `Esc` (bei freier Maus) Pausenmenü: Fortsetzen, Speichern, Laden, Online, Einstellungen, Hauptmenü, Beenden · im Menü `↑`/`↓` Auswahl, `Enter` bestätigen, `Esc` zurück · Tasten lassen sich unter Einstellungen → Steuerung ändern | |
+| Story (seit v3.22.0) | `Leertaste`/`Enter`/Klick Dialog weiter · `1`–`3` bzw. `↑`/`↓` + `Enter` Antwort wählen · `Esc` Gespräch bzw. Kamerafahrt überspringen (hält an Entscheidungen an) · `E` mit Story-Figuren reden, Kisten tragen · `J` Tagebuch (Kapitel, Missionen, Beziehungen, Entscheidungen) · nach „Mission gescheitert“: `Enter` ab Checkpoint wiederholen, `Esc` abbrechen | |
 | Allgemein | `E` einsteigen, Auto klauen, Helikopter fliegen, aussteigen (bei brennendem Auto bei jedem Tempo) · `F` Rennen starten/abbrechen, Auto verkaufen, an Haustür oder Autohaus: Menü · `G` Garage · `M` Stadtplan mit Schnellreise (gesperrt bei Fahndung und im Rennen) · `N` Zeitraffer bis 22 bzw. 9 Uhr · `K` Wetter wechseln · `O` Grafikqualität (Ultra, Hoch, Mittel, Niedrig; wird gespeichert) · `B` Bewegungsunschärfe an/aus (wird gespeichert, auch auf dem Startbildschirm) · `F1` Hilfe · Maus umsehen · Mausrad Zoom | |
 
 ## 3a. Spielprinzip (seit v1.0.0)
@@ -115,7 +116,8 @@ Build-Schritt veröffentlichen (Vercel: Repository importieren, kein Build-Befeh
 | Online (seit v3.0.0) | Bis 16 Spieler je Lobby in derselben Welt. Man sieht die anderen als Figuren mit Namensschild (Farbe, Sterne), ihre Autos mit Lenkung, Neigung, Schaden, Feuer, Blaulicht und Hupe, auf Minikarte und Stadtplan als farbige Punkte (Stadtplan: „Spieler: Name“ = Schnellreise hin). Wer in ein Auto steigt, macht es für alle sichtbar; nach dem Aussteigen bleibt es stehen und andere können es nehmen (Garagenautos sind abgeschlossen, dort nur mitfahren). Bis zu 3 Mitfahrer. Autos anderer sind Hindernisse, fahren einen um und explodieren für alle. Uhrzeit und Wetter gelten für die Lobby. Geld, Wohnungen, Garage, Bestzeiten bleiben im eigenen Spielstand; Verkehr, Fußgänger, Polizei und Rennen rechnet jedes Spiel für sich |
 | Bushaltestellen und Stadtbusse (seit v3.20.0) | Echte Haltestellen aus OpenStreetMap (1.651 Halte im Gebiet, 1.006 am Straßennetz). In Spielernähe: H-Schild mit Haltestellenname, Wartefläche mit Bordstein (wo kein Gehsteig ist), Wartehäuschen mit Bank und Glas (OSM `shelter=yes` oder Busbahnhof), 0–4 wartende Fahrgäste (am Busbahnhof mehr). 30 Linien aus den OSM-Linien-Relationen, zuerst die Coburger Stadtbuslinien 1402 (Oberlauter ⇄ Wüstenahorn) und 1403 (Sändleinweg → Dörfles), dazu Linien in Neustadt (A1) und im Umland; je Linie 1–3 weiße Stadtbusse. Ablauf am Halt: Bus fährt an, hält am Schild, Türen auf, Fahrgäste steigen an der Mitteltür aus und gehen als Fußgänger weiter, Wartende gehen zur vorderen Tür und steigen ein, Türen zu, Weiterfahrt (Mindesthalt 7 s). Busse beachten Ampeln, Vorfahrt, Zebrastreifen und halten vor Hindernissen (auch vor dem Spieler); Verkehr hält hinter ihnen. Busse sind feste Hindernisse; klauen kann man sie nicht |
 | Helikopter (seit v3.20.0) | Drei Landeplätze (hellblau auf Minikarte und Stadtplan): **am Bahnhof** (freie Fläche nahe dem Start), **Klinikum Coburg**, **Verkehrslandeplatz Brandensteinsebene**. Dort steht ein Hubschrauber (D-HCOB, blau-weiß): `E` einsteigen, der Rotor läuft in ≈ 3 s hoch. Höchsttempo ≈ 180 km/h, Steigen 9 m/s. Landen auf dem Boden, Landeplätzen und Dächern (auf Dächern kein Aussteigen). Gebäude sind Hindernisse; harte Aufpralle kosten Leben (Balken wie beim Auto), bei 0 Absturz → ERLEDIGT. Mit Fahndung startet kein Hubschrauber. Abgestellte Hubschrauber bleiben stehen, am Landeplatz steht später ein neuer |
-| Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt) |
+| Speicherstand | Geld, Bestzeiten, Wohnungen (`homes`) und Garage (`garage`: Typ, Farbe, Zustand, zerstört) im Browser (`localStorage`, Schlüssel `gta-coburg-v1`; ältere Spielstände werden ergänzt). Seit v3.22.0 zusätzlich `story` (Kapitel, erledigte Missionen, Entscheidungen, Beziehungen, Statistik), siehe 8 |
+| Story-Modus (seit v3.22.0) | „Zurück in der Heimat“: **Neues Spiel** startet die Kampagne am Bahnhof, **Weiterspielen** und **Spiel laden** setzen sie fort (Story-Stand steckt im Spielstand und damit in allen Speicherplätzen). Gelbe Missionsmarker mit Schild, gelber Punkt auf Minikarte und Stadtplan; Ziele mit Säule, Punkt am Kartenrand und lila Route im Auto. Kapitel 1 (Missionen 1–5) spielbar, Kapitel 2–7 in Entwicklung. Online ruht die Story vollständig (siehe 8) |
 
 ## 4. Inhalt der Welt
 
@@ -193,6 +195,10 @@ und müssen dort bleiben.
 | `js/fx.js` | Partikel (Rauch, Feuer, Explosion mit Lichtblitz), leuchtende Säulen und Text-Schilder |
 | `js/urbanground.js` | Stadtboden (seit v3.20.0, `UrbanKit`): Streifen an Gebäuden nach Gebiet und Typ (`district`: alt, urb, res, com, pub, school, church, gar, none; Tabelle `URBAN.style`), an Straßenkanten bis zur Fahrbahn (`rayToRoad`, Raster an der Straße ausgerichtet), sonst schmal (Traufkies, Platten, Hofpflaster) mit Randstein; Rasen hinter dem Traufstreifen nur wo das Luftbild grün ist (Farbe aus dem Foto, `lawn`); Eingang (`entrance`: Podest, Weg geradeaus zur Straße, nur wenn frei); Parkplätze (`lot`: Asphalt, `stallLines` wie die geparkten Autos, `access` Zufahrt); befestigte Flächen merken (`mark`, `paved` für den Bewuchs). Ein Material mit Textur-Atlas (4 × 2 Felder: Kies, Platten, Verbundpflaster, Kleinpflaster, Asphalt, Rasen, Markierung), Belag je Ecke im Attribut `aSurf`, Höhenstaffel der Beläge; Töpfe à 500 m, gezeichnet nur bis `URBAN.far` (380 m über den Topfrand, `cull` aus `hideFar`). Nur Stufe „voll“, nicht auf `?gfx=webgpu`; `?urban=0` / `?urban=1` |
 | `js/bus.js` | Bushaltestellen und Stadtbusse (seit v3.20.0, `BusSystem`): Halte an Verkehrskanten heften (`snapStops`, Fahrtrichtung nach Straßenseite), Linien aus der OSM-Haltfolge (`buildLine`, Dijkstra `path` über `Traffic.out`, Einbahnstraßen beachtet, in Zeitscheiben von 3 ms), Busse fern rechnerisch, unter 650 m als `Vehicle('bus')` auf der Verkehrsschiene (`Traffic.placeCar`, `Traffic.ruleLimit`), Zustände drive → arrive → doors → close (→ end: Neubeginn außer Sicht); Haltestellen-Bauten und Wartende bis 320 m (`buildStop`, `addWaiting` als Figuren in `peds.sitters`), Ein-/Aussteigen (`passengers`, `Pedestrians.adopt`), Kollision (`push`), Hindernis-Punkte für den Verkehr (`obstacles`); `?bus=0` |
+| `js/story-dialogue.js` | Story-Oberfläche (seit v3.22.0): `STORY_CAST` (Figuren mit Name, Farbe, 3D-Aussehen, Porträt), `Portrait` (gezeichnete Porträts mit Blinzeln, Mundbewegung beim Sprechen, 9 Stimmungen), `DialogueManager` (Szenen mit Schreibmaschine, Antworten, Bedingungen, Wirkungen; Untertitel im Spiel; automatisches Weiterblättern und Textgeschwindigkeit aus den Einstellungen), `StoryHUD` (Missionsziel, Zeit, Balken, Handy mit SMS/Anruf, Titelkarten, Erfolg/Gescheitert, Dokumente, Beziehungs-Hinweise) |
+| `js/story-core.js` | Story-Kern (seit v3.22.0): `Story` (StoryManager + MissionManager: Start/Fortsetzen/Ruhen, verfügbare Missionen, Marker betreten, Erfolg, Fehlschlag mit Checkpoint, Kapitelabschluss, Tagebuch `J`), `StorySave` (`save.story`), `Relationships`, `CharacterManager` (Story-Figuren aus `Player` mit Zubehör: Brille, Bart, Krawatte, Kettchen, Locken, Bob; Laufen, Blick, Gesten), `CutsceneManager` (Einstellungen und Fahrten, Kamera wird aus Wänden gezogen, Schuss/Gegenschuss), `WorldEventManager` (Marker, Ziele, Route über `RoadNav`, Voss-Plakat am Markt, Schild „Kfz Weber“, Kisten), `MissionRun` (Bausteine für Missionsskripte), `STORY_LIST` (35 Missionen), `STORY_CHAPTERS` |
+| `js/story-k1.js` | Kapitel 1 „Zurück in Coburg“, Missionen 1–5 (seit v3.22.0); Handlung aller Kapitel in `STORY.md` |
+| `css/story.css` | Kinobalken, Dialogfenster, Untertitel, Missions-HUD, Handy, Titelkarten, Ergebnis, Dokument, Tagebuch (seit v3.22.0) |
 | `js/heli.js` | Helikopter (seit v3.20.0): `Helicopter` (prozedurales Modell, Flugmodell `update`, Boden/Dach `floorAt`, Gebäude `blocked`, Rotor mit unscharfer Scheibe in `sync`), `HeliPads` (Landeplätze `HELIPADS`, Platz suchen und bauen ab 900 m, bereitstehende Hubschrauber, `take`/`park`/`remove`, `mapPlaces`, `worldWithPads`); in `game.js` Modus `fly` (`enterHeli`, `exitHeli`, Kamera, Hinweise); `?heli=0` |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
 | `data/lod2.js` | **Erzeugt** von `tools/convert-lod2.js`: Gebäudeflächen als `window.COBURG_LOD2` (≈ 5,9 MB) |
@@ -310,6 +316,9 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- 🟡 v3.22.0 (24.11.2026, Branch `story/zurueck-in-der-heimat`, nicht gepusht): **Story-Modus „Zurück in der Heimat“, Phasen 1–3.**
+  Details, Technik, Tests und offene Aufgaben in Abschnitt 8, Handlung in `STORY.md`.
 
 - ✅ v3.21.0 (24.11.2026, `main`): **Hauptmenü, Ladebildschirm, Online-Modus, Einstellungen.**
   - **Architektur:** Lader (`boot.js`) → Ladebildschirm (`loadscreen.js`) mit echtem Fortschritt → Weltaufbau →
@@ -1428,6 +1437,17 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 7. Nächste Schritte
 
+### 7.6 Nächste Schritte Story-Modus (nach v3.22.0)
+
+- [ ] Branch `story/zurueck-in-der-heimat` auf `main` übernehmen und pushen (nur nach Freigabe; Vercel veröffentlicht dann).
+- [ ] Kapitel 1 im echten Spiel ohne Abkürzungen durchspielen (Fahrzeiten und Zeitlimits feinjustieren; Treffpunkte bei
+  allen Grafikstufen ansehen; Handy/Touch: Dialog antippen).
+- [ ] Phase 4: Missionen 6–25 nach `STORY.md` (Kapitel 2–5), neue Bausteine: Verfolgen eines KI-Wagens (`AutoDriver`),
+  Beschatten (Abstand halten), Schleichen (Sichtkegel), Fotografieren, Wahl zwischen zwei Markern.
+- [ ] Phase 5: Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
+- [ ] Nebenmissionen (`STORY.md` 6): Kfz-Weber-Aufträge, Taxi, Bratwurst-Lieferdienst, Voss-Plakate sammeln.
+- [ ] Polish: Lippen-/Kopfbewegung der 3D-Figuren, eigene Innenräume (Voss-Villa, Redaktion), Story-Musik.
+
 ### 7.1 Grafik-Fahrplan „GTA-V-Realismus, regionale Architektur, WebGPU“ (seit 02.11.2026)
 
 Arbeitszweig: **`grafik/regionale-architektur`** (von `origin/main` v3.4.0). Nie direkt auf `main`, kein Deployment
@@ -1640,3 +1660,76 @@ Rohdaten. Zuletzt G10 WebGPU-Nachzug (PBR, Lichterteppich, Wasser-Strömung, Gel
 - [ ] Rennen auch mit Fahndung („illegales Straßenrennen“, Polizei taucht während des Rennens auf)
 - [ ] Mehr Fahrzeugtypen (Lieferwagen, Motorrad; Stadtbus im Linienverkehr seit v3.20.0)
 - [ ] Verkehr mit echter Fahrphysik, der auf Unfälle reagiert (heute fährt er auf Schienen)
+
+## 8. Story-Modus „Zurück in der Heimat“ (seit v3.22.0)
+
+Auftrag vom 24.11.2026: vollständige Singleplayer-Kampagne (1 spielbare Figur, 4 Nebenfiguren, 7 Kapitel,
+35 Hauptmissionen, 3 Enden, Nebenmissionen, freies Spiel danach), ohne Vertonung, in Phasen. **Handlung, Figuren,
+alle 35 Missionen, Entscheidungen und Enden: `STORY.md`.**
+
+### 8.1 Phase 1 – Bestandsaufnahme (Ergebnis)
+
+| Bereich | Vorhanden | Nutzung für die Story |
+|---|---|---|
+| Start/Menü | `mainmenu.js`: Weiterspielen, Neues Spiel (setzt `gta-coburg-v1` zurück, lädt neu mit `gta-coburg-autoplay`), Spiel laden (6 Plätze kopieren den ganzen Spielstand), Online-Modus | **kein neuer Menüpunkt**: Neues Spiel = neue Kampagne, Weiterspielen/Laden = Story fortsetzen; Texte und Spielstand-Zusammenfassung um den Story-Fortschritt ergänzt |
+| Spielstand | ein Objekt `save` (`localStorage` `gta-coburg-v1`), `persist()` | `save.story` – dadurch automatisch in allen Speicherplätzen, Sicherungen, Import/Export |
+| Spielschleife | `game.js` `step`/`render`/`updateCamera`, Modi walk/drive/fly | `story.update(dt)` im Spielschritt (auch in Wohnungen), Eingabesperre während Szenen, Kamera-Übernahme |
+| Karte/Orte | `ui.landmarks` (Bahnhof, Markt, Ehrenburg, Landestheater, Hofgarten, Veste, Rosengarten …), `HOMES`, `VENUES`, `PLACES` | Missionsorte = echte Orte: Bratwurststand (`props.grill`), Lackiererei Nord = „Kfz Weber“, Judengasse, Lossaustraße, H&M Spitalgasse, Villa Leopoldstraße |
+| Figuren | `Player` (Gelenke, Aussehen), Fußgänger als Instanzen | Story-Figuren als `Player` mit Zubehör |
+| Fahrzeuge | `Vehicle`, `parkCarNear`, `parked`, `enterCar/exitCar`, `lastImpact`, `health` | Missionsautos (Kombi, Kleinbus, Sportwagen), Ladungsanzeige aus Aufprallen |
+| Navigation | `RoadNav` (`locate`, `costsFrom`, `route`) | Route zum Ziel auf der Minikarte |
+| Interaktion | `E`/`F`, Wohnungen mit Innenraum und Bett (`sleep`), Modeladen (`save.outfit`) | Story-`E` hat Vorrang; Schlafen und Kleiderkauf sind Missionsschritte |
+| Mehrspieler | `net.js`, `net-p2p.js`, `mp/*` – **unverändert** | Story ruht, sobald `net.online`; Story-Daten gehen nie ins Netz |
+
+### 8.2 Technik (Phase 2)
+
+- **Module wie gefordert, ohne Parallelsysteme:** StoryManager/MissionManager = `Story`, DialogueManager,
+  CutsceneManager, CharacterManager, RelationshipManager = `Relationships`, StorySaveManager = `StorySave`
+  (im vorhandenen Spielstand), WorldEventManager. Marker nutzen `makeBeacon`/`makeLabel` (fx.js), Punkte die
+  vorhandene Minikarte (`PLACE_COLOR.story`, `storyTarget`), Autos `parkCarNear`/`Vehicle`, Figuren `Player`.
+- **Missionsskripte** sind `async`-Funktionen je Etappe (= Checkpoint) mit Bausteinen von `MissionRun`:
+  `goto`, `interact`, `talk` (Dialog mit Kamera), `cut` (Kamerafahrt + Untertitel), `say` (Untertitel), `sms`,
+  `call`, `doc`, `timer`, `meter`, `watch` (Fehlschlag-Bedingung), `every`, `npc`, `vehicle`, `seat`,
+  `placePlayer`, `black`, `waitEvent`. Abbruch (Fehlschlag, Online, Hauptmenü) beendet alle Wartestellen sauber.
+- **Fehlschlag:** „MISSION GESCHEITERT“ mit Grund, `Enter` = ab Checkpoint wiederholen (Etappe baut Figuren/Autos
+  neu und setzt Leon an den Start der Etappe), `Esc` = abbrechen (Marker erscheint wieder). Auch bei
+  „Erledigt“/„Verhaftet“ (nach der Sequenz).
+- **Dialoge ohne Vertonung:** Fenster mit animiertem Porträt, Name in Figurenfarbe, Schreibmaschine, Antworten mit
+  Hinweis (z. B. „€ 200 · Max ▲“), Esc überspringt bis zur nächsten Entscheidung; Untertitel bei Fahrten und Anrufen;
+  Einstellungen → Allgemein → „Story und Dialoge“: automatisch weiterblättern, Textgeschwindigkeit, Untertitel.
+- **Kamera:** Schuss/Gegenschuss über die Schulter, Halbtotale, feste Einstellungen, Kamerafahrten mit Ease und
+  leichtem Handkamera-Atmen; Positionen werden aus Wänden gezogen; Marker/Schilder während Szenen ausgeblendet;
+  Kinobalken, HUD ausgeblendet. Story-Figuren gestikulieren beim Sprechen und schauen den Gesprächspartner an.
+- **Online-Trennung:** `start('online')` und jede Sekunde mit `net.online` → Story ruht (Mission ohne Wertung beendet,
+  Marker/Requisiten weg). Nach dem Verlassen der Lobby läuft sie im selben Spiel weiter. `?story=0` schaltet sie ab.
+
+### 8.3 Phase 3 – Kapitel 1 (Missionen 1–5)
+
+| # | Mission | Orte | Spielablauf | Entscheidung |
+|---|---|---|---|---|
+| 1 | Wieder daheim | Bahnhof → Markt | Kamerafahrt am Bahnhof, Kapitel-Titel, zu Fuß zum Markt mit Gedanken, Erwin am Bratwurststand, Kamera aufs Voss-Plakat, SMS von Max | zahlen / anschreiben |
+| 2 | Alte Zeiten | Kfz Weber → Veste | Max rennt heran, Wiedersehen mit Tobi, Max’ Kombi zur Veste (4:00, Max kommentiert Unfälle, Tempo, alte Geschichten), Drohnenflug über Coburg, Gespräch über den Brand | Max € 200 leihen |
+| 3 | Eine Unterkunft | Judengasse → Hofgarten → Lossaustraße | Frau Gundermann (scheitert), Herr Kraus bei den Enten, 3 Umzugskisten tragen (nicht rennen, nicht einsteigen), Schlüssel, Wohnung betreten, schlafen; Tobi ruft an | – |
+| 4 | Der erste Auftrag | Kfz Weber → Kongresshaus Rosengarten | Kleinbus mit Kristallgläsern, Ladungsanzeige (Aufpralle), 3:30, Anruf von Max, Übergabe an Dr. Lenz | Umschlag „Gutachten Itzaue“ lesen (Dokument mit Korrekturen) |
+| 5 | Ein interessanter Kontakt | H&M → Schlossplatz → Villa Leopoldstraße | Dresscode (Hemd/Pullover/Jacke kaufen), Abendtreffen mit Voss, Voss’ Sportwagen ohne Kratzer und ohne Polizei fahren (Voss kommentiert), das Angebot, Kapitelabschluss | Haltung zu Voss; Angebot annehmen / Bedenkzeit |
+
+Belohnungen: € 50 / € 150 / Wohnung Lossaustraße (gemietet) / € 300 + € 4 je Ladungsprozent / € 1.000; Beziehungen
+ändern sich je nach Wahl und Fahrleistung.
+
+### 8.4 Tests (24.11.2026, Browser-Vorschau)
+
+- Kapitel 1 zweimal komplett durchlaufen (Fahrten und Wege per Teleport abgekürzt, alle Dialoge, Entscheidungen,
+  Interaktionen und Ereignisse echt): beide Entscheidungswege je Mission, Geld/Flags/Beziehungen stimmen, Kapitel-
+  abschluss mit „Kapitel 2 folgt“.
+- Fehlschlag + „Ab Checkpoint wiederholen“ (Mission 5, Autozustand < 50 %): neues Auto, Leon sitzt drin, Mission läuft weiter.
+- Ladungsanzeige (Mission 4), Route auf der Minikarte, Zeitlimit, Handy (SMS, Anrufe), Dokument, Tagebuch,
+  Spielstand-Zusammenfassung („Kapitel 2 · 5/35 Missionen · …“), Weiterspielen nach Neuladen, Online-Ruhe und
+  Wiederaufnahme.
+- Gefundene und behobene Fehler: Kamera in Hauswänden (Kamera wird jetzt aus Wänden gezogen), Treffpunkt in der
+  Lackiererei-Säule, Plakat ohne freien Platz, Esc öffnete zusätzlich das Pausenmenü, Schlafen vor dem Hinweis wurde
+  ignoriert, feste Kamera der Plakat-Szene, Kamera in Leons Kopf (Voss-Auftritt), Missionsauto blieb nach Fehlschlag stehen.
+- Unverändert: `node tools/mp-test.js` 27/27, `node tools/data-hash.js` 0 geändert; keine Konsolenfehler beim Start.
+
+### 8.5 Offen
+
+Siehe 7.6. Kapitel 2–7 sind in `STORY.md` ausgearbeitet, im Tagebuch als „in Entwicklung“ markiert und noch nicht spielbar.

@@ -2,7 +2,7 @@
 'use strict';
 
 // Farben der Orte auf Minikarte und Stadtplan
-const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066', food: '#ff8a3d', store: '#ff5fa2', guns: '#e2463f' };
+const PLACE_COLOR = { spray: '#38d97a', dealer: '#ff9a2e', shop: '#2ed3c6', flat: '#b57cff', home: '#e9b949', mycar: '#ffe066', food: '#ff8a3d', store: '#ff5fa2', guns: '#e2463f', story: '#ffd23a', storyTarget: '#ffe14d' };
 
 class UI {
   constructor(world) {
@@ -184,6 +184,14 @@ class UI {
       for (let i = 0; i < race.path.length; i += 2) i ? ctx.lineTo(race.path[i], race.path[i + 1]) : ctx.moveTo(race.path[0], race.path[1]);
       ctx.stroke();
     }
+    // Story: Route zum Missionsziel (js/story-core.js)
+    if (extra.route && !race) {
+      const rp = extra.route.path;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(20,10,30,0.55)'; ctx.lineWidth = 8 / k;
+      ctx.beginPath(); for (let i = 0; i < rp.length; i += 2) i ? ctx.lineTo(rp[i], rp[i + 1]) : ctx.moveTo(rp[0], rp[1]); ctx.stroke();
+      ctx.strokeStyle = 'rgba(194,123,255,0.95)'; ctx.lineWidth = 4.5 / k; ctx.stroke();
+    }
     // andere Autos
     ctx.fillStyle = '#3b6fd1';
     for (const c of cars) if (c.kind !== 'police') { ctx.beginPath(); ctx.arc(c.x, c.z, 3.2 / k * 0.9, 0, 6.283); ctx.fill(); }
@@ -203,7 +211,7 @@ class UI {
       ctx.fill(); ctx.stroke();
     };
     for (const c of cars) if (c.kind === 'police') blip(c.x, c.z, '#2a5bd7', 3.5, false);
-    for (const p of extra.places || []) blip(p.x, p.z, PLACE_COLOR[p.type] || '#fff', p.type === 'flat' ? 3.5 : 5, p.type !== 'flat', p.type === 'mycar' ? 'dot' : 'sq');
+    for (const p of extra.places || []) blip(p.x, p.z, PLACE_COLOR[p.type] || '#fff', p.type === 'flat' ? 3.5 : p.type === 'storyTarget' ? 6.5 : 5, p.type !== 'flat', p.type === 'mycar' || p.type === 'storyTarget' ? 'dot' : 'sq');
     if (!race) for (const r of extra.raceStarts || []) blip(r.x, r.z, '#3aa0ff', 5, true, 'sq');
     if (race) {
       for (const c of race.rivals) blip(c.x, c.z, '#ffffff', 4, false);

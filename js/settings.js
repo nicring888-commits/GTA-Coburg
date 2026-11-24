@@ -23,7 +23,7 @@ const Settings = (() => {
     audio: { master: 0.8, sfx: 1, ambient: 1, ui: 0.7, muteHidden: true },
     controls: { sens: 1, invertY: false, fov: 65, keys: {} },          // keys: Standardcode → eigene Taste
     display: { res: 1, adaptive: true },                                // res: Anteil der Renderauflösung
-    general: { menuCam: true, tips: true, hints: true, autosave: true },
+    general: { menuCam: true, tips: true, hints: true, autosave: true, dlgAuto: false, dlgSpeed: 1, subtitles: true },
   };
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
