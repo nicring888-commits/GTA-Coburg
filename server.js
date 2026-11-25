@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 8175;
 const HOST = process.env.HOST || (process.argv.includes('--lan') || process.argv.includes('--public') ? '0.0.0.0' : '127.0.0.1');
 const ROOT = __dirname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream' };
 
 // Messläufe (js/bench.js, seit v3.18.0): Bilder und Messwerte nach bench/shots/<lauf>/ speichern und auflisten.
