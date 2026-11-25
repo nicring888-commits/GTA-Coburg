@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.25.0 „Story-Modus, Kapitel 4“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.24.0) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.25.0 „Story-Modus, Kapitel 4“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -320,7 +320,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🟡 v3.25.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 4 „Kein Zurück“ (Missionen 16–20)**, siehe 8.8.
+- ✅ v3.25.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 4 „Kein Zurück“ (Missionen 16–20)**, siehe 8.8.
 - ✅ v3.24.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 3 „Hinter den Kulissen“ (Missionen 11–15)**, siehe 8.7.
 - ✅ v3.23.1 (25.11.2026, `main`): **Fehler behoben: rechte Bildhälfte bzw. rechtes Viertel schwarz** (gemeldet: beim
   Laden eines Spielstands, beim Missionsstart oder aus dem Menü; Minikarte und Tasten blieben sichtbar).
@@ -1482,7 +1482,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [x] Kapitel 3 (Missionen 11–15) umgesetzt (v3.24.0).
 - [x] v3.24.0 auf `main` übernommen und gepusht (25.11.2026).
 - [x] Kapitel 4 (Missionen 16–20) umgesetzt (v3.25.0).
-- [ ] v3.25.0 auf `main` übernehmen und pushen (nach Freigabe).
+- [x] v3.25.0 auf `main` übernommen und gepusht (25.11.2026).
 - [ ] Phase 4 weiter: Missionen 21–25 (Kapitel 5). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
   Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
