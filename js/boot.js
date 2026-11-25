@@ -184,7 +184,7 @@
   ].filter(Boolean);
   const CODE = ['mp/protocol.js', 'js/mp-config.js'].concat(['settings', 'util', 'materials', 'post', 'atmosphere', 'water', 'landscape', 'world', 'urbanground', 'houses', 'archetypes', 'tile-worker', 'signals', 'region',
     'vehicle', 'parking', 'carlights', 'lightcarpet', 'traffic', 'player', 'ui', 'fx', 'pedestrians', 'props', 'townlife', 'bus', 'heli', 'driver', 'police', 'race', 'places', 'weapons', 'interiors',
-    'property', 'venues', 'net-p2p', 'net', 'tsl-materials', 'tsl-facade', 'tsl-post', 'gfx-webgpu', 'mainmenu', 'story-dialogue', 'story-core', 'story-k1', 'story-k2'].concat(/[?&]bench\b/.test(location.search) ? ['bench'] : [], ['game', 'touch']).map(n => `js/${n}.js`));
+    'property', 'venues', 'net-p2p', 'net', 'tsl-materials', 'tsl-facade', 'tsl-post', 'gfx-webgpu', 'mainmenu', 'story-dialogue', 'story-core', 'story-k1', 'story-k2', 'story-k3'].concat(/[?&]bench\b/.test(location.search) ? ['bench'] : [], ['game', 'touch']).map(n => `js/${n}.js`));
 
   const TIMEOUT = 90000;  // ohne jeden Fortschritt; große Dateien bei langsamer Mobilverbindung
   function loadScript(src) {

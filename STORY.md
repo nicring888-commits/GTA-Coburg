@@ -2,7 +2,7 @@
 
 > Grundlage für alle Story-Missionen. Was hier steht, gilt für Dialoge, Orte, Entscheidungen und die drei Enden.
 > Umsetzungsstand und Technik: PROJEKT.md, Abschnitt 8. Die Missionen 1–5 sind spielbar (`js/story-k1.js`),
-> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0; alle weiteren sind hier ausgearbeitet und werden in
+> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0; alle weiteren sind hier ausgearbeitet und werden in
 > Phase 4/5 umgesetzt.
 
 ## 1. Prämisse
@@ -139,17 +139,25 @@ Format: **Ort** · Ablauf · Erfolg · Belohnung · Übergang. Orte sind reale O
     durchsucht Leon Dragans Wagen: Liste „Projekt Itzaue – offene Objekte“ mit **Autohaus Berger – Brand 2021** und
     „Erbe L. Berger … über Fischer einbinden“. **Kapitelabschluss:** Voss ist nicht seriös – und Max steckt mit drin.
 
-### Kapitel 3 – Hinter den Kulissen
+### Kapitel 3 – Hinter den Kulissen (spielbar seit v3.24.0)
 
-11. **Die Journalistin** · Sarah fotografiert Leon beim Kessler-Hof. Verfolgung zu Fuß durch die Altstadt
-    (Herrngasse, Judengasse), Leon stellt sie an der Stadtmauer – Wortgefecht, sie gibt ihm ihre Karte.
-12. **Unangenehme Fragen** · Treffen im Café Pfannküchle: Sarah zeigt ihre Recherche (Brandserie, Gutachten).
-    Gemeinsame Fahrt zum Itzufer, wo das Autohaus Berger stand – Leon sieht die Brandruine zum ersten Mal wieder.
-13. **Alte Bekannte** · Jürgen Kessler, Leons Ex-Geschäftspartner aus Nürnberg, ist Voss' Spediteur. Treffen am
-    Goldbergsee, Fahrt zu einer Scheune bei Ahorn; Kessler gesteht Angst vor Voss.
-14. **Verdächtige Geschäfte** · Nachts in den Kessler-Hof einbrechen, Frachtbriefe fotografieren (Wachleute meiden,
-    Taschenlampen-Kegel). Entscheidung: Beweise an Sarah oder an Voss.
-15. **Falsche Freunde** · Max benimmt sich seltsam, hat neues Geld. Leon beschattet Max zu einem Treffen mit Dragan.
+11. **Die Journalistin** · Lossaustraße → Richtung Bahnhof · Eine Frau fotografiert Leons Haus und Dienstwagen und rennt
+    weg; Verfolgung zu Fuß (sie wird nach 25 s langsamer, > 45 m für 7 s = entkommen). Es ist **Sarah Neumann**, die neue
+    Mieterin von oben („Sie sind der Kistenträger!“). Entscheidung: offen (nur wenn Leon die Liste kennt) / vorsichtig /
+    abweisend. Sie lädt ins Café Pfannküchle ein.
+12. **Unangenehme Fragen** · Café Pfannküchle → Uferstraße (Itzufer) · Sarahs Recherche als Dokument (Brandserie,
+    Gutachter Hessler, Itzgrund GmbH mit Geschäftsführer J. Kessler), Reaktion auf Hofmann (M10). Fahrt mit Sarah zur
+    **Brandruine des Autohauses Berger** (verkohlte Mauern, altes Schild), Erinnerungs-Kamerafahrt; Sarah erklärt das
+    Wegerecht. Entscheidung: verbünden / nachdenken. Danach SMS von Kessler.
+13. **Alte Bekannte** · Bismarckturm, abends → Bahnhof · Kessler gesteht: Strohmann der Itzgrund GmbH, Geldwäsche über
+    die Autos, Dragan legt die Brände. Dragans Leute kommen (zwei Verfolger-Autos, die ständig neu zum Spieler routen):
+    abhängen (> 200 m für 8 s), Kessler zum Bahnhof bringen; Hinweis auf die Frachtbriefe (Schrank drei, Schlüssel
+    unter dem Kaktus) und „Voss wusste, dass du zurückkommst“.
+14. **Verdächtige Geschäfte** · Speditionshof, 23:30 · Schleichen an zwei Wachleuten mit sichtbaren Taschenlampen-Kegeln
+    vorbei (13 m, ±34°, Hauswände verdecken, rennen fällt auf; Balken „Entdeckt“), Schlüssel, Schrank, Fotos, unbemerkt
+    weg. Entscheidung: Beweise an Sarah / an Voss (Geld, Voss ▲, Kessler in Gefahr) / behalten.
+15. **Falsche Freunde** · Albertsplatz → Hofgarten · Max lügt, Leon beschattet ihn (Verdachtsbalken) und belauscht das
+    Treffen mit Dragan: Max hat 40.000 € Schulden, hat Leon für Voss zurückgeholt, bittet aber, Leon rauszulassen.
     **Kapitelabschluss:** Kessler ist verschwunden, sein Wagen ausgebrannt am Callenberg – und Zeugen haben den
     Weber-Kleinbus aus Mission 4 dort gesehen. Leon steht unter Verdacht.
 

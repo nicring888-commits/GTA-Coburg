@@ -451,7 +451,7 @@ class WorldEventManager {
 class MissionRun {
   constructor(S, def, stage = 0, retry = false) {
     this.S = S; this.G = S.G; this.def = def; this.stage = stage; this.retry = retry;
-    this.waiters = []; this.watchers = []; this.ticks = [];
+    this.waiters = []; this.watchers = []; this.ticks = []; this.cleanups = [];
     this.cars = []; this.dead = false; this.t = 0; this.stageT = 0;
     this.interactT = null; this.events = [];
     this.lock = 0;     // > 0: Spieler-Eingabe gesperrt (Szenen)
@@ -499,11 +499,16 @@ class MissionRun {
       if (this.timerLeft <= 0) { this.fail(this.timerMsg || 'Die Zeit ist abgelaufen.'); return; }
     }
     for (const w of this.watchers) { const r = w(dt); if (r) { this.fail(r); return; } }
-    this.ticks = this.ticks.filter(f => !f(dt));
+    // während des Takts neu angelegte Aufgaben (z. B. autoDrive aus einem every heraus) nicht verlieren
+    const cur = this.ticks; this.ticks = [];
+    const keep = cur.filter(f => !f(dt));
+    if (this.dead) { this.ticks = []; return; }
+    this.ticks = keep.concat(this.ticks);
     for (const w of this.waiters.slice()) {
+      if (this.dead) return;
       let ok = false;
       try { ok = w.fn(dt); } catch (e) { console.warn(e); }
-      if (ok) { this.waiters.splice(this.waiters.indexOf(w), 1); w.res(ok); }
+      if (ok) { const i = this.waiters.indexOf(w); if (i >= 0) { this.waiters.splice(i, 1); w.res(ok); } }
     }
   }
 
@@ -513,6 +518,8 @@ class MissionRun {
   watch(fn) { this.watchers.push(fn); return fn; }
   unwatch(fn) { this.watchers = this.watchers.filter(w => w !== fn); }
   every(fn) { this.ticks.push(fn); }
+  // beim Aufräumen (Erfolg, Fehlschlag, Abbruch) ausführen, z. B. Missionsrequisiten entfernen
+  onCleanup(fn) { this.cleanups.push(fn); }
   objective(html) { this.S.hud.objective(html); }
   fail(reason) { if (!this.dead) this.S.failed(this, reason); }
   rel(who, d) { this.S.rel.add(who, d); }
@@ -746,6 +753,7 @@ class MissionRun {
   // aufräumen (Mission vorbei oder abgebrochen)
   cleanup(keepCars) {
     const S = this.S, G = this.G;
+    for (const f of this.cleanups.splice(0)) try { f(); } catch (e) { console.warn(e); }
     S.chars.clear();
     S.world.clearTarget();
     S.world.clearExtra();

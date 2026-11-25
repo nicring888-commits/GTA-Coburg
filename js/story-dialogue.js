@@ -59,6 +59,13 @@ const STORY_CAST = {
   hofmann: { name: 'Hofmann', full: 'Bäckermeister Hofmann', color: '#e8d2a0',
     look: { skin: '#eab896', shirt: '#f4f1ea', pants: '#e8e4da', hair: '#6a4a2a', cap: '#f4f1ea' },
     face: { skin: '#eab896', hair: '#6a4a2a', style: 'short', shirt: '#f4f1ea', collar: '#dcd6c8', cap: '#f4f1ea', bg: ['#4a3a20', '#14100a'] } },
+  // Kapitel 3
+  kessler: { name: 'Kessler', full: 'Jürgen Kessler', color: '#d8b46a',
+    look: { skin: '#e6b894', shirt: '#6a5a3a', pants: '#2e2a24', hair: '#7a5a34', glasses: true },
+    face: { skin: '#e6b894', hair: '#7a5a34', style: 'short', shirt: '#6a5a3a', collar: '#4a3e28', glasses: true, lines: true, bg: ['#3a2e18', '#120e08'] } },
+  wache: { name: 'Wachmann', full: 'Wachmann', color: '#9aa3b2',
+    look: { skin: '#dcae8c', shirt: '#22262e', pants: '#22262e', hair: '#2a2a2a', cap: '#14161a' },
+    face: { skin: '#dcae8c', hair: '#2a2a2a', style: 'short', shirt: '#22262e', collar: '#14161a', cap: '#14161a', bg: ['#1c2028', '#08090c'] } },
 };
 
 // ---------------------------------------------------------------------------------------------------------------

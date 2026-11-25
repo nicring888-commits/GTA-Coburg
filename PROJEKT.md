@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.23.1 „Bildrand-Fix“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.24.0 „Story-Modus, Kapitel 3“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.23.1) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -199,6 +199,7 @@ und müssen dort bleiben.
 | `js/story-core.js` | Story-Kern (seit v3.22.0): `Story` (StoryManager + MissionManager: Start/Fortsetzen/Ruhen, verfügbare Missionen, Marker betreten, Erfolg, Fehlschlag mit Checkpoint, Kapitelabschluss, Tagebuch `J`), `StorySave` (`save.story`), `Relationships`, `CharacterManager` (Story-Figuren aus `Player` mit Zubehör: Brille, Bart, Krawatte, Kettchen, Locken, Bob; Laufen, Blick, Gesten), `CutsceneManager` (Einstellungen und Fahrten, Kamera wird aus Wänden gezogen, Schuss/Gegenschuss), `WorldEventManager` (Marker, Ziele, Route über `RoadNav`, Voss-Plakat am Markt, Schild „Kfz Weber“, Kisten), `MissionRun` (Bausteine für Missionsskripte), `STORY_LIST` (35 Missionen), `STORY_CHAPTERS` |
 | `js/story-k1.js` | Kapitel 1 „Zurück in Coburg“, Missionen 1–5 (seit v3.22.0); Handlung aller Kapitel in `STORY.md` |
 | `js/story-k2.js` | Kapitel 2 „Neue Möglichkeiten“, Missionen 6–10 (seit v3.23.0) |
+| `js/story-k3.js` | Kapitel 3 „Hinter den Kulissen“, Missionen 11–15 (seit v3.24.0): Verfolgung zu Fuß (`runPath`), Wachleute mit Lichtkegel (`Guards`), Verfolger-Autos (`hunters`) |
 | `css/story.css` | Kinobalken, Dialogfenster, Untertitel, Missions-HUD, Handy, Titelkarten, Ergebnis, Dokument, Tagebuch (seit v3.22.0) |
 | `js/heli.js` | Helikopter (seit v3.20.0): `Helicopter` (prozedurales Modell, Flugmodell `update`, Boden/Dach `floorAt`, Gebäude `blocked`, Rotor mit unscharfer Scheibe in `sync`), `HeliPads` (Landeplätze `HELIPADS`, Platz suchen und bauen ab 900 m, bereitstehende Hubschrauber, `take`/`park`/`remove`, `mapPlaces`, `worldWithPads`); in `game.js` Modus `fly` (`enterHeli`, `exitHeli`, Kamera, Hinweise); `?heli=0` |
 | `data/coburg.js` | **Erzeugt** von `tools/convert.js`: kompakte Spielwelt als `window.COBURG` (≈ 1,4 MB) |
@@ -318,6 +319,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- 🟡 v3.24.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 3 „Hinter den Kulissen“ (Missionen 11–15)**, siehe 8.7.
 - ✅ v3.23.1 (25.11.2026, `main`): **Fehler behoben: rechte Bildhälfte bzw. rechtes Viertel schwarz** (gemeldet: beim
   Laden eines Spielstands, beim Missionsstart oder aus dem Menü; Minikarte und Tasten blieben sichtbar).
   - **Ursache:** `renderer.setSize(innerWidth, innerHeight)` (in `post.apply` und im `resize`-Handler) schrieb die
@@ -1475,7 +1477,9 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [x] Kapitel 2 (Missionen 6–10) umgesetzt (v3.23.0).
 - [ ] Kapitel 1 im echten Spiel ohne Abkürzungen durchspielen (Fahrzeiten und Zeitlimits feinjustieren; Treffpunkte bei
   allen Grafikstufen ansehen; Handy/Touch: Dialog antippen).
-- [ ] Phase 4 weiter: Missionen 11–25 (Kapitel 3–5). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
+- [x] Kapitel 3 (Missionen 11–15) umgesetzt (v3.24.0).
+- [ ] v3.24.0 auf `main` übernehmen und pushen (nach Freigabe).
+- [ ] Phase 4 weiter: Missionen 16–25 (Kapitel 4–5). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
   Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
 - [ ] Phase 5: Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
@@ -1791,3 +1795,23 @@ selbstständig (ein Versetzen in 150 s); M10 „Ab Checkpoint wiederholen“ nac
 Auto blieb am Bordstein hängen; Dragans SUV verkeilte sich mit dem Verkehr. Keine Konsolenfehler.
 Noch offen: Fahrzeiten im echten Spiel mit Tastatur prüfen (Zeitlimit M7, Medaillenzeiten M8), sichtbares Versetzen
 des Story-Autos bei Stau eventuell nur außer Sicht.
+
+### 8.7 Phase 4, Teil 2 – Kapitel 3 (v3.24.0)
+
+| # | Mission | Orte | Spielablauf | Entscheidung |
+|---|---|---|---|---|
+| 11 | Die Journalistin | Lossaustraße → Richtung Bahnhof | Verfolgung zu Fuß, Sarah ist die Nachbarin von oben | offen / vorsichtig / abweisend |
+| 12 | Unangenehme Fragen | Café Pfannküchle → Uferstraße | Recherche-Dokument, Fahrt mit Sarah, Brandruine Autohaus Berger (Requisite, nur während der Mission) | verbünden / nachdenken |
+| 13 | Alte Bekannte | Bismarckturm → Bahnhof | Kesslers Geständnis, zwei Verfolger abhängen, Kessler absetzen | – |
+| 14 | Verdächtige Geschäfte | Speditionshof, nachts | Schleichen an Wachleuten mit Lichtkegeln, 3 Stellen im Büro | Beweise an Sarah / Voss / behalten |
+| 15 | Falsche Freunde | Albertsplatz → Hofgarten | Max beschatten, Max und Dragan belauschen, Gül-Anruf, Zeitungsmeldung: Kessler vermisst, Leon unter Verdacht | – |
+
+Neue Figuren: Jürgen Kessler, Wachleute. Kern: `MissionRun.onCleanup` (Requisiten aufräumen), Takt-Aufgaben, die
+während eines Takts angelegt werden, gehen nicht mehr verloren (vorher blieben die Verfolger stehen), Warteschleife
+bricht nach einem Fehlschlag sauber ab.
+
+**Tests (25.11.2026, Vorschau, Spielzeit per `game.simulate`, Wege per Teleport abgekürzt):** Missionen 11–15
+komplett mit Kapitelabschluss (Kapitel 4 frei); Sarah wird nach ≈ 22 s Sprint eingeholt; Verfolger kommen von 144 m
+auf ≈ 10 m heran und lassen sich abhängen; Wachmann entdeckt Leon im Kegel in ≈ 2 s (Hauswand verdeckt), Fehlschlag und
+„Wiederholen“ bauen die Wachen neu auf; Brandruine verschwindet nach der Mission. Keine Konsolenfehler.
+Offen: echte Tastaturfahrt/-lauf (Sarahs Tempo, Abhängen), Wachen-Routen am Hof liegen teils dicht an Hallenwänden.
