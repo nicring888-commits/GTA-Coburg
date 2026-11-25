@@ -149,7 +149,7 @@
   let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
   let paused = false;      // Pausenmenü offen
   let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
-  const VERSION = '3.24.0';
+  const VERSION = '3.25.0';
   const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
@@ -229,7 +229,7 @@
     // Story-Modus (js/story-core.js): läuft im normalen Spiel (Neues Spiel, Weiterspielen, Spiel laden), nie online
     if (typeof Story !== 'undefined' && !/[?&]story=0\b/.test(location.search)) story = new Story({
       scene, world, ui, nav, audio, save, persist, addMoney, parkCarNear, parked, cam, places, property, props, atmo, spawn, camera, keys,
-      get net() { return net; },
+      get net() { return net; }, get police() { return police; }, get fx() { return fx; },
       player: () => player, car: () => car, mode: () => mode, stars: () => police.stars,
       enterCar, exitCar, lockPointer, landmarks: () => ui.landmarks, trafficCars: () => traffic.cars,
       over: () => !!over, busy: () => !!(races.active || property.inside || ride || property.menuOpen),

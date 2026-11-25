@@ -2,7 +2,7 @@
 
 > Grundlage für alle Story-Missionen. Was hier steht, gilt für Dialoge, Orte, Entscheidungen und die drei Enden.
 > Umsetzungsstand und Technik: PROJEKT.md, Abschnitt 8. Die Missionen 1–5 sind spielbar (`js/story-k1.js`),
-> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0; alle weiteren sind hier ausgearbeitet und werden in
+> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0; alle weiteren sind hier ausgearbeitet und werden in
 > Phase 4/5 umgesetzt.
 
 ## 1. Prämisse
@@ -161,15 +161,24 @@ Format: **Ort** · Ablauf · Erfolg · Belohnung · Übergang. Orte sind reale O
     **Kapitelabschluss:** Kessler ist verschwunden, sein Wagen ausgebrannt am Callenberg – und Zeugen haben den
     Weber-Kleinbus aus Mission 4 dort gesehen. Leon steht unter Verdacht.
 
-### Kapitel 4 – Kein Zurück
+### Kapitel 4 – Kein Zurück (spielbar seit v3.25.0)
 
-16. **Ärger in Coburg** · Polizeirazzia bei Tobi. Flucht mit dem Kleinbus vor der Polizei (3 Sterne), Kleinbus loswerden.
-17. **Unter Beobachtung** · Leon wird verfolgt: Verfolger-Auto erkennen und abschütteln, Wanze in der Wohnung finden.
-18. **Der falsche Verdacht** · Alibi beweisen: Überwachungsvideo der Tankstelle besorgen, Zeugin Gül (Taxi) finden.
-19. **Eine Entscheidung** · Dragan entführt Max wegen Schulden, gleichzeitig wird Sarahs Quelle bedroht – Leon kann
-    nur einen retten (zeitgleiche Marker, Wahl durch Losfahren).
-20. **Konsequenzen** · Schießerei am Güterbahnhof, Tobis Werkstatt brennt. **Kapitelabschluss:** In Voss' Akten
-    findet Leon seinen eigenen Namen: Grundbuchauszug Autohaus Berger – Leon war von Anfang an Teil des Plans.
+16. **Ärger in Coburg** · Kfz Weber → Ketschengasse · Tobi gesteht, dass Dragan den Kleinbus hatte; im Laderaum liegen
+    ein Benzinkanister und ein Feuerzeug „Autohaus Berger“. Razzia: Flucht im Kleinbus mit 3 Sternen (echte Fahndung),
+    dann zu Rocco, der den Bus verschwinden lässt. Entscheidung: € 1.000 zahlen / Gefallen schulden. Leon behält das Feuerzeug.
+17. **Unter Beobachtung** · Lossaustraße · Ein grauer Wagen folgt mit Abstand (fährt hinterher, hält bei < 30 m). Zwei
+    Umwege, dann abhängen (> 220 m für 8 s). Unter dem Auto: GPS-Sender. Entscheidung: zertreten / auf einen Stadtbus
+    kleben / behalten. Sarah: Mikrofon im Rauchmelder, Kommissarin Roth sucht Leon als Zeugen.
+18. **Der falsche Verdacht** · Albertsplatz → Abschlepphof beim Autohändler → Polizeiinspektion (Hindenburgstraße) ·
+    Güls Dashcam (21:42 Kessler lebend am Bahnhof) liegt im abgeschleppten Taxi; Dragan steht im Weg und stößt Leon weg.
+    Kommissarin **Hanna Roth**: Der Callenberg-Zeuge arbeitet für Voss. Entscheidung: Roth als Verbündete / allein weiter.
+19. **Eine Entscheidung** · Zwei Anrufe: Max am **Güterbahnhof**, Gutachter **Hessler** am Hofgarten (4:00). Wahl durch
+    Hinfahren, der andere ist verloren (Beziehung −40). Max: Bluff mit den Frachtbriefen oder bis € 5.000 zahlen, dann
+    mit Max vor einem Verfolger zu Tobi. Hessler: Dragans Geländewagen rammen, bis er steht; Hessler sagt aus.
+20. **Konsequenzen** · Albertsplatz → Kfz Weber → Klinikum Coburg · Tobis Werkstatt brennt (2:50, Rauch kostet Leben),
+    Tobi rausziehen, Dragans Mappe: Grundbuch Flurstück 1147/3 auf **Leon Berger**, Schulden über Kessler aufgekauft,
+    Rückkehr über Fischer organisiert, „Plan B: L. B. als Täter im Fall Kessler“. Tobi ins Klinikum (3:20).
+    **Kapitelabschluss:** Leon war von Anfang an Teil des Plans.
 
 ### Kapitel 5 – Die Wahrheit
 
