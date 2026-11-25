@@ -2,7 +2,7 @@
 
 > Grundlage für alle Story-Missionen. Was hier steht, gilt für Dialoge, Orte, Entscheidungen und die drei Enden.
 > Umsetzungsstand und Technik: PROJEKT.md, Abschnitt 8. Die Missionen 1–5 sind spielbar (`js/story-k1.js`),
-> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0, Kapitel 5 (21–25, `js/story-k5.js`) seit v3.26.0; alle weiteren sind hier ausgearbeitet und werden in
+> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0, Kapitel 5 (21–25, `js/story-k5.js`) seit v3.26.0, Kapitel 6 (26–30, `js/story-k6.js`) seit v3.28.0; alle weiteren sind hier ausgearbeitet und werden in
 > Phase 4/5 umgesetzt.
 
 ## 1. Prämisse
@@ -197,15 +197,24 @@ Format: **Ort** · Ablauf · Erfolg · Belohnung · Übergang. Orte sind reale O
 25. **Der Verrat** · Veste → Richtung Hofgarten · Konfrontation mit Max, wo Kapitel 1 die Freundschaft feierte. Max flieht
     im Auto, Leon rammt ihn bis zum Stillstand. Entscheidung (maxFate): verschonen (Max sagt aus) / verstoßen.
 
-### Kapitel 6 – Alles auf eine Karte
+### Kapitel 6 – Alles auf eine Karte (spielbar seit v3.28.0)
 
-26. **Alte Rechnungen** · Leon besucht das Grab seines Vaters (Friedhof am Glockenberg), dann die Brandruine:
-    Erinnerungs-Cutscene; stellt Dragan, der den Brand legte.
-27. **Kein einfacher Ausweg** · Voss bietet € 250.000 für die Unterschrift. Entscheidung `buyout`.
-28. **Alles verändert sich** · Kessler lebt – festgehalten in Voss' Jagdhütte bei Callenberg. Befreiung.
-29. **Zusammenhalt** · Alle Verbündeten versammeln (Sarah, Tobi, Lenz, Kessler, ggf. Max); Plan für die Stadtratssitzung.
-30. **Der letzte Auftrag** · Vorbereitung: Server-Kopie bei Voss stehlen, Fluchtwagen bei Tobi parken, Kamera im
-    Rathaus platzieren.
+26. **Alte Rechnungen** · Friedhof am Glockenberg → Brandruine (Uferstraße) · Grab von Günter Berger (1958–2021),
+    Erwin erzählt vom schwarzen Geländewagen, der jeden Donnerstag an der Ruine steht. Rückblende auf die Brandnacht
+    (Feuer an der Ruine), Dragan flieht zu Fuß, Leon holt ihn ein. Geständnis: Voss zahlte € 20.000, der Vater schwieg,
+    um Leon zu schützen. Entscheidung (`dragan`): Polizei/Roth / Geständnis auf Video und laufen lassen / Rache (`revenge`).
+27. **Kein einfacher Ausweg** · Villa Leopoldstraße → Kfz Weber · Voss bietet € 250.000 (€ 25.000 sofort).
+    Entscheidung: annehmen (`buyout`, Geld) / hinhalten und mitschneiden (`vossTape`, nur mit Sarah) / ablehnen.
+    Voss’ zweiter Plan: Haftbefehl im Fall Kessler (2 Sterne), Flucht zu Tobi; Gül hat Kessler lebend gesehen.
+28. **Alles verändert sich** · Waldweg hinter Schloss Callenberg (Landkreis) · Nachts zur Jagdhütte, an zwei Wachen
+    vorbeischleichen, Tür aufbrechen, Kessler befreien, zwei Verfolger abhängen, Kessler zu Roth bzw. zu Sarah.
+    Kessler sagt aus, der Haftbefehl fällt (`kesslerSafe`).
+29. **Zusammenhalt** · Lossaustraße → Verbündete in beliebiger Reihenfolge (8 min): Tobi (Kfz Weber), Gül
+    (Albertsplatz), Max am Bratwurststand (nur wenn verschont), Roth (nur wenn verbündet). Tobi sagt Nein, wenn Leon
+    Voss’ Geld genommen hat oder Tobi < 10 – Leon kann ihn umstimmen. Plan für die Stadtratssitzung (`allies`).
+30. **Der letzte Auftrag** · Villa → Kfz Weber → Rathaus · Server-Kopie am Fenster des Arbeitszimmers (14 s, Wachen),
+    Voss’ Supersportwagen als Fluchtwagen zu Kfz Weber (Autoalarm, wenig Schaden), Kamera am Rathaus (Nachtwächter).
+    **Kapitelabschluss:** SMS von Voss: „Schöne Kamera, Herr Berger.“ – der Plan ist verraten.
 
 ### Kapitel 7 – Das Ende einer Geschichte
 

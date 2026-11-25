@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.27.0 „Supersportwagen“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.26.0) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.28.0 „Story-Modus, Kapitel 6“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.26.0) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -199,6 +199,7 @@ und müssen dort bleiben.
 | `js/story-core.js` | Story-Kern (seit v3.22.0): `Story` (StoryManager + MissionManager: Start/Fortsetzen/Ruhen, verfügbare Missionen, Marker betreten, Erfolg, Fehlschlag mit Checkpoint, Kapitelabschluss, Tagebuch `J`), `StorySave` (`save.story`), `Relationships`, `CharacterManager` (Story-Figuren aus `Player` mit Zubehör: Brille, Bart, Krawatte, Kettchen, Locken, Bob; Laufen, Blick, Gesten), `CutsceneManager` (Einstellungen und Fahrten, Kamera wird aus Wänden gezogen, Schuss/Gegenschuss), `WorldEventManager` (Marker, Ziele, Route über `RoadNav`, Voss-Plakat am Markt, Schild „Kfz Weber“, Kisten), `MissionRun` (Bausteine für Missionsskripte), `STORY_LIST` (35 Missionen), `STORY_CHAPTERS` |
 | `js/story-k1.js` | Kapitel 1 „Zurück in Coburg“, Missionen 1–5 (seit v3.22.0); Handlung aller Kapitel in `STORY.md` |
 | `js/story-k2.js` | Kapitel 2 „Neue Möglichkeiten“, Missionen 6–10 (seit v3.23.0) |
+| `js/story-k6.js` | Kapitel 6 „Alles auf eine Karte“, Missionen 26–30 (seit v3.28.0): Grab und Rückblende, Fahndung als Folge, Jagdhütte im Landkreis (`navPt` statt `S.road`), Verbündete in beliebiger Reihenfolge, Kopieren unter Beobachtung |
 | `js/story-k5.js` | Kapitel 5 „Die Wahrheit“, Missionen 21–25 (seit v3.26.0): Baustelle Itzaue, heimlich fotografieren, Begleitschutz zu Fuß mit Spur, Max stellen |
 | `js/story-k4.js` | Kapitel 4 „Kein Zurück“, Missionen 16–20 (seit v3.25.0): Polizeiflucht als Ziel, Beschatter, zwei gleichzeitige Ziele, Rammen, Feuer |
 | `js/story-k3.js` | Kapitel 3 „Hinter den Kulissen“, Missionen 11–15 (seit v3.24.0): Verfolgung zu Fuß (`runPath`), Wachleute mit Lichtkegel (`Guards`), Verfolger-Autos (`hunters`) |
@@ -321,6 +322,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- 🟡 v3.28.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 6 „Alles auf eine Karte“ (Missionen 26–30)**, siehe 8.10. Damit sind 30 von 35 Missionen spielbar.
 - 🟡 v3.27.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Supersportwagen** – neuer Fahrzeugtyp `super`, fährt wirklich 250 km/h (0–100 in 1,9 s, 200 in 4,5 s, 250 nach ≈ 10 s, Begrenzer bei 250, bergab schneller). Eigene Schubkennlinie (`engineMax`, `thrustExp`) und weniger Luftwiderstand (`drag`) nur für diesen Typ, alle anderen Autos fahren unverändert. Aussehen: aus dem Sportwagen-Modell abgeleitet (7 % breiter, 4 % länger, über der Gürtellinie flacher) mit Heckflügel in Wagenfarbe und Frontsplitter; ohne Automodelle eine eigene flache Keilform. Im Autohaus für € 24.000, selten im Verkehr (1 % der Autos, klaubar), Verkaufswert bis € 4.800. Getestet: Messfahrt in der Vorschau, Fahrt mit Kollision (kein Durchtunneln), Mehrspieler-Test 27/27.
 - ✅ v3.26.0 (25.11.2026, auf `main`): **Story-Modus Kapitel 5 „Die Wahrheit“ (Missionen 21–25)**, siehe 8.9. Damit ist Phase 4 abgeschlossen (Missionen 6–25).
 - ✅ v3.25.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 4 „Kein Zurück“ (Missionen 16–20)**, siehe 8.8.
@@ -1490,7 +1492,9 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [x] v3.26.0 auf `main` übernommen und gepusht. Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
   Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
-- [ ] **Phase 5 als Nächstes:** Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
+- [x] Kapitel 6 (Missionen 26–30) umgesetzt (v3.28.0), dazu der Supersportwagen (v3.27.0).
+- [ ] v3.27.0 und v3.28.0 auf `main` übernehmen und pushen (nach Freigabe).
+- [ ] **Phase 5 weiter:** Kapitel 7 (Missionen 31–35), drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
 - [ ] Nebenmissionen (`STORY.md` 6): Kfz-Weber-Aufträge, Taxi, Bratwurst-Lieferdienst, Voss-Plakate sammeln.
 - [ ] Polish: Lippen-/Kopfbewegung der 3D-Figuren, eigene Innenräume (Voss-Villa, Redaktion), Story-Musik.
 
@@ -1858,3 +1862,24 @@ komplett, Kapitelabschluss (Kapitel 6 frei). Gefunden und behoben: Verfolger in 
 Sarah blieb an Ecken hängen (folgt jetzt Leons Spur und schließt bei > 12 m auf). Auf sehr kleinen Bildschirmen steht das
 Missionsziel jetzt oben (überlappte mit Untertiteln). Keine Konsolenfehler.
 Offen: Fotografieren-Takt in M21 und die Fußflucht in M23 mit echter Steuerung prüfen.
+
+### 8.10 Phase 5, Teil 1 – Kapitel 6 (v3.28.0)
+
+| # | Mission | Orte | Spielablauf | Entscheidung |
+|---|---|---|---|---|
+| 26 | Alte Rechnungen | Friedhof am Glockenberg → Brandruine | Grab (Requisite), Erwin, Rückblende mit Feuer, Dragan zu Fuß einholen | Polizei / Video / Rache |
+| 27 | Kein einfacher Ausweg | Villa → Kfz Weber | Voss’ Angebot, Haftbefehl (2 Sterne), Unterschlupf bei Tobi, Güls Hinweis | annehmen (€ 25.000) / mitschneiden / ablehnen |
+| 28 | Alles verändert sich | Waldweg bei Schloss Callenberg → Polizei bzw. Redaktion | Jagdhütte (Requisite) mit zwei Wachen, Kessler befreien, Verfolger abhängen | – |
+| 29 | Zusammenhalt | Lossaustraße → Kfz Weber, Albertsplatz, Markt, Polizei | Verbündete in beliebiger Reihenfolge (8 min), Plan als Dokument | Tobi umstimmen / ohne Tobi |
+| 30 | Der letzte Auftrag | Villa → Kfz Weber → Rathaus | Server-Kopie (14 s am Fenster), Voss’ Supersportwagen als Fluchtwagen, Kamera am Rathaus | – |
+
+Neue Merker: `dragan`, `draganTape`, `revenge`, `buyout`, `vossTape`, `refused27`, `kesslerSafe`, `allies`, `tobiOut`,
+`serverCopy`, `cameraSet`. Im Landkreis findet `S.road`/`parkCarNear` keine Straße: Kapitel 6 nimmt dort den nächsten
+Punkt im Navigationsnetz (`navPt`) und stellt Autos mit fester Ausrichtung ab.
+
+**Tests (25.11.2026, Vorschau, Spielzeit per `game.simulate`, Wege per Teleport abgekürzt):** Missionen 26–30
+komplett mit Kapitelabschluss (Kapitel 7 angekündigt, 30/35), dazu die Wege „Geld annehmen“ (+ € 25.000) und „Tobi sagt
+Nein“. Gefunden und behoben: Jagdhütte und Verfolger lagen im Landkreis neben jeder Straße (`navPt`); in M27 kam die
+Fahndung vor Sarahs Warnanruf (jetzt danach, Auto steht bereit); der zweite Wachmann an der Villa lief direkt am Fenster
+vorbei (jetzt in 7 m Abstand). Hütte und Wachen stehen auf dem Gelände. Keine Konsolenfehler, Mehrspieler-Test 27/27.
+Offen: Schleichen, Fußverfolgung und Polizeiflucht mit echter Steuerung prüfen.
