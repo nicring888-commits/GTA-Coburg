@@ -19,7 +19,7 @@ const STORY_CHAPTERS = [
   { n: 4, title: 'Kein Zurück', end: 'Leon war von Anfang an Teil eines größeren Plans.' },
   { n: 5, title: 'Die Wahrheit', end: 'Jemand aus dem engsten Kreis hat ihn hintergangen.' },
   { n: 6, title: 'Alles auf eine Karte', end: 'Der Plan geht nicht auf.' },
-  { n: 7, title: 'Das Ende einer Geschichte', end: '' },
+  { n: 7, title: 'Das Ende einer Geschichte', end: 'Jede Geschichte endet. Coburg bleibt.' },
 ];
 
 // Alle 35 Hauptmissionen (Titel, Kapitel); spielbar sind die, für die eine Missionsbeschreibung registriert ist

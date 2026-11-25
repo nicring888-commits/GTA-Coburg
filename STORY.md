@@ -2,8 +2,8 @@
 
 > Grundlage für alle Story-Missionen. Was hier steht, gilt für Dialoge, Orte, Entscheidungen und die drei Enden.
 > Umsetzungsstand und Technik: PROJEKT.md, Abschnitt 8. Die Missionen 1–5 sind spielbar (`js/story-k1.js`),
-> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0, Kapitel 5 (21–25, `js/story-k5.js`) seit v3.26.0, Kapitel 6 (26–30, `js/story-k6.js`) seit v3.28.0; alle weiteren sind hier ausgearbeitet und werden in
-> Phase 4/5 umgesetzt.
+> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0, Kapitel 5 (21–25, `js/story-k5.js`) seit v3.26.0, Kapitel 6 (26–30, `js/story-k6.js`) seit v3.28.0, Kapitel 7 (31–35, `js/story-k7.js`) mit den drei Enden seit v3.29.0.
+> Die ganze Geschichte ist spielbar.
 
 ## 1. Prämisse
 
@@ -71,6 +71,9 @@ und Missionsleistung; im Tagebuch (`J`) sichtbar.
 - **Ende C – Alles verloren:** Rache an Voss eskaliert, die Polizei sucht Leon, alle Brücken sind abgebrochen. Am
   Bahnhof – wo alles begann – steigt er in den Zug. Bedingung: Wahl „Rache“ oder bei A/B nicht erfüllte Bedingung
   und weniger als zwei Verbündete (Max, Sarah, Tobi ≥ 20).
+- **Umsetzung (`storyEnding` in `js/story-k7.js`):** Veröffentlichen → A, wenn (Sarah ≥ 20 und Beweise) oder ≥ 2
+  Verbündete, sonst C. Übernehmen → B, wenn Voss ≥ 0 oder `buyout`; sonst A mit ≥ 2 Verbündeten (Sarah hält Leon
+  zurück), sonst C. Rache → immer C. Die Auswahl zeigt als Hinweis, wohin die Wahl gerade führt.
 
 Nach jedem Ende: **freies Spielen** in Coburg mit allen Freischaltungen; Nebenmissionen bleiben, Story-Marker weg,
 Abspann und „Epilog“-Anrufe passend zum Ende.
@@ -216,14 +219,28 @@ Format: **Ort** · Ablauf · Erfolg · Belohnung · Übergang. Orte sind reale O
     Voss’ Supersportwagen als Fluchtwagen zu Kfz Weber (Autoalarm, wenig Schaden), Kamera am Rathaus (Nachtwächter).
     **Kapitelabschluss:** SMS von Voss: „Schöne Kamera, Herr Berger.“ – der Plan ist verraten.
 
-### Kapitel 7 – Das Ende einer Geschichte
+### Kapitel 7 – Das Ende einer Geschichte (spielbar seit v3.29.0)
 
-31. **Der Wendepunkt** · Stadtratssitzung im Rathaus: Voss hat vorgesorgt, der Plan fliegt auf, Sarah wird entführt.
-32. **Die Abrechnung** · Verfolgung durch den Landkreis bis zur Baustelle Itzaue, Konfrontation mit Voss.
-33. **Nichts bleibt geheim** · Livestream vom Marktplatz bzw. Datenübergabe – je nach Weg.
-34. **Letzte Entscheidungen** · Die finale Wahl am Ufer der Itz (Veröffentlichen / Übernehmen / Rache).
-35. **Zurück in die Zukunft** · Epilog je Ende (A Werkstatt-Eröffnung, B Penthouse-Ansprache, C Zug am Bahnhof),
-    Abspann, Freies Spiel.
+31. **Der Wendepunkt** · Rathaus → Güterbahnhof · Stadtratssitzung: Die Kamera ist weg, die Server-Kopie verschlüsselt,
+    Max (falls dabei) wird nicht angehört, die Abstimmung vertagt. Sarah wird vor dem Rathaus in einen Kleinbus gezerrt;
+    Verfolgung bis zum Güterbahnhof, dort nur noch ihr Handy. Voss: „Baustelle Itzaue. Mitternacht.“
+32. **Die Abrechnung** · Baustelle Itzaue → Landkreis Richtung Rödental · Übergabe mit Voss, Sarah und Dragan (bzw. Voss’
+    Mann, wenn Dragan in Haft ist). Entscheidung: Tobis Attrappe (`fakeStick`, nur mit Tobi) / Bluff mit Roth
+    (`rothBluff`) / unterschreiben (`signed`). Voss flieht im Geländewagen, Leon rammt ihn bis zum Stillstand und
+    bekommt den Original-Server (`serverOriginal`); Voss entkommt zu Fuß.
+33. **Nichts bleibt geheim** · Lossaustraße → Marktplatz · Lenz knackt den Code („Itzaue2030!“), Leon bringt den Server
+    in 3:20 zum Marktplatz, zwei Verfolger. Livestream mit allen Verbündeten: Überweisung „Abriss“, gefälschtes
+    Gutachten, Zahlungen an Stadtrat Brandt. Voss bittet um ein letztes Treffen am Itzufer.
+34. **Letzte Entscheidungen** · Itzufer an der Brandruine, Morgengrauen · Voss bietet seine Firma gegen ein Dementi.
+    Finale Wahl (`finalChoice`): Veröffentlichen / Übernehmen / Rache → `ending` (Bedingungen in Abschnitt 4).
+    A: Roth bzw. die Polizei nimmt Voss fest. B: Voss überschreibt alles (€ 250.000). C: Voss landet in der Itz,
+    Fahndung mit 2 Sternen.
+35. **Zurück in die Zukunft** · Epilog je Ende: **A** drei Monate später, Neueröffnung „Berger & Weber“ an der
+    Werkstatt mit allen Verbündeten, Voss neun Jahre, das Grundstück an der Itz gehört einer Bürgerstiftung. **B** ein
+    Jahr später, Penthouse am Glockenberg, „Berger-Park“, Tobi verkauft die Werkstatt, Sarahs Artikel „Der neue Voss“.
+    **C** zwei Tage später, Bahnhof Coburg, 5:47 Uhr, eine letzte Nachricht von Max bzw. Sarah, Abblende.
+    Danach **Abspann** (Mitwirkende, Quellen, eigene Statistik; Esc überspringt) und **freies Spiel**: keine Story-Marker,
+    Spielstand „Story abgeschlossen (Ende X)“, Epilog-SMS. „Neues Spiel“ startet die Geschichte für einen anderen Weg.
 
 ## 6. Nebenmissionen (Plan)
 

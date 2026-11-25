@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.28.0 „Story-Modus, Kapitel 6“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.29.0 „Story-Modus, Kapitel 7 und Enden“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.28.0) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -199,6 +199,7 @@ und müssen dort bleiben.
 | `js/story-core.js` | Story-Kern (seit v3.22.0): `Story` (StoryManager + MissionManager: Start/Fortsetzen/Ruhen, verfügbare Missionen, Marker betreten, Erfolg, Fehlschlag mit Checkpoint, Kapitelabschluss, Tagebuch `J`), `StorySave` (`save.story`), `Relationships`, `CharacterManager` (Story-Figuren aus `Player` mit Zubehör: Brille, Bart, Krawatte, Kettchen, Locken, Bob; Laufen, Blick, Gesten), `CutsceneManager` (Einstellungen und Fahrten, Kamera wird aus Wänden gezogen, Schuss/Gegenschuss), `WorldEventManager` (Marker, Ziele, Route über `RoadNav`, Voss-Plakat am Markt, Schild „Kfz Weber“, Kisten), `MissionRun` (Bausteine für Missionsskripte), `STORY_LIST` (35 Missionen), `STORY_CHAPTERS` |
 | `js/story-k1.js` | Kapitel 1 „Zurück in Coburg“, Missionen 1–5 (seit v3.22.0); Handlung aller Kapitel in `STORY.md` |
 | `js/story-k2.js` | Kapitel 2 „Neue Möglichkeiten“, Missionen 6–10 (seit v3.23.0) |
+| `js/story-k7.js` | Kapitel 7 „Das Ende einer Geschichte“, Missionen 31–35 (seit v3.29.0): Stadtratssitzung, Entführung, Livestream, finale Wahl (`storyEnding`), Epiloge A/B/C, Abspann (`#st-credits`) |
 | `js/story-k6.js` | Kapitel 6 „Alles auf eine Karte“, Missionen 26–30 (seit v3.28.0): Grab und Rückblende, Fahndung als Folge, Jagdhütte im Landkreis (`navPt` statt `S.road`), Verbündete in beliebiger Reihenfolge, Kopieren unter Beobachtung |
 | `js/story-k5.js` | Kapitel 5 „Die Wahrheit“, Missionen 21–25 (seit v3.26.0): Baustelle Itzaue, heimlich fotografieren, Begleitschutz zu Fuß mit Spur, Max stellen |
 | `js/story-k4.js` | Kapitel 4 „Kein Zurück“, Missionen 16–20 (seit v3.25.0): Polizeiflucht als Ziel, Beschatter, zwei gleichzeitige Ziele, Rammen, Feuer |
@@ -322,6 +323,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- 🟡 v3.29.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 7 „Das Ende einer Geschichte“ (Missionen 31–35)** mit den drei Enden, Abspann und freiem Spiel, siehe 8.11. **Die Story ist damit komplett (35/35).**
 - ✅ v3.28.0 (25.11.2026, auf `main`): **Story-Modus Kapitel 6 „Alles auf eine Karte“ (Missionen 26–30)**, siehe 8.10. Damit sind 30 von 35 Missionen spielbar.
 - ✅ v3.27.0 (25.11.2026, auf `main`): **Supersportwagen** – neuer Fahrzeugtyp `super`, fährt wirklich 250 km/h (0–100 in 1,9 s, 200 in 4,5 s, 250 nach ≈ 10 s, Begrenzer bei 250, bergab schneller). Eigene Schubkennlinie (`engineMax`, `thrustExp`) und weniger Luftwiderstand (`drag`) nur für diesen Typ, alle anderen Autos fahren unverändert. Aussehen: aus dem Sportwagen-Modell abgeleitet (7 % breiter, 4 % länger, über der Gürtellinie flacher) mit Heckflügel in Wagenfarbe und Frontsplitter; ohne Automodelle eine eigene flache Keilform. Im Autohaus für € 24.000, selten im Verkehr (1 % der Autos, klaubar), Verkaufswert bis € 4.800. Getestet: Messfahrt in der Vorschau, Fahrt mit Kollision (kein Durchtunneln), Mehrspieler-Test 27/27.
 - ✅ v3.26.0 (25.11.2026, auf `main`): **Story-Modus Kapitel 5 „Die Wahrheit“ (Missionen 21–25)**, siehe 8.9. Damit ist Phase 4 abgeschlossen (Missionen 6–25).
@@ -1494,7 +1496,9 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
 - [x] Kapitel 6 (Missionen 26–30) umgesetzt (v3.28.0), dazu der Supersportwagen (v3.27.0).
 - [x] v3.27.0 und v3.28.0 auf `main` übernommen und gepusht.
-- [ ] **Phase 5 weiter:** Kapitel 7 (Missionen 31–35), drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
+- [x] Kapitel 7 (Missionen 31–35), drei Enden, Abspann, freies Spiel (v3.29.0) – Phase 5 fertig, Story komplett.
+- [ ] v3.29.0 auf `main` übernehmen und pushen (nach Freigabe).
+- [ ] Ganze Story einmal mit echter Steuerung durchspielen (Schleichen, Fußverfolgungen, Polizeiflucht, Rammen, Tempo der Verfolgungen).
 - [ ] Nebenmissionen (`STORY.md` 6): Kfz-Weber-Aufträge, Taxi, Bratwurst-Lieferdienst, Voss-Plakate sammeln.
 - [ ] Polish: Lippen-/Kopfbewegung der 3D-Figuren, eigene Innenräume (Voss-Villa, Redaktion), Story-Musik.
 
@@ -1883,3 +1887,25 @@ Nein“. Gefunden und behoben: Jagdhütte und Verfolger lagen im Landkreis neben
 Fahndung vor Sarahs Warnanruf (jetzt danach, Auto steht bereit); der zweite Wachmann an der Villa lief direkt am Fenster
 vorbei (jetzt in 7 m Abstand). Hütte und Wachen stehen auf dem Gelände. Keine Konsolenfehler, Mehrspieler-Test 27/27.
 Offen: Schleichen, Fußverfolgung und Polizeiflucht mit echter Steuerung prüfen.
+
+### 8.11 Phase 5, Teil 2 – Kapitel 7, Enden, Abspann (v3.29.0)
+
+| # | Mission | Orte | Spielablauf | Entscheidung |
+|---|---|---|---|---|
+| 31 | Der Wendepunkt | Rathaus → Güterbahnhof | Sitzung (Kamerafahrt, Dialog), Sarah entführt, Kleinbus verfolgen, Handy finden | – |
+| 32 | Die Abrechnung | Baustelle Itzaue → Landkreis | Übergabe, Voss’ Geländewagen rammen (mit Verfolger), Original-Server | Attrappe / Bluff / unterschreiben |
+| 33 | Nichts bleibt geheim | Lossaustraße → Marktplatz | Code knacken, Server in 3:20 zum Markt (zwei Verfolger), Livestream mit allen Verbündeten | – |
+| 34 | Letzte Entscheidungen | Itzufer an der Brandruine | Voss’ letztes Angebot, Folgen je Ende (Festnahme / Übergabe / Fahndung) | Veröffentlichen / Übernehmen / Rache |
+| 35 | Zurück in die Zukunft | A Kfz Weber · B Glockenberg · C Bahnhof | Epilog, Abspann, freies Spiel | – |
+
+**Enden:** `storyEnding(S, wahl)` (Bedingungen in STORY.md 4) setzt `flags.ending`; nach dem Epilog steht es in
+`save.story.ending`, `SaveSlots.summary` zeigt „Story abgeschlossen (Ende X)“. Danach gibt es keine Story-Marker mehr
+(alle Missionen erledigt), das Spiel läuft frei weiter; nach dem Epilog kommen ein Hinweis und eine Epilog-SMS.
+**Abspann:** eigenes Overlay `#st-credits` (css/story.css), rollt ≈ 34 s, Esc/Enter/Leertaste/Klick überspringt,
+mit Quellenangaben und eigener Statistik. Kapitel 7 hat jetzt einen Abschlusssatz („Jede Geschichte endet. Coburg bleibt.“).
+
+**Tests (25.11.2026, Vorschau, Spielzeit per `game.simulate`, Wege per Teleport abgekürzt):** Missionen 31–35 komplett
+mit Ende A (Abspann, „Story abgeschlossen (Ende A)“, keine Marker), dazu Ende B (+ € 250.000, Epilog Glockenberg) und
+Ende C (Fahndung, Epilog Bahnhof) aus einem gesicherten Stand nach M33. `storyEnding` für vier Konstellationen geprüft
+(drei Verbündete / allein / allein mit Sarah ≥ 25 / allein mit Geld). Keine Konsolenfehler, Mehrspieler-Test 27/27.
+Offen: die Verfolgungen (Kleinbus, Voss’ Geländewagen) und den Zeitdruck in M33 mit echter Steuerung prüfen.
