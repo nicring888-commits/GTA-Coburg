@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.26.0 „Story-Modus, Kapitel 5“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.25.0) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.26.0 „Story-Modus, Kapitel 5“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -321,7 +321,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🟡 v3.26.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 5 „Die Wahrheit“ (Missionen 21–25)**, siehe 8.9. Damit ist Phase 4 abgeschlossen (Missionen 6–25).
+- ✅ v3.26.0 (25.11.2026, auf `main`): **Story-Modus Kapitel 5 „Die Wahrheit“ (Missionen 21–25)**, siehe 8.9. Damit ist Phase 4 abgeschlossen (Missionen 6–25).
 - ✅ v3.25.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 4 „Kein Zurück“ (Missionen 16–20)**, siehe 8.8.
 - ✅ v3.24.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 3 „Hinter den Kulissen“ (Missionen 11–15)**, siehe 8.7.
 - ✅ v3.23.1 (25.11.2026, `main`): **Fehler behoben: rechte Bildhälfte bzw. rechtes Viertel schwarz** (gemeldet: beim
@@ -1486,7 +1486,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [x] Kapitel 4 (Missionen 16–20) umgesetzt (v3.25.0).
 - [x] v3.25.0 auf `main` übernommen und gepusht (25.11.2026).
 - [x] Kapitel 5 (Missionen 21–25) umgesetzt (v3.26.0) – Phase 4 fertig.
-- [ ] v3.26.0 auf `main` übernehmen und pushen (nach Freigabe). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
+- [x] v3.26.0 auf `main` übernommen und gepusht. Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
   Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
 - [ ] **Phase 5 als Nächstes:** Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
