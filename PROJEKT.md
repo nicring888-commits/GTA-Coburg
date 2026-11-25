@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.28.0 „Story-Modus, Kapitel 6“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.26.0) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.28.0 „Story-Modus, Kapitel 6“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -322,8 +322,8 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
-- 🟡 v3.28.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 6 „Alles auf eine Karte“ (Missionen 26–30)**, siehe 8.10. Damit sind 30 von 35 Missionen spielbar.
-- 🟡 v3.27.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Supersportwagen** – neuer Fahrzeugtyp `super`, fährt wirklich 250 km/h (0–100 in 1,9 s, 200 in 4,5 s, 250 nach ≈ 10 s, Begrenzer bei 250, bergab schneller). Eigene Schubkennlinie (`engineMax`, `thrustExp`) und weniger Luftwiderstand (`drag`) nur für diesen Typ, alle anderen Autos fahren unverändert. Aussehen: aus dem Sportwagen-Modell abgeleitet (7 % breiter, 4 % länger, über der Gürtellinie flacher) mit Heckflügel in Wagenfarbe und Frontsplitter; ohne Automodelle eine eigene flache Keilform. Im Autohaus für € 24.000, selten im Verkehr (1 % der Autos, klaubar), Verkaufswert bis € 4.800. Getestet: Messfahrt in der Vorschau, Fahrt mit Kollision (kein Durchtunneln), Mehrspieler-Test 27/27.
+- ✅ v3.28.0 (25.11.2026, auf `main`): **Story-Modus Kapitel 6 „Alles auf eine Karte“ (Missionen 26–30)**, siehe 8.10. Damit sind 30 von 35 Missionen spielbar.
+- ✅ v3.27.0 (25.11.2026, auf `main`): **Supersportwagen** – neuer Fahrzeugtyp `super`, fährt wirklich 250 km/h (0–100 in 1,9 s, 200 in 4,5 s, 250 nach ≈ 10 s, Begrenzer bei 250, bergab schneller). Eigene Schubkennlinie (`engineMax`, `thrustExp`) und weniger Luftwiderstand (`drag`) nur für diesen Typ, alle anderen Autos fahren unverändert. Aussehen: aus dem Sportwagen-Modell abgeleitet (7 % breiter, 4 % länger, über der Gürtellinie flacher) mit Heckflügel in Wagenfarbe und Frontsplitter; ohne Automodelle eine eigene flache Keilform. Im Autohaus für € 24.000, selten im Verkehr (1 % der Autos, klaubar), Verkaufswert bis € 4.800. Getestet: Messfahrt in der Vorschau, Fahrt mit Kollision (kein Durchtunneln), Mehrspieler-Test 27/27.
 - ✅ v3.26.0 (25.11.2026, auf `main`): **Story-Modus Kapitel 5 „Die Wahrheit“ (Missionen 21–25)**, siehe 8.9. Damit ist Phase 4 abgeschlossen (Missionen 6–25).
 - ✅ v3.25.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 4 „Kein Zurück“ (Missionen 16–20)**, siehe 8.8.
 - ✅ v3.24.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 3 „Hinter den Kulissen“ (Missionen 11–15)**, siehe 8.7.
@@ -1493,7 +1493,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
   Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
 - [x] Kapitel 6 (Missionen 26–30) umgesetzt (v3.28.0), dazu der Supersportwagen (v3.27.0).
-- [ ] v3.27.0 und v3.28.0 auf `main` übernehmen und pushen (nach Freigabe).
+- [x] v3.27.0 und v3.28.0 auf `main` übernommen und gepusht.
 - [ ] **Phase 5 weiter:** Kapitel 7 (Missionen 31–35), drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
 - [ ] Nebenmissionen (`STORY.md` 6): Kfz-Weber-Aufträge, Taxi, Bratwurst-Lieferdienst, Voss-Plakate sammeln.
 - [ ] Polish: Lippen-/Kopfbewegung der 3D-Figuren, eigene Innenräume (Voss-Villa, Redaktion), Story-Musik.
