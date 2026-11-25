@@ -149,7 +149,7 @@ und müssen dort bleiben.
 
 | Datei | Aufgabe |
 |---|---|
-| `index.html`, `css/style.css` | HUD, Stadtplan, Hilfe; Gerüst von Ladebildschirm und Hauptmenü |
+| `index.html`, `css/style.css` | HUD, Stadtplan, Hilfe; Gerüst von Ladebildschirm und Hauptmenü; Symbole und `manifest.webmanifest` für den Home-Bildschirm (`assets/icons/`) |
 | `css/menu.css` | Hauptmenü, Pausenmenü, Ladebildschirm, Einstellungen, Online-Fenster, Dialoge (seit v3.21.0). Logo und Schriften: Anton, Cinzel, Inter (Google Fonts, Ersatzschriften eingetragen) |
 | `js/loadscreen.js` | Ladebildschirm (seit v3.21.0, läuft vor `boot.js`): wechselnde Standbilder aus der Spielwelt (`assets/menu/ls-*.jpg`, 1440 × 810, zusammen 0,9 MB) mit langsamer Kamerabewegung, Ortsname, wechselnde Tipps, Fortschritt. `LoadScreen.set(text, f)` mit echtem Anteil oder `null` = unbestimmte Animation; `show(titel)`, `hide(cb)` |
 | `js/settings.js` | Einstellungen (seit v3.21.0, `localStorage` `gta-coburg-settings`): Audio (Gesamt, Effekte, Umgebung, Menü, stumm im Hintergrund), Steuerung (Mausempfindlichkeit, Y umkehren, Sichtfeld, Tastenbelegung als Übersetzung eigener Tasten in die Standardcodes: `Settings.mapKey`), Anzeige (Renderauflösung, dynamische Auflösung), Allgemein. Grafikstufe, Nachbearbeitung und Unschärfe behalten ihre alten Schlüssel |
@@ -316,6 +316,19 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.22.1 (25.11.2026): **App-Symbol für den Home-Bildschirm.** Wer die Seite zum Home-Bildschirm hinzufügt
+  (iPhone: Teilen → „Zum Home-Bildschirm“, Android: „App installieren“), bekommt das GTA-Coburg-Bild (Veste, Hubschrauber,
+  Logo) als Symbol und „GTA Coburg“ als Namen.
+  - `assets/icons/`: `apple-touch-icon.png` (180 × 180), `icon-192.png`, `icon-512.png`, `favicon-32.png`, aus dem Bild des
+    Nutzers (1254 × 1254, die schwarzen abgerundeten Ecken sind weggeschnitten, 80 px je Seite; iOS und Android runden das
+    Symbol selbst, ohne Beschnitt würden schwarze Ecken sichtbar).
+  - `manifest.webmanifest` (Name, Kurzname, Vollbild, Farbe `#0d1015`, Symbole 192/512), in `index.html` verlinkt zusammen
+    mit `apple-touch-icon`, `apple-mobile-web-app-title`, Statusleiste und `theme-color`; `server.js` liefert
+    `.webmanifest` als `application/manifest+json`.
+  - Getestet: Manifest ist gültiges JSON, alle Dateien kommen mit richtigem Typ vom Server. ⚠️ Nicht auf einem echten
+    iPhone/Android getestet. Bereits hinzugefügte Verknüpfungen behalten ihr altes Symbol: entfernen und neu hinzufügen.
+  - Nicht gemacht: „maskable“-Symbol für Android (das Logo reicht bis an den Rand und würde im runden Ausschnitt abgeschnitten).
 
 - 🟡 v3.22.0 (24.11.2026, Branch `story/zurueck-in-der-heimat`, nicht gepusht): **Story-Modus „Zurück in der Heimat“, Phasen 1–3.**
   Details, Technik, Tests und offene Aufgaben in Abschnitt 8, Handlung in `STORY.md`.
