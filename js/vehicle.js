@@ -1,4 +1,4 @@
-// Autos: Modelle (Pkw, Kleinwagen, Kombi, Geländewagen, Kleinbus, Pick-up, Cabrio, Sportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik (haftet, Driften mit Handbremse),
+// Autos: Modelle (Pkw, Kleinwagen, Kombi, Geländewagen, Kleinbus, Pick-up, Cabrio, Sportwagen, Supersportwagen, Taxi, Polizei) mit gerundeter Karosserie, Glas, Felgen und Lack mit Klarlack, Arcade-Fahrphysik (haftet, Driften mit Handbremse),
 // Schaden bis zum Ausbrennen.
 'use strict';
 
@@ -24,10 +24,13 @@ const VEHICLE_KINDS = {
   pickup: { name: 'Pick-up', maxSpeed: 45, accel: 8.5, grip: 9.5, armor: 1.3, value: 750 },
   suv: { name: 'Geländewagen', maxSpeed: 47, accel: 9.5, grip: 10.5, armor: 1.45, value: 950 },
   cabrio: { name: 'Cabrio', maxSpeed: 54, accel: 11, grip: 11, armor: 0.9, value: 1100 },
+  // Supersportwagen (seit v3.27.0): erreicht wirklich 250 km/h (maxSpeed = Anzeige). Eigene Kennlinie: Schub fällt erst
+  // kurz vor engineMax ab (thrustExp), wenig Luftwiderstand (drag statt 0.0016) → 0–100 in ≈ 2 s, 250 km/h nach ≈ 10 s
+  super: { name: 'Supersportwagen', maxSpeed: 250 / 3.6, engineMax: 75, thrustExp: 3, drag: 0.0005, accel: 15, grip: 13, armor: 0.8, value: 4800 },
   bus: { name: 'Stadtbus', maxSpeed: 22, accel: 3, grip: 8, armor: 3, value: 0 },   // nur im Linienverkehr (js/bus.js)
 };
 // Lackfarben je Typ (Händler, Lackiererei, Verkehr)
-function kindPalette(kind) { return kind === 'sport' || kind === 'cabrio' ? SPORT_COLORS : CAR_COLORS; }
+function kindPalette(kind) { return kind === 'sport' || kind === 'cabrio' || kind === 'super' ? SPORT_COLORS : CAR_COLORS; }
 
 // ---------------- Modelle ----------------
 // Karosserie als Seitenprofil (Länge × Höhe) mit Radkästen, über die Breite extrudiert und an den Kanten gerundet.
@@ -46,6 +49,14 @@ const CAR_SHAPES = {
     roof: [[-0.2, 1.14], [-0.25, 1.21], [-1.0, 1.22], [-1.1, 1.13]],
     pillars: [[0.64, 0.8, -0.25, 1.18], [-1.0, 1.19, -1.75, 0.85]], bPillar: null,
     head: [2.12, 0.58], tail: [-2.17, 0.74], cabinW: 1.42, mirror: [0.5, 0.86], roofY: 1.22,
+  },
+  // Supersportwagen: flacher Keil, Kabine weit hinten, großer Heckflügel (Vehicle/carSVG)
+  super: {
+    body: [[-2.2, 0.26], [2.2, 0.26], [2.3, 0.36], [2.27, 0.47], [1.9, 0.58], [0.8, 0.7], [0.5, 0.72], [-1.6, 0.78], [-2.15, 0.8], [-2.26, 0.63], [-2.25, 0.36]],
+    cabin: [[0.52, 0.68], [-0.35, 1.04], [-1.0, 1.05], [-1.85, 0.78], [-1.8, 0.7]],
+    roof: [[-0.3, 1.01], [-0.35, 1.08], [-1.0, 1.09], [-1.1, 1.0]],
+    pillars: [[0.52, 0.7, -0.35, 1.05], [-1.0, 1.06, -1.85, 0.78]], bPillar: null,
+    head: [2.22, 0.5], tail: [-2.26, 0.7], cabinW: 1.4, mirror: [0.4, 0.78], roofY: 1.09,
   },
   kleinwagen: {
     body: [[-1.85, 0.3], [1.85, 0.3], [1.92, 0.5], [1.9, 0.72], [1.75, 0.84], [1.05, 0.94], [0.85, 0.98], [-1.6, 1.0], [-1.88, 0.96], [-1.94, 0.8], [-1.92, 0.45]],
@@ -284,7 +295,7 @@ function carMaterials() {
 const CarModels = {
   KINDS: ['car', 'kleinwagen', 'kombi', 'van', 'pickup', 'suv', 'cabrio', 'sport', 'police', 'taxi', 'bus'],
   // Ziellänge je Typ (m): die Modelle werden um höchstens ±15 % angepasst, Fahrphysik und Kollision bleiben
-  LENGTH: { car: 4.45, kleinwagen: 3.65, kombi: 4.6, van: 4.7, pickup: 5.0, suv: 4.7, cabrio: 4.45, sport: 4.35, police: 4.75, taxi: 4.75, bus: 11.4 },
+  LENGTH: { car: 4.45, kleinwagen: 3.65, kombi: 4.6, van: 4.7, pickup: 5.0, suv: 4.7, cabrio: 4.45, sport: 4.35, super: 4.5, police: 4.75, taxi: 4.75, bus: 11.4 },
   data: {}, headMats: [],
   on() {
     return !!window.QUALITY && /build\/three\.module\.js$/.test(window.THREE_SRC || '') &&
@@ -297,9 +308,33 @@ const CarModels = {
     const mod = await import(base + 'examples/jsm/loaders/GLTFLoader.js');
     const L = new mod.GLTFLoader();
     await Promise.all(this.KINDS.map(k => L.loadAsync('assets/cars/' + k + '.glb')
-      .then(g => { try { this.prepare(k, g.scene); } catch (e) { console.warn('Automodell ' + k + ':', e.message); } },
+      .then(g => {
+        try { this.prepare(k, g.scene); } catch (e) { console.warn('Automodell ' + k + ':', e.message); }
+        if (k === 'sport') try { this.prepare('super', this.deriveSuper(g.scene)); } catch (e) { console.warn('Automodell super:', e.message); }
+      },
         e => console.warn('Automodell fehlt:', k, e.message))));
-    console.info('Automodelle:', Object.keys(this.data).length + '/' + this.KINDS.length);
+    console.info('Automodelle:', Object.keys(this.data).length + '/' + (this.KINDS.length + 1));
+  },
+  // Supersportwagen (seit v3.27.0) aus dem Sportwagen abgeleitet: breiter, länger, über der Gürtellinie flacher
+  // (Radkästen und Räder bleiben), dazu Heckflügel und Frontsplitter in buildModel
+  deriveSuper(sc) {
+    const c = sc.clone(true);
+    let root = null;
+    c.traverse(o => { if (!root && o.userData && o.userData.wheels) root = o; });
+    if (!root) throw new Error('ohne Maße');
+    const u = root.userData = JSON.parse(JSON.stringify(root.userData));
+    const W = 1.07, L = 1.04, k = 0.7, low = y => y < k ? y : k + (y - k) * 0.78;
+    for (const n of ['paint', 'glass', 'head', 'tail']) {
+      const m = root.getObjectByName(n);
+      if (!m) continue;
+      const g = m.geometry = m.geometry.clone(), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * W, low(p.getY(i)), p.getZ(i) * L);
+      p.needsUpdate = true; g.computeBoundingBox(); g.computeBoundingSphere();
+    }
+    u.wheels = u.wheels.map(([x, y, z]) => [x * W, y, z * L]);
+    u.width *= W; u.length *= L; u.zMax *= L; u.zMin *= L; u.height = low(u.height);
+    u.superWing = true;
+    return c;
   },
   // Lackmaske: Grundfarbe aus der Textur, in Lackflächen (Maske) mal Lackfarbe bzw. Instanzfarbe
   // (Maske als eigene Textur, damit es auch mit dem Lambert-Material der Stufe „leicht“ geht; gleiche UV wie map)
@@ -404,7 +439,7 @@ class Vehicle {
     const add = (geo, mat, x, y, z, shadow = true) => {
       const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = shadow; g.add(m); return m;
     };
-    const sport = kind === 'sport', top = G.roofY;
+    const sport = kind === 'sport' || kind === 'super', top = G.roofY;
     add(G.paint, paint, 0, 0, 0);
     this.glassMesh = add(G.glass, M.glass, 0, 0, 0);
     add(G.trim, M.trim, 0, 0, 0, false);
@@ -419,8 +454,9 @@ class Vehicle {
     const blob = add(G.blob, M.blob, 0, 0.05, 0, false);
     blob.userData.keep = true; blob.renderOrder = 1;
     if (sport) {
-      add(G.spoiler, paint, 0, 1.06, -1.98);
-      add(G.strut, M.trim, 0.55, 0.94, -1.98, false); add(G.strut, M.trim, -0.55, 0.94, -1.98, false);
+      const wy = kind === 'super' ? 1.12 : 1.06, wz = kind === 'super' ? -2.02 : -1.98;
+      add(G.spoiler, paint, 0, wy, wz);
+      add(G.strut, M.trim, 0.55, wy - 0.12, wz, false); add(G.strut, M.trim, -0.55, wy - 0.12, wz, false);
     }
     this.lamps = null;
     if (kind === 'police') {
@@ -491,6 +527,13 @@ class Vehicle {
       for (const sx of [1, -1]) { const sd = add(G0.side, M.policeSide, false); sd.position.set(sx * (D.sideX + 0.012), D.sideY, -0.05); sd.rotation.y = sx * Math.PI / 2; sd.scale.set(0.85, 1, 1); }
     }
     if (this.kind === 'taxi') { const sg = add(G0.sign, M.taxiSign, false); sg.position.set(0, u.height - 0.08, D.topZ); sg.scale.set(1.15, 1, 1.15); }
+    if (u.superWing) {
+      // Heckflügel (Lackfarbe) auf zwei Stützen, Frontsplitter dunkel
+      const tb = D.tail ? D.tail.boundingBox : null, ty = tb ? tb.max.y : u.height * 0.75, wz = u.zMin + 0.32;
+      const wing = add(G0.spoiler, this.paint); wing.position.set(0, ty + 0.3, wz); wing.scale.set(u.width / 1.75, 1.2, 1.25); wing.rotation.x = -0.08;
+      for (const x of [0.5, -0.5]) { const st = add(G0.strut, M.trim, false); st.position.set(x, ty + 0.17, wz); st.scale.set(1, 1.4, 1); }
+      const sp = add(G0.spoiler, M.trim, false); sp.position.set(0, 0.2, u.zMax - 0.12); sp.scale.set(u.width / 1.7, 0.8, 0.9);
+    }
     this.wheels = []; this.frontPivots = [];
     for (const [x, y, z] of u.wheels) {
       const pivot = new THREE.Group(), w = new THREE.Group(), hold = new THREE.Group();
@@ -530,14 +573,18 @@ class Vehicle {
     const power = this.health < 25 ? 0.6 : 1;
 
     let a = 0;
-    if (thr > 0) a = vf < -0.5 ? CAR.brake * thr : S.accel * power * thr * Math.max(0, 1 - vf / S.maxSpeed) * (hb ? 0.4 : 1);
+    // Schub fällt zur Höchstgeschwindigkeit hin ab (linear; mit thrustExp erst spät, Supersportwagen)
+    const vTop = S.engineMax || S.maxSpeed, pull = S.thrustExp ? 1 - Math.pow(Math.max(0, vf) / vTop, S.thrustExp) : 1 - vf / vTop;
+    if (thr > 0) a = vf < -0.5 ? CAR.brake * thr : S.accel * power * thr * Math.max(0, pull) * (hb ? 0.4 : 1);
     else if (thr < 0) a = vf > 0.5 ? CAR.brake * thr : (vf > -CAR.reverseMax ? 5 * thr : 0);
-    a -= 0.0016 * vf * Math.abs(vf) + Math.sign(vf) * (thr === 0 ? 0.9 : 0.25);
+    a -= (S.drag || 0.0016) * vf * Math.abs(vf) + Math.sign(vf) * (thr === 0 ? 0.9 : 0.25);
     if (hb) a -= Math.sign(vf) * 5.5;
     // Steigung
     a -= 9.81 * Math.sin(this.pitch) * 0.85;
     const before = vf;
     vf += a * dt;
+    // Begrenzer (Supersportwagen): der Motor schiebt nicht über maxSpeed, bergab geht es trotzdem schneller
+    if (S.engineMax && thr > 0 && vf > S.maxSpeed && vf > before && this.pitch > -0.04) vf = Math.max(S.maxSpeed, before);
     if (thr === 0 && Math.sign(vf) !== Math.sign(before) && Math.abs(this.pitch) < 0.05) vf = 0;
 
     // Arcade-Lenkung: schnell und direkt, bei hohem Tempo etwas weniger Einschlag (ruhiger geradeaus)

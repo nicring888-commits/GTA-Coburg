@@ -27,6 +27,7 @@ const SHOP_MODELS = [
   { kind: 'suv', title: 'Geländewagen', tag: 'Hoch, fast so robust wie ein Streifenwagen, mit Dachreling', price: 5600, colors: CAR_COLORS },
   { kind: 'cabrio', title: 'Cabrio', tag: 'Offen, 194 km/h, für die Sonne über der Veste', price: 6900, colors: SPORT_COLORS },
   { kind: 'sport', title: 'Sportwagen', tag: 'Spoiler, 216 km/h, zieht wie verrückt', price: 9500, colors: SPORT_COLORS },
+  { kind: 'super', title: 'Supersportwagen', tag: 'Heckflügel, 250 km/h, 0–100 in 2 Sekunden', price: 24000, colors: SPORT_COLORS },
 ];
 const GARAGE_SLOTS = 8;
 const PROP_COLOR = { flat: '#b57cff', home: '#e9b949', shop: '#2ed3c6' };
@@ -46,6 +47,7 @@ function carSVG(kind, color) {
   // flache Anbauteile von der Seite (Dachreling, Bordwände; Sitzlehnen des Cabrios nicht)
   for (const [w, h, d, x, y, z] of S.extra || []) if (x >= 0 && h < 0.3) parts += box(z - d / 2, y - h / 2, z + d / 2, y + h / 2, '#222');
   if (kind === 'sport') parts += box(-2.18, 1.03, -1.78, 1.09, color, ' stroke="#0005"') + box(-2.0, 0.86, -1.94, 1.03, '#222');
+  if (kind === 'super') parts += box(-2.24, 1.09, -1.8, 1.16, color, ' stroke="#0005"') + box(-2.05, 0.8, -1.99, 1.09, '#222') + box(1.9, 0.2, 2.32, 0.25, '#222');
   if (kind === 'taxi') parts += '<rect x="' + X(-0.78) + '" y="' + (Y(S.roofY) - 8) + '" width="26" height="8" rx="2" fill="#f6d23a" stroke="#0006"/><text x="' + X(-0.45) + '" y="' + (Y(S.roofY) - 1.5) + '" font-size="6" font-weight="800" text-anchor="middle" fill="#111">TAXI</text>';
   const [hz, hy] = S.head, [tz, ty] = S.tail;
   parts += box(hz - 0.2, hy - 0.06, hz + 0.05, hy + 0.06, '#fff6dd') + box(tz - 0.02, ty - 0.06, tz + 0.15, ty + 0.06, '#c0392b');
@@ -338,7 +340,7 @@ class Property {
         return `<div class="mn-car">
           <div class="mn-car-pic">${carSVG(m.kind, col)}</div>
           <div class="mn-car-name">${m.title}</div><div class="mn-car-tag">${m.tag}</div>
-          ${bar('Tempo', spec.maxSpeed / 60)}${bar('Beschleunigung', spec.accel / 12.5)}${bar('Robustheit', spec.armor / 1.5)}
+          ${bar('Tempo', spec.maxSpeed / 70)}${bar('Beschleunigung', spec.accel / 12.5)}${bar('Robustheit', spec.armor / 1.5)}
           <div class="mn-swatches">${m.colors.map(c => `<button class="sw${c === col ? ' on' : ''}" style="background:${c}" data-act="color" data-kind="${m.kind}" data-color="${c}" aria-label="Farbe"></button>`).join('')}</div>
           <div class="mn-car-price">${euro(m.price)} <small>${Math.round(spec.maxSpeed * 3.6)} km/h</small></div>
           <button class="mn-btn primary" data-act="buy" data-kind="${m.kind}" ${short > 0 || full ? 'disabled' : ''}>${short > 0 ? 'Fehlen ' + euro(short) : 'Kaufen'}</button>
