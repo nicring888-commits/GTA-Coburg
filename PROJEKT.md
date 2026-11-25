@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.25.0 „Story-Modus, Kapitel 4“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.26.0 „Story-Modus, Kapitel 5“ (25.11.2026, Branch `story/zurueck-in-der-heimat`; auf `main` und live ist v3.25.0) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -199,6 +199,7 @@ und müssen dort bleiben.
 | `js/story-core.js` | Story-Kern (seit v3.22.0): `Story` (StoryManager + MissionManager: Start/Fortsetzen/Ruhen, verfügbare Missionen, Marker betreten, Erfolg, Fehlschlag mit Checkpoint, Kapitelabschluss, Tagebuch `J`), `StorySave` (`save.story`), `Relationships`, `CharacterManager` (Story-Figuren aus `Player` mit Zubehör: Brille, Bart, Krawatte, Kettchen, Locken, Bob; Laufen, Blick, Gesten), `CutsceneManager` (Einstellungen und Fahrten, Kamera wird aus Wänden gezogen, Schuss/Gegenschuss), `WorldEventManager` (Marker, Ziele, Route über `RoadNav`, Voss-Plakat am Markt, Schild „Kfz Weber“, Kisten), `MissionRun` (Bausteine für Missionsskripte), `STORY_LIST` (35 Missionen), `STORY_CHAPTERS` |
 | `js/story-k1.js` | Kapitel 1 „Zurück in Coburg“, Missionen 1–5 (seit v3.22.0); Handlung aller Kapitel in `STORY.md` |
 | `js/story-k2.js` | Kapitel 2 „Neue Möglichkeiten“, Missionen 6–10 (seit v3.23.0) |
+| `js/story-k5.js` | Kapitel 5 „Die Wahrheit“, Missionen 21–25 (seit v3.26.0): Baustelle Itzaue, heimlich fotografieren, Begleitschutz zu Fuß mit Spur, Max stellen |
 | `js/story-k4.js` | Kapitel 4 „Kein Zurück“, Missionen 16–20 (seit v3.25.0): Polizeiflucht als Ziel, Beschatter, zwei gleichzeitige Ziele, Rammen, Feuer |
 | `js/story-k3.js` | Kapitel 3 „Hinter den Kulissen“, Missionen 11–15 (seit v3.24.0): Verfolgung zu Fuß (`runPath`), Wachleute mit Lichtkegel (`Guards`), Verfolger-Autos (`hunters`) |
 | `css/story.css` | Kinobalken, Dialogfenster, Untertitel, Missions-HUD, Handy, Titelkarten, Ergebnis, Dokument, Tagebuch (seit v3.22.0) |
@@ -320,6 +321,7 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 
 ## 6. Stand
 
+- 🟡 v3.26.0 (25.11.2026, Branch `story/zurueck-in-der-heimat`): **Story-Modus Kapitel 5 „Die Wahrheit“ (Missionen 21–25)**, siehe 8.9. Damit ist Phase 4 abgeschlossen (Missionen 6–25).
 - ✅ v3.25.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 4 „Kein Zurück“ (Missionen 16–20)**, siehe 8.8.
 - ✅ v3.24.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 3 „Hinter den Kulissen“ (Missionen 11–15)**, siehe 8.7.
 - ✅ v3.23.1 (25.11.2026, `main`): **Fehler behoben: rechte Bildhälfte bzw. rechtes Viertel schwarz** (gemeldet: beim
@@ -1483,10 +1485,11 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 - [x] v3.24.0 auf `main` übernommen und gepusht (25.11.2026).
 - [x] Kapitel 4 (Missionen 16–20) umgesetzt (v3.25.0).
 - [x] v3.25.0 auf `main` übernommen und gepusht (25.11.2026).
-- [ ] Phase 4 weiter: Missionen 21–25 (Kapitel 5). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
+- [x] Kapitel 5 (Missionen 21–25) umgesetzt (v3.26.0) – Phase 4 fertig.
+- [ ] v3.26.0 auf `main` übernehmen und pushen (nach Freigabe). Vorhanden seit v3.23.0: KI fährt Story-Autos (`autoDrive`),
   Beschatten, Prüfpunkte, Belauschen; noch nötig: Verfolgung zu Fuß (Sarah, M11), Schleichen mit Sichtkegeln (M14),
   Fotografieren, Polizeiflucht als Missionsziel (M16), Wahl zwischen zwei Markern (M19).
-- [ ] Phase 5: Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
+- [ ] **Phase 5 als Nächstes:** Missionen 26–35, drei Enden (Bedingungen in `STORY.md` 4), Abspann, freies Spiel nach der Story.
 - [ ] Nebenmissionen (`STORY.md` 6): Kfz-Weber-Aufträge, Taxi, Bratwurst-Lieferdienst, Voss-Plakate sammeln.
 - [ ] Polish: Lippen-/Kopfbewegung der 3D-Figuren, eigene Innenräume (Voss-Villa, Redaktion), Story-Musik.
 
@@ -1838,3 +1841,19 @@ komplett mit Kapitelabschluss (Kapitel 5 frei), Mission 19 auf beiden Wegen (Hes
 Gespräch; Max: Bluff mit Frachtbriefen, Verfolger, Ankunft bei Tobi). Razzia setzt 3 Sterne, 6 Streifenwagen kamen;
 Beschatter folgt auch nach einem Kilometer Sprung; Rauch kostet Leben; Dokument mit Bildlauf. Keine Konsolenfehler.
 Offen: Polizeiflucht und Rammen mit echter Steuerung prüfen; Dragans „Wegstoßen“ in M18 ist einfach gehalten.
+
+### 8.9 Phase 4, Teil 4 – Kapitel 5 (v3.26.0)
+
+| # | Mission | Orte | Spielablauf | Entscheidung |
+|---|---|---|---|---|
+| 21 | Das große Geschäft | Villa → Baustelle Itzaue | Voss fahren, Baustelle (Requisite), Bauplan fotografieren, während Voss wegschaut | mitspielen / konfrontieren |
+| 22 | Verlorenes Vertrauen | Klinikum → Werkstatt | Tobis Geständnis, Werkzeugkoffer, Brief des Vaters | verzeihen / nicht |
+| 23 | Die Wahrheit kommt ans Licht | Redaktion (Steinweg) → Polizei/Rocco | Flucht zu Fuß mit Sarah (Spur-Folgen), Autoverfolgung | – |
+| 24 | Ein neuer Verbündeter | Rosengarten → Lossaustraße | Lenz abholen, zwei Verfolger, USB-Stick mit Max’ Nachrichten | – |
+| 25 | Der Verrat | Veste → Hofgarten | Konfrontation, Max flieht, rammen bis Stillstand | Max verschonen / verstoßen |
+
+**Tests (25.11.2026, Vorschau, Spielzeit per `game.simulate`, Wege per Teleport abgekürzt):** Missionen 21–25
+komplett, Kapitelabschluss (Kapitel 6 frei). Gefunden und behoben: Verfolger in M23 erschienen direkt neben Sarah;
+Sarah blieb an Ecken hängen (folgt jetzt Leons Spur und schließt bei > 12 m auf). Auf sehr kleinen Bildschirmen steht das
+Missionsziel jetzt oben (überlappte mit Untertiteln). Keine Konsolenfehler.
+Offen: Fotografieren-Takt in M21 und die Fußflucht in M23 mit echter Steuerung prüfen.

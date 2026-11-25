@@ -2,7 +2,7 @@
 
 > Grundlage für alle Story-Missionen. Was hier steht, gilt für Dialoge, Orte, Entscheidungen und die drei Enden.
 > Umsetzungsstand und Technik: PROJEKT.md, Abschnitt 8. Die Missionen 1–5 sind spielbar (`js/story-k1.js`),
-> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0; alle weiteren sind hier ausgearbeitet und werden in
+> Kapitel 2 (Missionen 6–10, `js/story-k2.js`) seit v3.23.0, Kapitel 3 (11–15, `js/story-k3.js`) seit v3.24.0, Kapitel 4 (16–20, `js/story-k4.js`) seit v3.25.0, Kapitel 5 (21–25, `js/story-k5.js`) seit v3.26.0; alle weiteren sind hier ausgearbeitet und werden in
 > Phase 4/5 umgesetzt.
 
 ## 1. Prämisse
@@ -180,16 +180,22 @@ Format: **Ort** · Ablauf · Erfolg · Belohnung · Übergang. Orte sind reale O
     Rückkehr über Fischer organisiert, „Plan B: L. B. als Täter im Fall Kessler“. Tobi ins Klinikum (3:20).
     **Kapitelabschluss:** Leon war von Anfang an Teil des Plans.
 
-### Kapitel 5 – Die Wahrheit
+### Kapitel 5 – Die Wahrheit (spielbar seit v3.26.0)
 
-21. **Das große Geschäft** · Leon spielt mit, besucht mit Voss die Baustelle Itzaue, erfährt vom Wegerecht.
-22. **Verlorenes Vertrauen** · Tobi hat heimlich seine Werkstatt an Voss verkauft. Streit, Entscheidung verzeihen.
-23. **Die Wahrheit kommt ans Licht** · Sarah findet das Original-Gutachten zum Brand von vor fünf Jahren: Brandstiftung,
-    Auftraggeber Voss. Gemeinsame Flucht aus dem Redaktionsgebäude.
-24. **Ein neuer Verbündeter** · Dr. Katharina Lenz meldet sich, will aussteigen; Leon holt sie bei Schloss Rosenau ab
-    und schützt sie vor Dragan.
-25. **Der Verrat** · Lenz' Dateien zeigen: Max hat Voss seit Leons Rückkehr informiert (Spielschulden bei Dragan).
-    Konfrontation auf der Veste – wo Kapitel 1 die Freundschaft feierte. Entscheidung `maxFate`.
+21. **Das große Geschäft** · Villa Leopoldstraße → Baustelle Itzaue (Uferstraße) · Leon spielt mit und fährt Voss zur
+    Baustelle (Bauzaun, Container, Kran, Bauschild). Voss telefoniert; Leon fotografiert den Bauplan, solange Voss
+    wegschaut (er dreht sich alle 9 s um): „Zufahrt nur über Flurstück 1147/3“. Entscheidung: mitspielen / konfrontieren.
+22. **Verlorenes Vertrauen** · Klinikum → ausgebrannte Werkstatt · Tobi gesteht: Voss hat die Werkstatt vor drei Monaten
+    gekauft, Lenz ließ ihn Leon einstellen. Entscheidung: verzeihen / nicht. Im Tresor der Werkzeugkoffer des Vaters
+    mit einem Brief: Er hat nicht angezündet, Dragan war es, er hat das Wegerecht für Leon behalten.
+23. **Die Wahrheit kommt ans Licht** · Redaktion Coburger Stadtbote (Steinweg) · Sarah hat das Original-Brandgutachten
+    2021 (Brandstiftung, Fremdtäter). Dragan stürmt herein: Flucht zu Fuß mit Sarah (sie folgt Leons Weg, zwei Verfolger zu
+    Fuß), dann Autoverfolgung; Sarah und das Gutachten zu Roth (wenn verbündet) bzw. zu Rocco.
+24. **Ein neuer Verbündeter** · Rosengarten → Lossaustraße · Dr. Lenz steigt aus (Werkstattbrand mit Tobi darin), Abholung
+    am Lieferhof (Callback zu M4), zwei Verfolger abhängen. USB-Stick mit Konten, Mails, Verträgen – und Max’ Nachrichten
+    an Voss seit dem ersten Tag.
+25. **Der Verrat** · Veste → Richtung Hofgarten · Konfrontation mit Max, wo Kapitel 1 die Freundschaft feierte. Max flieht
+    im Auto, Leon rammt ihn bis zum Stillstand. Entscheidung (maxFate): verschonen (Max sagt aus) / verstoßen.
 
 ### Kapitel 6 – Alles auf eine Karte
 

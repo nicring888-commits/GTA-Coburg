@@ -148,7 +148,7 @@ body.st-cine #st-sub { bottom: calc(11vh + 16px); }
   #st-name { font-size: 12px; margin-bottom: 2px; }
   #st-hint { font-size: 10px; padding-top: 4px; }
   #st-sub { font-size: 14px; bottom: 112px; padding: 5px 12px; }
-  #st-obj { font-size: 14px; bottom: 70px; }
+  #st-obj { font-size: 14px; bottom: auto; top: 8px; max-width: min(520px, calc(100vw - 280px)); }
   #st-hudbox { top: 128px; }
   #st-timer { font-size: 22px; }
   #st-phone { bottom: auto; top: 110px; width: 220px; }

@@ -149,7 +149,7 @@
   let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
   let paused = false;      // Pausenmenü offen
   let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
-  const VERSION = '3.25.0';
+  const VERSION = '3.26.0';
   const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
