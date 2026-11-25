@@ -158,7 +158,11 @@ class PostFX {
     // Renderauflösung aus den Einstellungen (Anzeige → Renderauflösung, seit v3.21.0) als Anteil
     const res = window.Settings ? window.Settings.get('display', 'res') : 1;
     r.setPixelRatio(Math.min(devicePixelRatio || 1, this.q.ratio, (window.QUALITY && window.QUALITY.pixelRatio) || Infinity) * (res > 0.2 && res <= 1 ? res : 1));
-    r.setSize(innerWidth, innerHeight);
+    // Größe aus der sichtbaren Leinwand (CSS 100 %), ohne Inline-Pixelmaße: sonst bleibt die Leinwand nach einer
+    // veralteten Fenstergröße (iPhone/iPad beim Drehen, Adressleiste) zu schmal und rechts wird es schwarz (v3.23.1)
+    const el = r.domElement;
+    r.setSize(el.clientWidth || innerWidth, el.clientHeight || innerHeight, false);
+    el.style.width = el.style.height = '';
     // ohne Nachbearbeitung macht der Renderer Tonwertkurve und Farbraum selbst
     r.toneMapping = this.enabled ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.12;

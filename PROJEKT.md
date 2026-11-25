@@ -3,7 +3,7 @@
 > Lebendes Projektdokument. Wird bei jeder Arbeitssitzung aktualisiert:
 > Stand, Änderungen und **nächste Schritte** stehen immer hier.
 
-**Version:** 3.23.0 „Story-Modus, Kapitel 2“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
+**Version:** 3.23.1 „Bildrand-Fix“ (25.11.2026 auf `main`, Vercel veröffentlicht automatisch: https://gta-coburg.vercel.app) · **Letzte Aktualisierung:** 24.11.2026
 
 ---
 
@@ -317,6 +317,22 @@ Figuren auf `groundAt` (Brückenfahrbahn, wenn sie schon oben sind). Ortsleben (
 `Pedestrians.setExtra` (Gehwege der belebten Ortskacheln zusätzlich zum Netz der Innenstadt).
 
 ## 6. Stand
+
+- ✅ v3.23.1 (25.11.2026, `main`): **Fehler behoben: rechte Bildhälfte bzw. rechtes Viertel schwarz** (gemeldet: beim
+  Laden eines Spielstands, beim Missionsstart oder aus dem Menü; Minikarte und Tasten blieben sichtbar).
+  - **Ursache:** `renderer.setSize(innerWidth, innerHeight)` (in `post.apply` und im `resize`-Handler) schrieb die
+    Fenstergröße als feste Pixelbreite in den Stil der Leinwand und überstimmte damit das CSS `width: 100%`. iOS/Safari
+    (und manche Android-Browser) melden beim Drehen, beim Ein-/Ausblenden der Adressleiste oder nach dem Ladebildschirm
+    oft noch die alte bzw. eine Zwischen-Größe. Dann blieb die Leinwand zu schmal, rechts sah man den schwarzen
+    Seitenhintergrund; HUD und Touch-Tasten liegen in eigenen Ebenen mit 100 % Breite und blieben sichtbar.
+    Hochformat/Querformat ≈ ½ (Handy) bzw. ≈ ¾ (Tablet) – daher „Hälfte“ oder „Viertel“.
+  - **Lösung:** `setSize(…, false)` ohne Inline-Maße (CSS bestimmt die Größe), gemessen wird die Leinwand selbst
+    (`clientWidth`/`clientHeight`), neue Funktion `fitCanvas` in `game.js`: bei `resize`, `orientationchange`
+    (plus Nachprüfung nach 400 ms), `visualViewport.resize` und in jedem Bild als billiger Vergleich – eine verpasste
+    oder zu frühe Größenmeldung korrigiert sich im nächsten Bild selbst. Kameraseitenverhältnis wird mitgeführt.
+  - **Getestet:** künstlich hergestellter Fehlerzustand (Leinwand auf halbe Breite festgeschrieben) ist im nächsten Bild
+    behoben; Handy hoch (375 × 812) und quer (812 × 375): Leinwand, Zeichenpuffer und Seitenverhältnis stimmen.
+    ⚠️ Nicht auf einem echten iPhone/iPad geprüft.
 
 - ✅ v3.23.0 (25.11.2026, `main`, gepusht): **Story-Modus Kapitel 2 „Neue Möglichkeiten“ (Missionen 6–10)**, siehe 8.6.
 - ✅ v3.22.1 (25.11.2026): **App-Symbol für den Home-Bildschirm.** Wer die Seite zum Home-Bildschirm hinzufügt

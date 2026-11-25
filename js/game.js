@@ -149,7 +149,7 @@
   let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
   let paused = false;      // Pausenmenü offen
   let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
-  const VERSION = '3.23.0';
+  const VERSION = '3.23.1';
   const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
@@ -1226,6 +1226,7 @@
     requestAnimationFrame(loop);
     // Messlauf (js/bench.js) zeichnet selbst: Spiel anhalten
     if ((window.game && window.game.hold) || halted) { last = now; return; }
+    fitCanvas();   // Größe geändert, ohne dass ein resize kam (iOS)?
     const dt = Math.min(0.05, (now - last) / 1000);
     if (started || (menu && menu.director.active)) post.adapt(now - last);
     last = now;
@@ -1619,12 +1620,27 @@
     farHidden.length = 0;
   }
 
-  addEventListener('resize', () => {
-    renderer.setSize(innerWidth, innerHeight);
+  // Leinwand an die echte Anzeigegröße anpassen (v3.23.1). Gemessen wird die Leinwand selbst (CSS: 100 % × 100 %),
+  // nicht innerWidth: iOS meldet beim Drehen und beim Ein-/Ausblenden der Adressleiste oft noch die alte Größe. Früher
+  // schrieb setSize diese Größe als Pixelmaß in den Stil der Leinwand – dann blieb sie zu schmal, rechts sah man den
+  // schwarzen Hintergrund (Hälfte bzw. Viertel), HUD und Touch-Tasten darüber blieben sichtbar. Jetzt ohne Inline-Maße
+  // und mit Prüfung in jedem Bild, damit eine verpasste oder zu frühe Größenmeldung sich von selbst korrigiert.
+  let fitW = 0, fitH = 0;
+  function fitCanvas(force) {
+    const el = renderer.domElement;
+    if (el.style.width || el.style.height) { el.style.width = el.style.height = ''; force = true; }
+    const w = el.clientWidth || innerWidth, h = el.clientHeight || innerHeight;
+    if (!force && w === fitW && h === fitH) return;
+    fitW = w; fitH = h;
+    renderer.setSize(w, h, false);
     post.scale = 1;
-    camera.aspect = innerWidth / innerHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-  });
+  }
+  addEventListener('resize', () => fitCanvas(true));
+  addEventListener('orientationchange', () => { fitCanvas(true); setTimeout(() => fitCanvas(true), 400); });
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => fitCanvas());
+  fitCanvas(true);
 
   // für Tests in der Konsole
   GfxProbe.start(renderer, scene);
