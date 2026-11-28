@@ -1,6 +1,6 @@
-// Wasser: Flüsse, Bäche, Seen und Teiche aus OSM mit ausgehobenem Bett, bewegter Wasseroberfläche und Ufern,
-// über die man nicht laufen oder fahren kann (außer über Brücken und Straßen). Benutzt von world.js (Innenstadt)
-// und region.js (Umland, je Kachel).
+// Wasser: Flüsse, Bäche, Seen und Teiche aus OSM mit ausgehobenem Bett und bewegter Wasseroberfläche. Seit v3.30.0
+// kein Hindernis mehr: Figuren schwimmen (js/player.js), Autos fahren mit Wasserwiderstand hindurch (js/vehicle.js).
+// Benutzt von world.js (Innenstadt) und region.js (Umland, je Kachel).
 'use strict';
 
 const WATER = {
@@ -10,6 +10,7 @@ const WATER = {
   blockWidth: 5,     // Fließgewässer ab dieser Breite sind ein Hindernis
   blockArea: 150,    // stehende Gewässer ab dieser Fläche (m²) sind ein Hindernis
   roadGap: 2.5,      // so viel Platz neben Straßen bleibt frei (Brücken, Durchlässe)
+  swimDepth: 0.95,   // ab dieser Wassertiefe schwimmt die Figur (seit v3.30.0; Wasser ist kein Hindernis mehr)
 };
 
 let _waterMat = null;
@@ -120,6 +121,34 @@ class WaterSet {
     this._q = [];
   }
   get empty() { return !this.polys.length && !this.lines.length; }
+
+  // Wasserspiegel an (x, z) oder null (seit v3.30.0: Schwimmen und Durchfahren). Wie in surfaceSteps: ursprüngliches
+  // Gelände minus WATER.surface, höchstens auf Uferhöhe, mindestens 20 cm über dem Bett. h0/hc wie dort.
+  levelAt(x, z, h0, hc) {
+    if (this.carveAt(x, z) <= 0) return null;
+    const v = h0(x, z) - WATER.surface, bed = hc(x, z) + 0.2;
+    let best = null;
+    for (const o of this.grid.query(x, z, 0, this._q)) {
+      let lv;
+      if (o.line) {
+        const L = o.line, p = L.p, k = o.k, ax = p[k], az = p[k + 1], bx = p[k + 2], bz = p[k + 3];
+        const c = U.closestOnSeg(x, z, ax, az, bx, bz);
+        if (Math.hypot(c[0] - x, c[1] - z) >= L.hw + 1) continue;
+        const len = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / len * L.hw, nz = (bx - ax) / len * L.hw, mx = c[0], mz = c[1];
+        const bank = Math.min(hc(mx + nx, mz + nz), hc(mx - nx, mz - nz), hc(mx + nx * 0.6, mz + nz * 0.6), hc(mx - nx * 0.6, mz - nz * 0.6)) - 0.08;
+        lv = Math.min(v, Math.max(bank, bed));
+      } else if (this.inPoly(x, z, o)) {
+        let bd = Infinity, rx = x, rz = z;
+        for (const ring of [o.p].concat(o.ho || [])) for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+          const c = U.closestOnSeg(x, z, ring[j], ring[j + 1], ring[i], ring[i + 1]), d = Math.hypot(c[0] - x, c[1] - z);
+          if (d < bd) { bd = d; rx = c[0]; rz = c[1]; }
+        }
+        lv = Math.min(v, Math.max(hc(rx, rz) - 0.08, bed));
+      } else continue;
+      if (best === null || lv > best) best = lv;
+    }
+    return best;
+  }
 
   inPoly(x, z, P) {
     return x >= P.bb.minX && x <= P.bb.maxX && z >= P.bb.minZ && z <= P.bb.maxZ && U.pointInPoly(x, z, P.p) && !(P.ho && P.ho.some(h => U.pointInPoly(x, z, h)));
@@ -284,34 +313,8 @@ class WaterSet {
     }
   }
 
-  // Uferkanten als Hindernis: emit(ax, az, bx, bz). nearRoad(x, z): Straße/Brücke in der Nähe (dort bleibt frei);
-  // rect: Rand der Kachel (künstliche Kanten zugeschnittener Flächen auslassen); inside(x, z): eigene Kachel?
-  edges(emit, nearRoad, rect, inside) {
-    const onRect = (ax, az, bx, bz) => rect && (
-      (Math.abs(ax - rect.x0) < 1 && Math.abs(bx - rect.x0) < 1) || (Math.abs(ax - rect.x1) < 1 && Math.abs(bx - rect.x1) < 1) ||
-      (Math.abs(az - rect.z0) < 1 && Math.abs(bz - rect.z0) < 1) || (Math.abs(az - rect.z1) < 1 && Math.abs(bz - rect.z1) < 1));
-    const piece = (ax, az, bx, bz) => {
-      const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / 2));
-      for (let s = 0; s < n; s++) {
-        const x0 = ax + (bx - ax) * s / n, z0 = az + (bz - az) * s / n, x1 = ax + (bx - ax) * (s + 1) / n, z1 = az + (bz - az) * (s + 1) / n;
-        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-        if (inside && !inside(mx, mz)) continue;
-        if (nearRoad(mx, mz)) continue;
-        emit(x0, z0, x1, z1);
-      }
-    };
-    for (const P of this.polys) {
-      if (!P.block) continue;
-      for (const ring of [P.p].concat(P.ho || [])) for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
-        const ax = ring[j], az = ring[j + 1], bx = ring[i], bz = ring[i + 1];
-        if (onRect(ax, az, bx, bz)) continue;
-        piece(ax, az, bx, bz);
-      }
-    }
-  }
-
-  // Fließgewässer als Hindernis: Stücke der Mittellinie (≤ 3 m) mit halber Breite. Wer näher kommt, wird zurück auf
-  // seine Uferseite geschoben (robuster als Uferlinien, auch in engen Biegungen). An Straßen und Brücken bleibt frei.
+  // Stücke der Mittellinie breiter Fließgewässer (≤ 3 m) mit halber Breite (bis v3.29.0 Hindernis; jetzt hält world.js
+  // damit nur Stadtmöbel und Bewuchs vom Wasser fern). An Straßen und Brücken bleibt frei.
   riverPieces(emit, nearRoad, inside) {
     for (const L of this.lines) {
       if (!L.block) continue;
@@ -405,21 +408,3 @@ function lowBridgeParts(parts, pts, L, R, ground, water, foot) {
   }
 }
 
-// Kreis (x, z, r) aus Flussstücken im Raster herausschieben; out wie bei World.collideCircle. Gibt true zurück, wenn verschoben.
-// y: Höhe eines Autos; wer deutlich über dem Wasserspiegel (q.y) fährt, ist auf einer Brücke und wird nicht geschoben.
-function pushFromRivers(grid, out, r, tmp, y) {
-  let moved = false;
-  const list = grid.query(out.x, out.z, r + 2, tmp);
-  for (const q of list) {
-    if (y !== undefined && q.y !== undefined && y > q.y + 2.5) continue;
-    const c = U.closestOnSeg(out.x, out.z, q.ax, q.az, q.bx, q.bz);
-    const dx = out.x - c[0], dz = out.z - c[1], d = Math.hypot(dx, dz), need = q.hw + r;
-    if (d >= need) continue;
-    let nx, nz;
-    if (d > 1e-4) { nx = dx / d; nz = dz / d; }
-    else { const l = Math.hypot(q.bx - q.ax, q.bz - q.az) || 1; nx = -(q.bz - q.az) / l; nz = (q.bx - q.ax) / l; }
-    out.x = c[0] + nx * need; out.z = c[1] + nz * need;
-    out.nx += nx; out.nz += nz; out.hit = true; moved = true;
-  }
-  return moved;
-}

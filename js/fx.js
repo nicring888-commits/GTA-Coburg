@@ -59,7 +59,7 @@ class FX {
     m.color.set(o.color); m.blending = o.add ? THREE.AdditiveBlending : THREE.NormalBlending;
     p.sprite.position.set(x, y, z);
     p.vx = o.vx || 0; p.vy = o.vy || 0; p.vz = o.vz || 0;
-    p.life = p.max = o.life; p.size = o.size; p.grow = o.grow || 0; p.alpha = o.alpha ?? 1;
+    p.life = p.max = o.life; p.size = o.size; p.grow = o.grow || 0; p.alpha = o.alpha ?? 1; p.g = o.g || 0;
     p.sprite.scale.setScalar(o.size);
     this.scene.add(p.sprite);
     this.live.push(p);
@@ -78,6 +78,18 @@ class FX {
       color: Math.random() < 0.5 ? '#ff7a1a' : '#ffc23a', add: true, life: 0.55, size: 1.4, grow: -1, alpha: 0.9,
       vy: 2.5 + Math.random() * 2,
     });
+  }
+
+  // Wasserspritzer (seit v3.30.0): Sprung ins Wasser, Auto oder Schwimmer im Wasser; s = Stärke 0..1
+  splash(x, y, z, s = 1, vx = 0, vz = 0) {
+    const n = Math.max(1, Math.round(3 + s * 9));
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.283, r = (0.5 + Math.random()) * (1 + s * 2);
+      this.particle(x + Math.cos(a) * 0.4, y + 0.05, z + Math.sin(a) * 0.4, {
+        color: i % 3 ? '#e8f1f4' : '#ffffff', life: 0.6 + Math.random() * 0.5, size: 0.35 + s * 0.5, grow: 1.2, alpha: 0.75,
+        vx: vx * 0.3 + Math.cos(a) * r, vy: 1.5 + Math.random() * (2 + s * 4), vz: vz * 0.3 + Math.sin(a) * r, g: 9.81,
+      });
+    }
   }
 
   explosion(x, y, z) {
@@ -102,6 +114,7 @@ class FX {
       if (p.life <= 0) { this.scene.remove(p.sprite); this.live.splice(i, 1); this.pool.push(p); continue; }
       const s = p.sprite;
       s.position.x += p.vx * dt; s.position.y += p.vy * dt; s.position.z += p.vz * dt;
+      p.vy -= p.g * dt;
       p.vx *= 1 - dt * 1.5; p.vz *= 1 - dt * 1.5;
       const k = p.life / p.max;
       s.scale.setScalar(Math.max(0.1, p.size + p.grow * (1 - k) * p.size));

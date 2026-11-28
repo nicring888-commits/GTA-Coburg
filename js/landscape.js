@@ -435,7 +435,12 @@ class Landscape {
     };
     const wv = new Float32Array(S * S);
     let any = false;
-    for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) { const w = cov(c, r); wv[r * S + c] = w; if (w > 0.3) any = true; }
+    // nicht über der Innenstadt (Hofgarten, Festungsberg): dort baut world.js eigene Bäume, das Umland nie, und die Hülle
+    // stünde als hohler Hügel, durch den man hindurchfährt
+    for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) {
+      const w = R.inCore(t.x0 + c * R.fx, t.z0 + r * R.fz) ? 0 : cov(c, r);
+      wv[r * S + c] = w; if (w > 0.3) any = true;
+    }
     if (!any) return;
     const pos = [], col = [], idx = [], map = new Int32Array(S * S).fill(-1);
     const rnd = U.rng(t.key * 13 + 5);

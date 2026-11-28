@@ -149,7 +149,7 @@
   let session = false;     // in dieser Seite schon gespielt (Menü zeigt „Fortsetzen“)
   let paused = false;      // Pausenmenü offen
   let halted = false;      // „Beenden“: keine Bilder mehr zeichnen
-  const VERSION = '3.29.0';
+  const VERSION = '3.30.0';
   const AUTOPLAY_KEY = 'gta-coburg-autoplay';
 
   const progress = (text, f) => boot.progress(text, f);
@@ -163,6 +163,7 @@
     ui.addLabels(scene);
     traffic = new Traffic(world, scene);
     player = new Player(scene);
+    player.onSplash = (x, y, z) => fx.splash(x, y, z, 1);   // Sprung ins Wasser
     player.setOutfit(save.outfit);
     nav = new RoadNav(world);
     fx = new FX(scene);
@@ -505,6 +506,15 @@
     resumeRendering() { halted = false; last = performance.now(); },
   };
   $('help-close').onclick = () => { $('help').classList.add('hidden'); };
+
+  // ---------- Wasser (seit v3.30.0): Gischt, wenn ein Auto durch einen Fluss oder See fährt ----------
+  function waterSpray(c, dt) {
+    if (!(c.waterDepth > 0.1)) return;
+    const sp = Math.hypot(c.vx, c.vz), wl = c.y + c.waterDepth;
+    if (sp < 1.5 || Math.random() > dt * (4 + sp)) return;
+    const fx0 = Math.sin(c.heading), fz0 = Math.cos(c.heading), sd = Math.random() < 0.5 ? 1 : -1;
+    fx.splash(c.x + fx0 * 2 + fz0 * 0.9 * sd, wl, c.z + fz0 * 2 - fx0 * 0.9 * sd, Math.min(1, sp / 12) * Math.min(1, c.waterDepth / 0.6), c.vx, c.vz);
+  }
 
   // ---------- Reifen: Bremsspuren, Qualm, Quietschen, Drift-Anzeige ----------
   let driftT = 0, driftM = 0;
@@ -1381,6 +1391,7 @@
       if (car.lastImpact > 3) audio.thump(car.lastImpact);
       audio.engine(true, car.speed, input.throttle);
       tireMarks(car, input, dt);
+      waterSpray(car, dt);
       audio.horn(!!keys.KeyH);
       if (pressed.KeyH) peds.panic(car.x + Math.sin(car.heading) * 7, car.z + Math.cos(car.heading) * 7, 8, 0.5); // Hupe: aus dem Weg!
       if (car.burning && burnWarned !== car) { burnWarned = car; ui.toast('Das Auto brennt! Schnell raus: E', 2.5); }
@@ -1407,6 +1418,8 @@
       const mv = SL ? { x: 0, z: 0, run: false, jump: false } : walkInput();
       if (weapons.aiming) mv.run = false; // beim Zielen nur gehen
       player.update(dt, mv, world, allCars());
+      // Schwimmen: kleine Spritzer an den Händen
+      if (player.swimming && player.moveSpeed > 0.5 && Math.random() < dt * 5) fx.splash(player.x + Math.sin(player.heading) * 0.9, player.waterLevel, player.z + Math.cos(player.heading) * 0.9, 0.12);
       audio.horn(false);
     }
     weapons.update(dt, freeze || mode === 'fly');
@@ -1499,7 +1512,7 @@
       $('clock').textContent = atmo.timeText + ' · ' + atmo.weatherName;
       const r = world.nearestRoad(px, pz, 35, s => !!s.n);
       const b = world.insideBuilding(px, pz, 0);
-      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : mode === 'fly' ? 'im Helikopter · ' + Math.round(heli.y - heli.ground) + ' m' : ride ? 'Mitfahrer bei ' + net.nameOf(ride.net.driver) : 'zu Fuß';
+      const how = mode === 'drive' ? (car.kind === 'car' ? 'im Auto' : 'im ' + car.spec.name) : mode === 'fly' ? 'im Helikopter · ' + Math.round(heli.y - heli.ground) + ' m' : ride ? 'Mitfahrer bei ' + net.nameOf(ride.net.driver) : player.swimming ? 'schwimmt' : 'zu Fuß';
       // im Landkreis: Ort zur Straße, beim Ankommen ein Ortsschild
       const place = world.region && !world.inCoreRect(px, pz) ? world.region.placeAt(px, pz) : null;
       const town = place ? place.n : 'Coburg';

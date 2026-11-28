@@ -844,6 +844,7 @@ class Region {
         let any = false;
         for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) {
           const x = x0 + c * sx, z = z0 + r * sz;
+          if (this.inCore(x, z)) continue;   // Innenstadt hat eigene Bäume (keine hohle Hülle darüber)
           for (const { a, bb } of forests) {
             if (x < bb.minX || x > bb.maxX || z < bb.minZ || z > bb.maxZ || !U.pointInPoly(x, z, a.p)) continue;
             if (a.ho && a.ho.some(q => U.pointInPoly(x, z, q))) continue;
@@ -1954,17 +1955,13 @@ class Region {
     const surf = this.chunks(t);
     yield* ws.surfaceSteps(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
     surf.meshes(waterMaterial(), { receive: true }).forEach(m => t.group.add(m));
-    yield;
-    ws.edges((ax, az, bx, bz) => {
-      t.edges.push(ax, az, bx, bz);
-      t.edgeGrid.insert(t.edges.length / 4 - 1, Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz));
-    }, (x, z) => this.roadNear(x, z, WATER.roadGap), { x0: t.x0, z0: t.z0, x1: t.x1, z1: t.z1 }, (x, z) => !this.inCore(x, z));
-    yield;
-    t.rivers = new U.Grid(20);
-    ws.riverPieces(q => {
-      q.y = this.heightAt0((q.ax + q.bx) / 2, (q.az + q.bz) / 2) - WATER.surface;
-      t.rivers.insert(q, Math.min(q.ax, q.bx) - q.hw, Math.min(q.az, q.bz) - q.hw, Math.max(q.ax, q.bx) + q.hw, Math.max(q.az, q.bz) + q.hw);
-    }, (x, z) => this.roadNear(x, z, WATER.roadGap), (x, z) => !this.inCore(x, z));
+    // Ufer und Flussläufe sind seit v3.30.0 kein Hindernis mehr: man schwimmt bzw. fährt hindurch (waterLevelAt)
+  }
+  // Wasserspiegel an (x, z) oder null (seit v3.30.0): aus allen Gewässern der geladenen Kachel
+  waterLevelAt(x, z) {
+    const [ti, tj] = this.tileOf(x, z), t = this.loaded.get(tileKey(ti, tj));
+    if (!t || !t.ready || !t.waterAll || t.waterAll.empty) return null;
+    return t.waterAll.levelAt(x, z, (a, b) => this.heightAt0(a, b), (a, b) => this.heightAt(a, b));
   }
 
   // ---------------- Orte: Laternen, Ladenschilder, Lokale, Fußgänger ----------------
@@ -2644,7 +2641,7 @@ class Region {
     yield;
     // Feldgehölze, Hecken und Einzelbäume, die das Luftbild zeigt, OSM aber nicht kennt
     yield* this.photoVegSteps(t, pts, free);
-    if (!pts.length) return;
+    if (!pts.length) { if (t.canopy) t.canopy.visible = false; return; }   // auch ohne Bäume keine Hülle mehr in der Nähe
     yield;
     const A = this.treeAssets(), rnd = U.rng(t.key);
     // je Art (0 Laubbaum, 1 Nadelbaum, 2 Busch, 3 Stamm) und Zelle (4 × 4 je Kachel) Matrizen und Farben sammeln
@@ -2862,10 +2859,6 @@ class Region {
           x += nx * (r - d); z += nz * (r - d);
           out.nx += nx; out.nz += nz; out.hit = true; moved = true;
         }
-      }
-      if (t.rivers) {
-        out.x = x; out.z = z;
-        if (pushFromRivers(t.rivers, out, r, this.world._tmp, y)) { x = out.x; z = out.z; moved = true; }
       }
       // geparkte Autos (js/parking.js, seit v3.18.0)
       if (t.life && t.life.lot) {

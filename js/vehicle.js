@@ -579,6 +579,14 @@ class Vehicle {
     else if (thr < 0) a = vf > 0.5 ? CAR.brake * thr : (vf > -CAR.reverseMax ? 5 * thr : 0);
     a -= (S.drag || 0.0016) * vf * Math.abs(vf) + Math.sign(vf) * (thr === 0 ? 0.9 : 0.25);
     if (hb) a -= Math.sign(vf) * 5.5;
+    // Wasser (seit v3.30.0): Autos fahren durch Flüsse und Seen, je tiefer, desto mehr bremst das Wasser
+    // (bei ≈ 1,3 m Tiefe noch ≈ 25 km/h, im flachen Bach kaum langsamer)
+    const wl = world.waterLevelAt ? world.waterLevelAt(this.x, this.z) : null;
+    this.waterDepth = wl !== null ? Math.max(0, wl - this.y) : 0;
+    if (this.waterDepth > 0.15) {
+      const k = U.clamp((this.waterDepth - 0.15) / 1.1, 0, 1);
+      a -= vf * Math.abs(vf) * 0.2 * k + Math.sign(vf) * 1.5 * k;
+    }
     // Steigung
     a -= 9.81 * Math.sin(this.pitch) * 0.85;
     const before = vf;
@@ -586,6 +594,8 @@ class Vehicle {
     // Begrenzer (Supersportwagen): der Motor schiebt nicht über maxSpeed, bergab geht es trotzdem schneller
     if (S.engineMax && thr > 0 && vf > S.maxSpeed && vf > before && this.pitch > -0.04) vf = Math.max(S.maxSpeed, before);
     if (thr === 0 && Math.sign(vf) !== Math.sign(before) && Math.abs(this.pitch) < 0.05) vf = 0;
+
+    if (thr === 0 && this.waterDepth > 0.15 && Math.abs(vf) < 0.4) vf = 0;   // Wasser bremst bis zum Stillstand
 
     // Arcade-Lenkung: schnell und direkt, bei hohem Tempo etwas weniger Einschlag (ruhiger geradeaus)
     const maxSteer = 0.62 / (1 + Math.abs(vf) * 0.085);

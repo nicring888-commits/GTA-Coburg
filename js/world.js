@@ -523,7 +523,8 @@ class World {
     const inside = this.region ? (x, z) => this.inCoreRect(x, z) : null;
     this.water.buildSurface(surf, (x, z) => this.heightAt0(x, z), inside, (x, z) => this.heightAt(x, z));
     surf.meshes(waterMaterial(), { receive: true }).forEach(m => this.group.add(m));
-    this.water.edges((ax, az, bx, bz) => this.addEdge(ax, az, bx, bz), (x, z) => !!this.nearRoad(x, z, WATER.roadGap), null, inside);
+    // Ufer sind seit v3.30.0 kein Hindernis mehr (Schwimmen, Durchfahren). Die Flussstücke halten nur noch Stadtmöbel
+    // und Bewuchs vom Wasser fern (urbanground: blocked)
     this.riverGrid = new U.Grid(20);
     this.water.riverPieces(q => {
       q.y = this.heightAt0((q.ax + q.bx) / 2, (q.az + q.bz) / 2) - WATER.surface;
@@ -558,6 +559,13 @@ class World {
     const h0 = this.heightAt0(x, z);
     if (h0 > h + 0.01 && this.nearRoad(x, z, 0.3)) h = h0;
     return h;
+  }
+
+  // Wasserspiegel an (x, z) oder null, wo kein Wasser ist (seit v3.30.0: Schwimmen, Autos im Wasser)
+  waterLevelAt(x, z) {
+    if (this.region && !this.inCoreRect(x, z)) return this.region.waterLevelAt(x, z);
+    if (!this.water || this.water.empty) return null;
+    return this.water.levelAt(x, z, (a, b) => this.heightAt0(a, b), (a, b) => this.heightAt(a, b));
   }
 
   // Umland aus data/region.js; ersetzt das Straßennetz der Innenstadt durch das des ganzen Landkreises
@@ -3071,10 +3079,6 @@ class World {
           x += nx * (rr - d); z += nz * (rr - d);
           out.nx += nx; out.nz += nz; out.hit = true; moved = true;
         }
-      }
-      if (this.riverGrid) {
-        out.x = x; out.z = z;
-        if (pushFromRivers(this.riverGrid, out, r, this._tmp, y)) { x = out.x; z = out.z; moved = true; }
       }
       // geparkte Autos in der Innenstadt (js/parking.js, seit v3.19.0), nur sichtbare Gruppen
       if (this.coreLots) for (const L of this.coreLots) {
