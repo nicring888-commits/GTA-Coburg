@@ -3,6 +3,9 @@
 'use strict';
 
 const WALK = { speed: 4.2, run: 8.5, jump: 5.6, gravity: 18, radius: 0.38 };
+// Schwimmen (seit v3.30.0): ab WATER.swimDepth Wassertiefe; Tempo, Lage der Füße unter dem Wasserspiegel (aufrecht
+// Wasser treten bzw. waagrecht kraulen), Neigung des Körpers beim Kraulen
+const SWIM = { speed: 2.1, run: 3.6, tread: 1.38, crawl: 1.1, pitch: 1.3, pivot: 1.0 };
 
 class Player {
   constructor(scene, look = {}) {
@@ -35,6 +38,8 @@ class Player {
     scene.add(g);
     this.x = 0; this.z = 0; this.y = 0; this.vy = 0;
     this.heading = 0; this.walkPhase = 0; this.onGround = true; this.moveSpeed = 0;
+    this.swimming = false; this.swimPitch = 0; this.waterLevel = null;
+    g.rotation.order = 'YXZ'; // beim Kraulen erst um die Hochachse drehen, dann nach vorn neigen
     this._col = {};
     // Waffenhaltung (js/weapons.js): aim 0 = Arme frei, 1 = einhändig, 2 = beidhändig; pitch hebt die Arme; swing = Schlag 1 → 0
     this.pose = { aim: 0, pitch: 0, swing: 0 };
@@ -66,7 +71,7 @@ class Player {
   // move: Richtung in Weltkoordinaten (Länge 0..1), run, jump
   update(dt, move, world, cars) {
     const ml = Math.hypot(move.x, move.z);
-    const target = ml > 0.01 ? (move.run ? (this.runSpeed || WALK.run) : WALK.speed) : 0;
+    const target = ml > 0.01 ? (this.swimming ? (move.run ? SWIM.run : SWIM.speed) : move.run ? (this.runSpeed || WALK.run) : WALK.speed) : 0;
     this.moveSpeed = U.damp(this.moveSpeed, target, 10, dt);
     if (ml > 0.01) {
       const want = Math.atan2(move.x, move.z);
@@ -85,6 +90,22 @@ class Player {
     // auf dem Gehsteig stehen (Bordstein 12 cm), nicht darin versinken
     const walk = world.walkAt ? world.walkAt(this.x, this.z) : null;
     if (walk !== null && walk > ground && walk - ground < 0.5) ground = walk;
+    // Schwimmen: ist das Wasser tief genug, trägt es die Figur (auf Brücken bleibt man oben, dort ist der Boden die Fahrbahn)
+    const wl = world.waterLevelAt ? world.waterLevelAt(this.x, this.z) : null;
+    this.waterLevel = wl;
+    const swim = wl !== null && wl - ground > WATER.swimDepth && this.y < wl + 0.3;
+    if (swim) {
+      if (!this.swimming && this.vy < -4 && this.onSplash) this.onSplash(this.x, wl, this.z);
+      this.swimming = true; this.onGround = true; this.vy = 0;
+      const crawl = U.clamp(this.moveSpeed / SWIM.speed, 0, 1);
+      this.swimPitch = U.damp(this.swimPitch, crawl * SWIM.pitch, 4, dt);
+      const feet = U.lerp(SWIM.tread, SWIM.crawl, this.swimPitch / SWIM.pitch);
+      this.y = Math.max(ground, U.damp(this.y, wl - feet + Math.sin(this.walkPhase * 0.5) * 0.04, 6, dt));
+      this.walkPhase += dt * (1.6 + sp * 1.4);
+      this.sync();
+      return;
+    }
+    if (this.swimming) { this.swimming = false; this.swimPitch = 0; }
     if (move.jump && this.onGround) { this.vy = WALK.jump; this.onGround = false; }
     this.vy -= WALK.gravity * dt;
     this.y += this.vy * dt;
@@ -119,6 +140,22 @@ class Player {
     const g = this.group;
     g.position.set(this.x, this.y, this.z);
     g.rotation.y = this.heading;
+    g.rotation.x = this.swimPitch;
+    if (this.swimming) {
+      // um die Hüfte neigen, damit der Körper über der Kollisionsstelle bleibt
+      const p = this.swimPitch, c = SWIM.pivot, s = Math.sin(p) * c;
+      g.position.set(this.x - Math.sin(this.heading) * s, this.y + c - Math.cos(p) * c, this.z - Math.cos(this.heading) * s);
+      // Kraulen (Arme kreisen gegenläufig, Beine schlagen) bzw. Wasser treten (Arme paddeln seitlich)
+      const ph = this.walkPhase, k = this.swimPitch / SWIM.pitch;
+      this.armL.rotation.x = U.lerp(Math.sin(ph) * 0.5 - 0.3, -ph % (Math.PI * 2), k);
+      this.armR.rotation.x = U.lerp(-Math.sin(ph) * 0.5 - 0.3, -(ph + Math.PI) % (Math.PI * 2), k);
+      this.armL.rotation.y = this.armR.rotation.y = 0;
+      this.armL.rotation.z = U.lerp(0.9 + Math.sin(ph * 2) * 0.25, 0, k); this.armR.rotation.z = -this.armL.rotation.z;
+      const kick = Math.sin(ph * 3) * (0.25 + 0.2 * k);
+      this.legL.rotation.x = kick; this.legR.rotation.x = -kick;
+      return;
+    }
+    this.armL.rotation.z = this.armR.rotation.z = 0;
     const sw = Math.sin(this.walkPhase) * Math.min(1, this.moveSpeed / 4) * 0.75;
     const air = this.onGround ? 0 : 0.5;
     this.legL.rotation.x = sw - air; this.legR.rotation.x = -sw + air * 0.3;
